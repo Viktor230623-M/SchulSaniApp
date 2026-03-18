@@ -1,0 +1,27 @@
+kind = "mobile"
+previewPath = "/"
+title = "School Paramedic Manager"
+version = "1.0.0"
+id = "artifacts/paramedic-app"
+router = "expo-domain"
+
+[[integratedSkills]]
+name = "expo"
+version = "1.0.0"
+
+[[services]]
+ensurePreviewReachable = "/status"
+localPort = 22906
+name = "expo"
+paths = ["/"]
+
+[services.development]
+run = "pnpm --filter @workspace/paramedic-app run dev"
+
+[services.env]
+PORT = "22906"
+BASE_PATH = "/"
+
+[services.production]
+build = ["pnpm", "--filter", "@workspace/paramedic-app", "run", "build"]
+run = ["pnpm", "--filter", "@workspace/paramedic-app", "run", "serve"]

@@ -1,0 +1,84 @@
+Your goal is to develop a native iOS application (NOT a website).
+
+IMPORTANT:
+- This must be a fully native iOS app built using Swift and SwiftUI.
+- Do NOT use web technologies (no HTML, CSS, JavaScript).
+- Do NOT create a web app.
+- Do NOT implement a real backend yet.
+- However, you MUST design the app so it can connect to a backend later.
+
+Project Description:
+The app is designed to manage school paramedics, allowing them to register availability, view assignments, and interact with mission requests.
+
+Language Support:
+- The app must support both German and English.
+- Structure all UI text using a localization system (e.g., Localizable.strings).
+
+App Structure:
+
+Use SwiftUI with a TabView (bottom navigation).
+
+Tabs:
+1. News
+2. Holidays
+3. Duty Status
+4. Missions
+5. Notifications
+
+UI / Design:
+- Background: white with subtle wave-like patterns.
+- Center element: green medical cross.
+- Follow Apple Human Interface Guidelines.
+
+Core Features (Frontend Only):
+- Toggle availability (On Duty / Off Duty)
+- Display mission list (mock data)
+- Accept / Reject missions
+- Notifications preview (mock)
+- News & holidays (static)
+
+Architecture:
+- Use MVVM pattern.
+- Separate:
+  - Views
+  - ViewModels
+  - Models
+  - Services (IMPORTANT for future backend)
+
+Backend Preparation (VERY IMPORTANT):
+- Create a service layer (e.g., ApiService).
+- Simulate API calls using mock data.
+- Define models EXACTLY like they would be returned from a backend.
+
+Example models to define:
+- User
+- Mission
+- DutyStatus
+- NewsItem
+- NotificationItem
+
+Prepare API structure (DO NOT IMPLEMENT NETWORKING YET):
+
+Define endpoints as comments or placeholders:
+- GET /missions
+- POST /missions/{id}/accept
+- POST /missions/{id}/reject
+- GET /news
+- POST /status
+
+Use async/await structure so real API can be plugged in later.
+
+Data Handling:
+- Use mock JSON or local data.
+- Structure code so replacing mock data with API calls is easy.
+
+DO NOT:
+- Build a website
+- Add real networking
+- Use HTTPS
+- Add backend logic
+
+At the end:
+- Ensure the project is ready to connect to a backend in the next step.
+
+Wait for the next instruction.
