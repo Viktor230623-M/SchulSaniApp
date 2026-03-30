@@ -1,12 +1,19 @@
+export type UserRole =
+  | "cto"
+  | "student_paramedic"
+  | "sanitaeter_leitung"
+  | "admin"
+  | "teacher";
+
 export interface User {
   id: string;
   firstName: string;
   lastName: string;
   email: string;
   phone: string;
-  role: "paramedic" | "coordinator" | "admin";
+  role: UserRole;
   schoolId: string;
-  avatarUrl?: string;
+  avatarUri?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -34,9 +41,9 @@ export interface DutyStatus {
   userId: string;
   status: DutyStatusType;
   updatedAt: string;
-  availableFrom?: string;
-  availableUntil?: string;
 }
+
+export type NewsStatus = "pending" | "approved" | "rejected";
 
 export interface NewsItem {
   id: string;
@@ -44,10 +51,13 @@ export interface NewsItem {
   summary: string;
   content: string;
   category: "announcement" | "training" | "update" | "alert";
+  status: NewsStatus;
   publishedAt: string;
   author: string;
+  authorId: string;
   imageUrl?: string;
   isRead: boolean;
+  rejectionReason?: string;
 }
 
 export type NotificationType =
@@ -55,8 +65,9 @@ export type NotificationType =
   | "mission_cancelled"
   | "status_changed"
   | "news"
-  | "holiday"
-  | "reminder";
+  | "loa_update"
+  | "reminder"
+  | "high_priority_alert";
 
 export interface NotificationItem {
   id: string;
@@ -64,15 +75,27 @@ export interface NotificationItem {
   title: string;
   body: string;
   isRead: boolean;
+  priority: "normal" | "high";
   createdAt: string;
   relatedId?: string;
 }
 
-export interface HolidayItem {
+export type LOAStatus = "pending" | "approved" | "rejected" | "appealed";
+
+export interface LOARequest {
   id: string;
-  name: string;
-  startDate: string;
-  endDate: string;
-  type: "school" | "public";
-  state?: string;
+  userId: string;
+  userName: string;
+  fromDate: string;
+  toDate: string;
+  reason: string;
+  status: LOAStatus;
+  createdAt: string;
+  adminNote?: string;
+  appealNote?: string;
+  reviewedBy?: string;
+  reviewedAt?: string;
 }
+
+export type AppTheme = "light" | "dark" | "red";
+export type AppLanguage = "de" | "en";
