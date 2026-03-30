@@ -1,6 +1,6 @@
 import type {
   DutyStatus,
-  HolidayItem,
+  LOARequest,
   Mission,
   NewsItem,
   NotificationItem,
@@ -8,22 +8,67 @@ import type {
 } from "@/models";
 
 const MOCK_DELAY = 600;
-
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-const MOCK_USER: User = {
-  id: "u-001",
-  firstName: "Max",
-  lastName: "Müller",
-  email: "max.mueller@schule.de",
-  phone: "+49 151 12345678",
-  role: "paramedic",
-  schoolId: "school-001",
-  createdAt: new Date().toISOString(),
-  updatedAt: new Date().toISOString(),
-};
+function uid() {
+  return Date.now().toString() + Math.random().toString(36).substring(2, 9);
+}
+
+// ─── Mock Users ──────────────────────────────────────────────────────────────
+
+export const MOCK_USERS: User[] = [
+  {
+    id: "u-001",
+    firstName: "Max",
+    lastName: "Müller",
+    email: "max.mueller@schule.de",
+    phone: "+49 151 12345678",
+    role: "student_paramedic",
+    schoolId: "school-001",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+  {
+    id: "u-002",
+    firstName: "Anna",
+    lastName: "Schmidt",
+    email: "anna.schmidt@schule.de",
+    phone: "+49 151 87654321",
+    role: "admin",
+    schoolId: "school-001",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+  {
+    id: "u-003",
+    firstName: "Peter",
+    lastName: "Weber",
+    email: "peter.weber@schule.de",
+    phone: "+49 151 11223344",
+    role: "sanitaeter_leitung",
+    schoolId: "school-001",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+  {
+    id: "u-004",
+    firstName: "Dr. Klaus",
+    lastName: "Bauer",
+    email: "k.bauer@schule.de",
+    phone: "+49 151 55667788",
+    role: "teacher",
+    schoolId: "school-001",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+];
+
+// mock on-duty users
+export const MOCK_ON_DUTY_USER_IDS = ["u-001", "u-003"];
+
+// ─── Mock Missions ────────────────────────────────────────────────────────────
 
 const MOCK_MISSIONS: Mission[] = [
   {
@@ -40,7 +85,7 @@ const MOCK_MISSIONS: Mission[] = [
   {
     id: "m-002",
     title: "Verletzung beim Sport",
-    description: "Sprunggelenksverletzung im Sportunterricht, möglicherweise Verstauchung.",
+    description: "Sprunggelenksverletzung, möglicherweise Verstauchung.",
     location: "Sporthalle",
     priority: "medium",
     status: "pending",
@@ -51,7 +96,7 @@ const MOCK_MISSIONS: Mission[] = [
   {
     id: "m-003",
     title: "Allergische Reaktion",
-    description: "Schüler hat allergische Reaktion nach Mittagessen in der Mensa.",
+    description: "Allergische Reaktion nach Mittagessen in der Mensa.",
     location: "Mensa, EG",
     priority: "high",
     status: "accepted",
@@ -72,6 +117,8 @@ const MOCK_MISSIONS: Mission[] = [
   },
 ];
 
+// ─── Mock News ────────────────────────────────────────────────────────────────
+
 const MOCK_NEWS: NewsItem[] = [
   {
     id: "n-001",
@@ -80,8 +127,10 @@ const MOCK_NEWS: NewsItem[] = [
     content:
       "Wir laden alle Schulsanitäter herzlich zu unserem jährlichen Auffrischungskurs ein. Der Kurs findet am 15. März von 14:00 bis 17:00 Uhr in der Schulaula statt. Themen: Wiederbelebung, Wundversorgung, Schockbehandlung. Bitte meldet euch bis zum 10. März an.",
     category: "training",
+    status: "approved",
     publishedAt: new Date(Date.now() - 2 * 86400000).toISOString(),
     author: "Dr. Schneider",
+    authorId: "u-004",
     isRead: false,
   },
   {
@@ -89,10 +138,12 @@ const MOCK_NEWS: NewsItem[] = [
     title: "Neue AED-Geräte installiert",
     summary: "Zwei neue Defibrillatoren wurden im Schulgebäude installiert.",
     content:
-      "Wir freuen uns mitteilen zu können, dass zwei neue AED-Geräte (Automatisierte Externe Defibrillatoren) in der Schule installiert wurden. Standorte: Eingangsbereich Gebäude A und Sporthalle. Eine kurze Einweisung findet nächste Woche statt.",
+      "Wir freuen uns mitteilen zu können, dass zwei neue AED-Geräte (Automatisierte Externe Defibrillatoren) in der Schule installiert wurden. Standorte: Eingangsbereich Gebäude A und Sporthalle.",
     category: "update",
+    status: "approved",
     publishedAt: new Date(Date.now() - 5 * 86400000).toISOString(),
     author: "Schulleitung",
+    authorId: "u-002",
     isRead: true,
   },
   {
@@ -100,95 +151,119 @@ const MOCK_NEWS: NewsItem[] = [
     title: "Wichtig: Dienstplanänderung",
     summary: "Dienstplan für Februar wurde aktualisiert. Bitte prüfen.",
     content:
-      "Der Dienstplan für den Monat Februar wurde aufgrund von Schulferiengrenzen angepasst. Bitte überprüft eure zugewiesenen Schichten in der App. Bei Fragen meldet euch beim Koordinator.",
+      "Der Dienstplan für den Monat Februar wurde aufgrund von Schulferiengrenzen angepasst. Bitte überprüft eure zugewiesenen Schichten.",
     category: "announcement",
+    status: "pending",
     publishedAt: new Date(Date.now() - 7 * 86400000).toISOString(),
     author: "Koordination",
+    authorId: "u-001",
     isRead: false,
+  },
+  {
+    id: "n-004",
+    title: "Neue Hygieneregelung",
+    summary: "Neue Hygienerichtlinien für den Sanitätsdienst wurden erlassen.",
+    content: "Details zu den neuen Hygienerichtlinien für den Sanitätsdienst.",
+    category: "alert",
+    status: "rejected",
+    publishedAt: new Date(Date.now() - 10 * 86400000).toISOString(),
+    author: "Max Müller",
+    authorId: "u-001",
+    isRead: false,
+    rejectionReason: "Bitte füge weitere Details zu den Richtlinien hinzu.",
   },
 ];
 
-const MOCK_HOLIDAYS: HolidayItem[] = [
+// ─── Mock LOA ─────────────────────────────────────────────────────────────────
+
+const MOCK_LOA: LOARequest[] = [
   {
-    id: "h-001",
-    name: "Osterferien",
-    startDate: "2025-04-14",
-    endDate: "2025-04-25",
-    type: "school",
-    state: "NRW",
+    id: "loa-001",
+    userId: "u-001",
+    userName: "Max Müller",
+    fromDate: "2025-04-14",
+    toDate: "2025-04-18",
+    reason: "Familienurlaub über Ostern",
+    status: "approved",
+    createdAt: new Date(Date.now() - 14 * 86400000).toISOString(),
+    adminNote: "Genehmigt. Viel Erholung!",
+    reviewedBy: "Anna Schmidt",
+    reviewedAt: new Date(Date.now() - 12 * 86400000).toISOString(),
   },
   {
-    id: "h-002",
-    name: "Karfreitag",
-    startDate: "2025-04-18",
-    endDate: "2025-04-18",
-    type: "public",
+    id: "loa-002",
+    userId: "u-001",
+    userName: "Max Müller",
+    fromDate: "2025-05-05",
+    toDate: "2025-05-07",
+    reason: "Arzttermin und Erholung",
+    status: "pending",
+    createdAt: new Date(Date.now() - 2 * 86400000).toISOString(),
   },
   {
-    id: "h-003",
-    name: "Ostermontag",
-    startDate: "2025-04-21",
-    endDate: "2025-04-21",
-    type: "public",
-  },
-  {
-    id: "h-004",
-    name: "Pfingstferien",
-    startDate: "2025-06-09",
-    endDate: "2025-06-20",
-    type: "school",
-    state: "NRW",
-  },
-  {
-    id: "h-005",
-    name: "Tag der Arbeit",
-    startDate: "2025-05-01",
-    endDate: "2025-05-01",
-    type: "public",
-  },
-  {
-    id: "h-006",
-    name: "Sommerferien",
-    startDate: "2025-07-07",
-    endDate: "2025-08-19",
-    type: "school",
-    state: "NRW",
+    id: "loa-003",
+    userId: "u-003",
+    userName: "Peter Weber",
+    fromDate: "2025-03-20",
+    toDate: "2025-03-21",
+    reason: "Fortbildung außerhalb",
+    status: "rejected",
+    createdAt: new Date(Date.now() - 20 * 86400000).toISOString(),
+    adminNote: "Wir brauchen dich zu diesem Zeitpunkt.",
+    reviewedBy: "Anna Schmidt",
+    reviewedAt: new Date(Date.now() - 18 * 86400000).toISOString(),
   },
 ];
+
+// ─── Mock Notifications ───────────────────────────────────────────────────────
 
 const MOCK_NOTIFICATIONS: NotificationItem[] = [
   {
     id: "notif-001",
+    type: "high_priority_alert",
+    title: "Notfall: AED-Gerät defekt!",
+    body: "Der AED in der Sporthalle ist ausgefallen. Sofort melden!",
+    isRead: false,
+    priority: "high",
+    createdAt: new Date(Date.now() - 10 * 60000).toISOString(),
+  },
+  {
+    id: "notif-002",
     type: "mission_assigned",
     title: "Einsatz zugewiesen",
     body: "Du wurdest für den Einsatz 'Ohnmacht auf dem Schulhof' eingeteilt.",
     isRead: false,
+    priority: "normal",
     createdAt: new Date(Date.now() - 5 * 60000).toISOString(),
     relatedId: "m-001",
   },
   {
-    id: "notif-002",
+    id: "notif-003",
+    type: "loa_update",
+    title: "LOA genehmigt",
+    body: "Dein Urlaubsantrag vom 14.04. - 18.04. wurde genehmigt.",
+    isRead: false,
+    priority: "normal",
+    createdAt: new Date(Date.now() - 2 * 3600000).toISOString(),
+    relatedId: "loa-001",
+  },
+  {
+    id: "notif-004",
     type: "news",
     title: "Neue Neuigkeit",
     body: "Neues Erste-Hilfe-Training im März wurde veröffentlicht.",
-    isRead: false,
-    createdAt: new Date(Date.now() - 2 * 3600000).toISOString(),
+    isRead: true,
+    priority: "normal",
+    createdAt: new Date(Date.now() - 5 * 3600000).toISOString(),
     relatedId: "n-001",
   },
   {
-    id: "notif-003",
+    id: "notif-005",
     type: "reminder",
     title: "Dienstbeginn in 30 Minuten",
     body: "Dein Dienst beginnt in 30 Minuten. Bitte sei pünktlich.",
     isRead: true,
-    createdAt: new Date(Date.now() - 5 * 3600000).toISOString(),
-  },
-  {
-    id: "notif-004",
-    type: "status_changed",
-    title: "Statusänderung",
-    body: "Dein Dienststatus wurde auf 'Im Dienst' gesetzt.",
-    isRead: true,
+    priority: "normal",
     createdAt: new Date(Date.now() - 24 * 3600000).toISOString(),
   },
 ];
@@ -196,10 +271,41 @@ const MOCK_NOTIFICATIONS: NotificationItem[] = [
 // ─── ApiService ────────────────────────────────────────────────────────────
 
 const ApiService = {
-  // GET /user/me
-  async getCurrentUser(): Promise<User> {
+  // POST /auth/login
+  async login(credentials: {
+    username: string;
+    password: string;
+  }): Promise<User> {
     await delay(MOCK_DELAY);
-    return { ...MOCK_USER };
+    // Mock: admin@school.de / admin → admin user; anything else → student
+    const isAdmin =
+      credentials.username.toLowerCase().includes("admin") ||
+      credentials.username === "admin";
+    const isTeacher = credentials.username.toLowerCase().includes("lehrer");
+    const isLeitung = credentials.username.toLowerCase().includes("leitung");
+    if (isAdmin) return { ...MOCK_USERS[1] };
+    if (isTeacher) return { ...MOCK_USERS[3] };
+    if (isLeitung) return { ...MOCK_USERS[2] };
+    return { ...MOCK_USERS[0] };
+  },
+
+  // POST /auth/logout
+  async logout(): Promise<void> {
+    await delay(300);
+  },
+
+  // GET /users
+  async getAllUsers(): Promise<User[]> {
+    await delay(MOCK_DELAY);
+    return [...MOCK_USERS];
+  },
+
+  // GET /users/on-duty
+  async getOnDutyUsers(): Promise<User[]> {
+    await delay(MOCK_DELAY);
+    return MOCK_USERS.filter((u) =>
+      MOCK_ON_DUTY_USER_IDS.includes(u.id)
+    );
   },
 
   // GET /missions
@@ -210,20 +316,20 @@ const ApiService = {
 
   // POST /missions/:id/accept
   async acceptMission(id: string): Promise<Mission> {
-    await delay(MOCK_DELAY);
-    const mission = MOCK_MISSIONS.find((m) => m.id === id);
-    if (!mission) throw new Error("Mission not found");
-    mission.status = "accepted";
-    return { ...mission };
+    await delay(400);
+    const m = MOCK_MISSIONS.find((m) => m.id === id);
+    if (!m) throw new Error("Mission not found");
+    m.status = "accepted";
+    return { ...m };
   },
 
   // POST /missions/:id/reject
   async rejectMission(id: string): Promise<Mission> {
-    await delay(MOCK_DELAY);
-    const mission = MOCK_MISSIONS.find((m) => m.id === id);
-    if (!mission) throw new Error("Mission not found");
-    mission.status = "rejected";
-    return { ...mission };
+    await delay(400);
+    const m = MOCK_MISSIONS.find((m) => m.id === id);
+    if (!m) throw new Error("Mission not found");
+    m.status = "rejected";
+    return { ...m };
   },
 
   // GET /news
@@ -232,17 +338,106 @@ const ApiService = {
     return [...MOCK_NEWS];
   },
 
+  // POST /news
+  async createNews(
+    item: Omit<NewsItem, "id" | "publishedAt" | "status" | "isRead">
+  ): Promise<NewsItem> {
+    await delay(400);
+    const newItem: NewsItem = {
+      ...item,
+      id: uid(),
+      publishedAt: new Date().toISOString(),
+      status: "pending",
+      isRead: false,
+    };
+    MOCK_NEWS.unshift(newItem);
+    return newItem;
+  },
+
+  // POST /news/:id/approve
+  async approveNews(id: string): Promise<NewsItem> {
+    await delay(400);
+    const n = MOCK_NEWS.find((n) => n.id === id);
+    if (!n) throw new Error("Not found");
+    n.status = "approved";
+    return { ...n };
+  },
+
+  // POST /news/:id/reject
+  async rejectNews(id: string, reason: string): Promise<NewsItem> {
+    await delay(400);
+    const n = MOCK_NEWS.find((n) => n.id === id);
+    if (!n) throw new Error("Not found");
+    n.status = "rejected";
+    n.rejectionReason = reason;
+    return { ...n };
+  },
+
   // POST /news/:id/read
   async markNewsRead(id: string): Promise<void> {
     await delay(200);
-    const item = MOCK_NEWS.find((n) => n.id === id);
-    if (item) item.isRead = true;
+    const n = MOCK_NEWS.find((n) => n.id === id);
+    if (n) n.isRead = true;
   },
 
-  // GET /holidays
-  async getHolidays(): Promise<HolidayItem[]> {
+  // POST /news/read-all
+  async markAllNewsRead(): Promise<void> {
+    await delay(200);
+    MOCK_NEWS.forEach((n) => (n.isRead = true));
+  },
+
+  // GET /loa
+  async getLOARequests(userId?: string): Promise<LOARequest[]> {
     await delay(MOCK_DELAY);
-    return [...MOCK_HOLIDAYS];
+    if (userId) return MOCK_LOA.filter((r) => r.userId === userId);
+    return [...MOCK_LOA];
+  },
+
+  // POST /loa
+  async createLOA(
+    req: Omit<LOARequest, "id" | "createdAt" | "status">
+  ): Promise<LOARequest> {
+    await delay(400);
+    const newReq: LOARequest = {
+      ...req,
+      id: uid(),
+      status: "pending",
+      createdAt: new Date().toISOString(),
+    };
+    MOCK_LOA.unshift(newReq);
+    return newReq;
+  },
+
+  // POST /loa/:id/approve
+  async approveLOA(id: string, note?: string): Promise<LOARequest> {
+    await delay(400);
+    const r = MOCK_LOA.find((r) => r.id === id);
+    if (!r) throw new Error("Not found");
+    r.status = "approved";
+    r.adminNote = note;
+    r.reviewedAt = new Date().toISOString();
+    return { ...r };
+  },
+
+  // POST /loa/:id/reject
+  async rejectLOA(id: string, reason: string): Promise<LOARequest> {
+    await delay(400);
+    const r = MOCK_LOA.find((r) => r.id === id);
+    if (!r) throw new Error("Not found");
+    r.status = "rejected";
+    r.adminNote = reason;
+    r.reviewedAt = new Date().toISOString();
+    return { ...r };
+  },
+
+  // POST /loa/:id/appeal
+  async appealLOA(id: string, appealNote: string): Promise<LOARequest> {
+    await delay(400);
+    const r = MOCK_LOA.find((r) => r.id === id);
+    if (!r) throw new Error("Not found");
+    r.status = "appealed";
+    r.appealNote = appealNote;
+    return { ...r };
   },
 
   // GET /notifications
@@ -258,23 +453,15 @@ const ApiService = {
   },
 
   // GET /status
-  async getDutyStatus(userId: string): Promise<DutyStatus> {
+  async getDutyStatus(): Promise<DutyStatus> {
     await delay(MOCK_DELAY);
-    return {
-      userId,
-      status: "off_duty",
-      updatedAt: new Date().toISOString(),
-    };
+    return { userId: "u-001", status: "off_duty", updatedAt: new Date().toISOString() };
   },
 
   // POST /status
   async updateDutyStatus(status: DutyStatus["status"]): Promise<DutyStatus> {
-    await delay(MOCK_DELAY);
-    return {
-      userId: MOCK_USER.id,
-      status,
-      updatedAt: new Date().toISOString(),
-    };
+    await delay(400);
+    return { userId: "u-001", status, updatedAt: new Date().toISOString() };
   },
 };
 

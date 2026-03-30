@@ -1,36 +1,46 @@
-import { NativeModules, Platform } from "react-native";
-
-type Language = "de" | "en";
-
-function getDeviceLanguage(): Language {
-  let lang = "en";
-  if (Platform.OS === "ios") {
-    lang =
-      NativeModules.SettingsManager?.settings?.AppleLocale ||
-      NativeModules.SettingsManager?.settings?.AppleLanguages?.[0] ||
-      "en";
-  } else if (Platform.OS === "android") {
-    lang = NativeModules.I18nManager?.localeIdentifier || "en";
-  }
-  return lang.startsWith("de") ? "de" : "en";
-}
+import type { AppLanguage } from "@/models";
 
 const translations = {
   de: {
     tabs: {
       news: "Neuigkeiten",
-      holidays: "Urlaub",
-      duty: "Dienststatus",
+      loa: "Urlaub",
+      duty: "Dienst",
       missions: "Einsätze",
-      notifications: "Benachrichtigungen",
+      notifications: "Meldungen",
+      settings: "Einstellungen",
+    },
+    auth: {
+      login: "Anmelden",
+      logout: "Abmelden",
+      iserv: "Mit IServ anmelden",
+      or: "oder",
+      username: "Benutzername",
+      password: "Passwort",
+      loginButton: "Anmelden",
+      loginLoading: "Anmeldung läuft...",
+      hint: "Test: \"admin\", \"lehrer\" oder beliebiger Name",
+    },
+    roles: {
+      cto: "CTO",
+      student_paramedic: "Sanitäter",
+      sanitaeter_leitung: "Sanitäter Leitung",
+      admin: "Administrator",
+      teacher: "Lehrer",
     },
     duty: {
       title: "Dienststatus",
       onDuty: "Im Dienst",
       offDuty: "Außer Dienst",
-      statusUpdated: "Status aktualisiert",
-      availableFor: "Verfügbar für Einsätze",
-      notAvailable: "Nicht verfügbar",
+      tapToToggle: "Tippen zum Wechseln",
+      statusAvailable: "Du bist verfügbar für Einsätze",
+      statusUnavailable: "Du bist nicht für Einsätze verfügbar",
+      whoIsOnDuty: "Wer ist im Dienst?",
+      noOneDuty: "Niemand ist aktuell im Dienst",
+      notes: "Hinweise",
+      hint1: "Dein Status wird für alle Koordinatoren sichtbar sein.",
+      hint2: "Du erhältst Benachrichtigungen, wenn du im Dienst bist.",
+      hint3: "Bitte denke daran, deinen Status rechtzeitig zu aktualisieren.",
     },
     missions: {
       title: "Einsätze",
@@ -39,6 +49,7 @@ const translations = {
       accepted: "Angenommen",
       rejected: "Abgelehnt",
       pending: "Ausstehend",
+      completed: "Abgeschlossen",
       high: "Hoch",
       medium: "Mittel",
       low: "Niedrig",
@@ -47,20 +58,74 @@ const translations = {
     },
     news: {
       title: "Neuigkeiten",
-      readMore: "Weiterlesen",
+      create: "Erstellen",
+      newArticle: "Neuer Beitrag",
+      newsTitle: "Titel",
+      summary: "Zusammenfassung",
+      content: "Inhalt",
+      category: "Kategorie",
+      submit: "Einreichen",
+      submitHint: "Der Beitrag wird nach Freigabe veröffentlicht.",
+      markRead: "Als gelesen markieren",
+      markAllRead: "Alle gelesen",
+      readAll: "Alle als gelesen markieren",
       noNews: "Keine Neuigkeiten",
+      unread: "ungelesen",
+      pendingApproval: "Wartet auf Freigabe",
+      approve: "Freigeben",
+      reject: "Ablehnen",
+      rejectedLabel: "Abgelehnt",
+      allArticles: "Alle Beiträge",
+      myArticles: "Meine Beiträge",
+      filterApproved: "Genehmigt",
+      filterPending: "Ausstehend",
+      filterRejected: "Abgelehnt",
     },
-    holidays: {
-      title: "Urlaub",
-      schoolHolidays: "Schulferien",
-      publicHolidays: "Feiertage",
-      noHolidays: "Keine Ferientermine",
+    loa: {
+      title: "Urlaubsanträge",
+      myRequests: "Meine Anträge",
+      allRequests: "Alle Anträge",
+      newRequest: "Neuer Antrag",
+      from: "Von",
+      to: "Bis",
+      reason: "Grund",
+      reasonPlaceholder: "Grund für den Urlaubsantrag",
+      submit: "Einreichen",
+      pending: "Ausstehend",
+      approved: "Genehmigt",
+      rejected: "Abgelehnt",
+      appealed: "Einspruch",
+      appeal: "Einspruch einlegen",
+      appealNote: "Einspruchsgrund",
+      appealPlaceholder: "Begründung für Einspruch",
+      adminNote: "Anmerkung",
+      approve: "Genehmigen",
+      reject: "Ablehnen",
+      rejectReason: "Ablehnungsgrund",
+      noRequests: "Keine Anträge",
+      noRequestsDesc: "Du hast noch keine Urlaubsanträge gestellt.",
     },
     notifications: {
       title: "Benachrichtigungen",
       markAllRead: "Alle gelesen",
       noNotifications: "Keine Benachrichtigungen",
       noNotificationsDesc: "Du bist auf dem neuesten Stand.",
+      highPriority: "Wichtige Meldungen",
+    },
+    settings: {
+      title: "Einstellungen",
+      profile: "Profil",
+      changePhoto: "Foto ändern",
+      language: "Sprache",
+      theme: "Design",
+      themeLight: "Hell",
+      themeDark: "Dunkel",
+      themeRed: "Rot",
+      allUsers: "Alle Benutzer",
+      onDutyOverview: "Dienstübersicht",
+      logout: "Abmelden",
+      logoutConfirm: "Wirklich abmelden?",
+      version: "Version",
     },
     common: {
       loading: "Laden...",
@@ -68,29 +133,56 @@ const translations = {
       retry: "Erneut versuchen",
       cancel: "Abbrechen",
       confirm: "Bestätigen",
+      save: "Speichern",
       ok: "OK",
       priority: "Priorität",
       location: "Ort",
       time: "Zeit",
       date: "Datum",
       type: "Typ",
+      send: "Senden",
     },
   },
   en: {
     tabs: {
       news: "News",
-      holidays: "Holidays",
-      duty: "Duty Status",
+      loa: "Leave",
+      duty: "Duty",
       missions: "Missions",
-      notifications: "Notifications",
+      notifications: "Alerts",
+      settings: "Settings",
+    },
+    auth: {
+      login: "Sign In",
+      logout: "Sign Out",
+      iserv: "Sign in with IServ",
+      or: "or",
+      username: "Username",
+      password: "Password",
+      loginButton: "Sign In",
+      loginLoading: "Signing in...",
+      hint: "Try: \"admin\", \"lehrer\" or any name",
+    },
+    roles: {
+      cto: "CTO",
+      student_paramedic: "Paramedic",
+      sanitaeter_leitung: "Head Paramedic",
+      admin: "Administrator",
+      teacher: "Teacher",
     },
     duty: {
       title: "Duty Status",
       onDuty: "On Duty",
       offDuty: "Off Duty",
-      statusUpdated: "Status updated",
-      availableFor: "Available for missions",
-      notAvailable: "Not available",
+      tapToToggle: "Tap to toggle",
+      statusAvailable: "You are available for missions",
+      statusUnavailable: "You are not available for missions",
+      whoIsOnDuty: "Who is on duty?",
+      noOneDuty: "No one is currently on duty",
+      notes: "Notes",
+      hint1: "Your status will be visible to all coordinators.",
+      hint2: "You will receive notifications for new missions when on duty.",
+      hint3: "Please remember to update your status in time.",
     },
     missions: {
       title: "Missions",
@@ -99,6 +191,7 @@ const translations = {
       accepted: "Accepted",
       rejected: "Rejected",
       pending: "Pending",
+      completed: "Completed",
       high: "High",
       medium: "Medium",
       low: "Low",
@@ -107,20 +200,74 @@ const translations = {
     },
     news: {
       title: "News",
-      readMore: "Read more",
+      create: "Create",
+      newArticle: "New Article",
+      newsTitle: "Title",
+      summary: "Summary",
+      content: "Content",
+      category: "Category",
+      submit: "Submit",
+      submitHint: "The article will be published after approval.",
+      markRead: "Mark as read",
+      markAllRead: "Mark all read",
+      readAll: "Mark all as read",
       noNews: "No News",
+      unread: "unread",
+      pendingApproval: "Pending approval",
+      approve: "Approve",
+      reject: "Reject",
+      rejectedLabel: "Rejected",
+      allArticles: "All Articles",
+      myArticles: "My Articles",
+      filterApproved: "Approved",
+      filterPending: "Pending",
+      filterRejected: "Rejected",
     },
-    holidays: {
-      title: "Holidays",
-      schoolHolidays: "School Holidays",
-      publicHolidays: "Public Holidays",
-      noHolidays: "No holiday dates",
+    loa: {
+      title: "Leave Requests",
+      myRequests: "My Requests",
+      allRequests: "All Requests",
+      newRequest: "New Request",
+      from: "From",
+      to: "To",
+      reason: "Reason",
+      reasonPlaceholder: "Reason for leave request",
+      submit: "Submit",
+      pending: "Pending",
+      approved: "Approved",
+      rejected: "Rejected",
+      appealed: "Appealed",
+      appeal: "File Appeal",
+      appealNote: "Appeal reason",
+      appealPlaceholder: "Reason for your appeal",
+      adminNote: "Admin note",
+      approve: "Approve",
+      reject: "Reject",
+      rejectReason: "Rejection reason",
+      noRequests: "No Requests",
+      noRequestsDesc: "You have not submitted any leave requests yet.",
     },
     notifications: {
       title: "Notifications",
       markAllRead: "Mark all read",
       noNotifications: "No Notifications",
       noNotificationsDesc: "You're all caught up.",
+      highPriority: "Priority Alerts",
+    },
+    settings: {
+      title: "Settings",
+      profile: "Profile",
+      changePhoto: "Change Photo",
+      language: "Language",
+      theme: "Theme",
+      themeLight: "Light",
+      themeDark: "Dark",
+      themeRed: "Red",
+      allUsers: "All Users",
+      onDutyOverview: "Duty Overview",
+      logout: "Sign Out",
+      logoutConfirm: "Are you sure you want to sign out?",
+      version: "Version",
     },
     common: {
       loading: "Loading...",
@@ -128,36 +275,26 @@ const translations = {
       retry: "Retry",
       cancel: "Cancel",
       confirm: "Confirm",
+      save: "Save",
       ok: "OK",
       priority: "Priority",
       location: "Location",
       time: "Time",
       date: "Date",
       type: "Type",
+      send: "Send",
     },
   },
 };
 
-let currentLanguage: Language = getDeviceLanguage();
+export type Translations = typeof translations.en;
+export type TranslationKey = string;
 
-export function t(
-  path: string,
-  lang: Language = currentLanguage
-): string {
+export function t(path: string, lang: AppLanguage): string {
   const keys = path.split(".");
-  let result: any = translations[lang];
+  let result: any = translations[lang] ?? translations.de;
   for (const key of keys) {
     result = result?.[key];
   }
   return result ?? path;
 }
-
-export function setLanguage(lang: Language) {
-  currentLanguage = lang;
-}
-
-export function getLanguage(): Language {
-  return currentLanguage;
-}
-
-export type Translations = typeof translations.en;
