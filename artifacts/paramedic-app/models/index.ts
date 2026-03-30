@@ -97,5 +97,5 @@ export interface LOARequest {
   reviewedAt?: string;
 }
 
-export type AppTheme = "light" | "dark" | "red";
+export type AppTheme = "light" | "dark" | "red" | "teal";
 export type AppLanguage = "de" | "en";

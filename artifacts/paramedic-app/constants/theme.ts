@@ -100,12 +100,38 @@ const redTheme: ThemeColors = {
   shadow: "rgba(239,68,68,0.12)",
 };
 
+const tealTheme: ThemeColors = {
+  background: "#F0FDFA",
+  backgroundSecondary: "#CCFBF1",
+  backgroundTertiary: "#99F6E4",
+  card: "#FFFFFF",
+  cardBorder: "#99F6E4",
+  text: "#0F172A",
+  textSecondary: "#475569",
+  textTertiary: "#94A3B8",
+  tint: "#0D9488",
+  tintLight: "#CCFBF1",
+  tintDark: "#0F766E",
+  tabBar: "#F0FDFA",
+  tabBarBorder: "#99F6E4",
+  tabBarActive: "#0D9488",
+  tabBarInactive: "#94A3B8",
+  inputBackground: "#F0FDFA",
+  inputBorder: "#99F6E4",
+  danger: "#EF4444",
+  warning: "#F97316",
+  success: "#0D9488",
+  overlay: "rgba(0,0,0,0.5)",
+  shadow: "rgba(13,148,136,0.12)",
+};
+
 export const THEMES: Record<AppTheme, ThemeColors> = {
   light: lightTheme,
   dark: darkTheme,
   red: redTheme,
+  teal: tealTheme,
 };
 
 export function getTheme(theme: AppTheme): ThemeColors {
-  return THEMES[theme];
+  return THEMES[theme] ?? lightTheme;
 }
