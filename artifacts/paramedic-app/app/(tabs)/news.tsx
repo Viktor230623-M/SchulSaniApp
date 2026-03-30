@@ -3,6 +3,7 @@ import * as Haptics from "expo-haptics";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Modal,
   Platform,
@@ -34,7 +35,7 @@ function categoryConfig(cat: NewsItem["category"], tint: string) {
   }[cat];
 }
 
-function StatusChip({ status, theme }: { status: NewsStatus; theme: any }) {
+function StatusChip({ status }: { status: NewsStatus }) {
   const cfg = {
     pending: { label: "Ausstehend", color: "#F97316", bg: "#FFF7ED" },
     approved: { label: "Genehmigt", color: "#22C55E", bg: "#F0FDF4" },
@@ -47,17 +48,42 @@ function StatusChip({ status, theme }: { status: NewsStatus; theme: any }) {
   );
 }
 
-function NewsCard({ item, canModerate, onMarkRead, onApprove, onReject, theme, lang }: any) {
+function NewsCard({
+  item, canModerate, isOwner,
+  onMarkRead, onApprove, onReject, onDelete,
+  theme, lang,
+}: any) {
   const [expanded, setExpanded] = useState(false);
   const cat = categoryConfig(item.category, theme.tint);
+
+  // Can delete if: owner (any status) OR moderator OR article is read
+  const canDelete = isOwner || canModerate || item.isRead;
+
+  function handleDelete() {
+    if (Platform.OS === "web") {
+      onDelete(item.id);
+      return;
+    }
+    Alert.alert(
+      t("news.deleteConfirm", lang),
+      t("news.deleteDesc", lang),
+      [
+        { text: t("common.cancel", lang), style: "cancel" },
+        { text: t("common.delete", lang), style: "destructive", onPress: () => onDelete(item.id) },
+      ]
+    );
+  }
 
   return (
     <Pressable
       onPress={() => setExpanded(!expanded)}
       style={({ pressed }) => [
         styles.card,
-        { backgroundColor: theme.card, borderColor: item.isRead ? theme.cardBorder : theme.tint + "55" },
-        { opacity: pressed ? 0.95 : 1 },
+        {
+          backgroundColor: theme.card,
+          borderColor: item.isRead ? theme.cardBorder : theme.tint + "55",
+          opacity: pressed ? 0.96 : 1,
+        },
       ]}
     >
       <View style={styles.cardRow}>
@@ -65,9 +91,18 @@ function NewsCard({ item, canModerate, onMarkRead, onApprove, onReject, theme, l
           <Ionicons name={cat.icon} size={12} color={cat.color} />
           <Text style={[styles.catText, { color: cat.color }]}>{cat.label}</Text>
         </View>
-        <StatusChip status={item.status} theme={theme} />
+        <StatusChip status={item.status} />
         {!item.isRead && item.status === "approved" && (
           <View style={[styles.unreadDot, { backgroundColor: theme.tint }]} />
+        )}
+        {canDelete && (
+          <Pressable
+            onPress={handleDelete}
+            hitSlop={8}
+            style={styles.deleteIconBtn}
+          >
+            <Ionicons name="trash-outline" size={15} color={theme.textTertiary} />
+          </Pressable>
         )}
       </View>
 
@@ -128,7 +163,7 @@ export default function NewsScreen() {
   const themeKey = useAppStore((s) => s.theme);
   const theme = getTheme(themeKey);
   const user = useAppStore((s) => s.user);
-  const { news, newsLoading, setNews, setNewsLoading, updateNewsItem, addNewsItem } = useAppStore();
+  const { news, newsLoading, setNews, setNewsLoading, updateNewsItem, addNewsItem, removeNewsItem } = useAppStore();
 
   const [filter, setFilter] = useState<Filter>("all");
   const [refreshing, setRefreshing] = useState(false);
@@ -138,11 +173,9 @@ export default function NewsScreen() {
   const [newContent, setNewContent] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  const canModerate = user?.role === "admin" || user?.role === "teacher";
+  const canModerate = user?.role === "admin" || user?.role === "teacher" || user?.role === "cto";
 
-  useEffect(() => {
-    load();
-  }, []);
+  useEffect(() => { load(); }, []);
 
   async function load() {
     setNewsLoading(true);
@@ -170,14 +203,20 @@ export default function NewsScreen() {
 
   async function handleApprove(id: string) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    const updated = await ApiService.approveNews(id);
+    await ApiService.approveNews(id);
     updateNewsItem(id, { status: "approved" });
   }
 
   async function handleReject(id: string) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const updated = await ApiService.rejectNews(id, "Bitte überarbeite den Beitrag.");
+    await ApiService.rejectNews(id, "Bitte überarbeite den Beitrag.");
     updateNewsItem(id, { status: "rejected", rejectionReason: "Bitte überarbeite den Beitrag." });
+  }
+
+  async function handleDelete(id: string) {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    await ApiService.deleteNews(id);
+    removeNewsItem(id);
   }
 
   async function handleCreate() {
@@ -201,7 +240,11 @@ export default function NewsScreen() {
   }
 
   const filtered = news.filter((n) => {
-    if (filter === "all") return n.status === "approved" || n.authorId === user?.id || canModerate;
+    if (filter === "all") {
+      return n.status === "approved" || n.authorId === user?.id || canModerate;
+    }
+    if (filter === "pending") return n.status === "pending" && (n.authorId === user?.id || canModerate);
+    if (filter === "rejected") return n.status === "rejected" && (n.authorId === user?.id || canModerate);
     return n.status === filter;
   });
 
@@ -228,12 +271,17 @@ export default function NewsScreen() {
               <View>
                 <Text style={[styles.heading, { color: theme.text }]}>{t("news.title", lang)}</Text>
                 {unread > 0 && (
-                  <Text style={[styles.unreadHint, { color: theme.tint }]}>{unread} {t("news.unread", lang)}</Text>
+                  <Text style={[styles.unreadHint, { color: theme.tint }]}>
+                    {unread} {t("news.unread", lang)}
+                  </Text>
                 )}
               </View>
               <View style={styles.headerBtns}>
                 {unread > 0 && (
-                  <Pressable onPress={handleMarkAllRead} style={[styles.iconBtn, { backgroundColor: theme.tintLight }]}>
+                  <Pressable
+                    onPress={handleMarkAllRead}
+                    style={[styles.iconBtn, { backgroundColor: theme.tintLight }]}
+                  >
                     <Ionicons name="checkmark-done" size={18} color={theme.tint} />
                   </Pressable>
                 )}
@@ -245,9 +293,11 @@ export default function NewsScreen() {
                 </Pressable>
               </View>
             </View>
-            {canModerate && (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll}>
-                {(["all", "approved", "pending", "rejected"] as const).map((f) => (
+
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll}>
+              {(["all", "approved", "pending", "rejected"] as const).map((f) => {
+                const label = f === "all" ? "Alle" : f === "approved" ? t("news.filterApproved", lang) : f === "pending" ? t("news.filterPending", lang) : t("news.filterRejected", lang);
+                return (
                   <Pressable
                     key={f}
                     onPress={() => setFilter(f)}
@@ -257,12 +307,12 @@ export default function NewsScreen() {
                     ]}
                   >
                     <Text style={[styles.filterPillText, { color: filter === f ? "#fff" : theme.textSecondary }]}>
-                      {f === "all" ? "Alle" : f === "approved" ? t("news.filterApproved", lang) : f === "pending" ? t("news.filterPending", lang) : t("news.filterRejected", lang)}
+                      {label}
                     </Text>
                   </Pressable>
-                ))}
-              </ScrollView>
-            )}
+                );
+              })}
+            </ScrollView>
           </View>
         }
         ListEmptyComponent={
@@ -280,9 +330,11 @@ export default function NewsScreen() {
           <NewsCard
             item={item}
             canModerate={canModerate}
+            isOwner={item.authorId === user?.id}
             onMarkRead={handleMarkRead}
             onApprove={handleApprove}
             onReject={handleReject}
+            onDelete={handleDelete}
             theme={theme}
             lang={lang}
           />
@@ -298,7 +350,10 @@ export default function NewsScreen() {
               <Ionicons name="close" size={24} color={theme.text} />
             </Pressable>
           </View>
-          <ScrollView contentContainerStyle={{ padding: 20, gap: 14 }} keyboardShouldPersistTaps="handled">
+          <ScrollView
+            contentContainerStyle={{ padding: 20, gap: 14 }}
+            keyboardShouldPersistTaps="handled"
+          >
             <TextInput
               value={newTitle}
               onChangeText={setNewTitle}
@@ -328,7 +383,11 @@ export default function NewsScreen() {
               disabled={submitting}
               style={[styles.submitBtn, { backgroundColor: theme.tint }]}
             >
-              {submitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitBtnText}>{t("news.submit", lang)}</Text>}
+              {submitting ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.submitBtnText}>{t("news.submit", lang)}</Text>
+              )}
             </Pressable>
           </ScrollView>
         </View>
@@ -354,6 +413,7 @@ const styles = StyleSheet.create({
   chip: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
   chipText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
   unreadDot: { width: 8, height: 8, borderRadius: 4 },
+  deleteIconBtn: { marginLeft: "auto" as any, padding: 4 },
   title: { fontSize: 16, fontFamily: "Inter_700Bold" },
   summary: { fontSize: 13, fontFamily: "Inter_400Regular", lineHeight: 18 },
   content: { fontSize: 14, fontFamily: "Inter_400Regular", lineHeight: 22, paddingTop: 8, borderTopWidth: 1, marginTop: 4 },

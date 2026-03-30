@@ -23,8 +23,10 @@ interface AppState {
   // Settings
   theme: AppTheme;
   language: AppLanguage;
+  tealUnlocked: boolean;
   setTheme: (theme: AppTheme) => void;
   setLanguage: (lang: AppLanguage) => void;
+  unlockTeal: () => void;
 
   // Duty
   dutyStatus: DutyStatus["status"];
@@ -46,6 +48,7 @@ interface AppState {
   setNewsLoading: (loading: boolean) => void;
   updateNewsItem: (id: string, patch: Partial<NewsItem>) => void;
   addNewsItem: (item: NewsItem) => void;
+  removeNewsItem: (id: string) => void;
 
   // LOA
   loaRequests: LOARequest[];
@@ -88,8 +91,10 @@ export const useAppStore = create<AppState>()(
       // Settings
       theme: "light",
       language: "de",
+      tealUnlocked: false,
       setTheme: (theme) => set({ theme }),
       setLanguage: (language) => set({ language }),
+      unlockTeal: () => set({ tealUnlocked: true }),
 
       // Duty
       dutyStatus: "off_duty",
@@ -116,8 +121,9 @@ export const useAppStore = create<AppState>()(
         set((s) => ({
           news: s.news.map((n) => (n.id === id ? { ...n, ...patch } : n)),
         })),
-      addNewsItem: (item) =>
-        set((s) => ({ news: [item, ...s.news] })),
+      addNewsItem: (item) => set((s) => ({ news: [item, ...s.news] })),
+      removeNewsItem: (id) =>
+        set((s) => ({ news: s.news.filter((n) => n.id !== id) })),
 
       // LOA
       loaRequests: [],
@@ -130,8 +136,7 @@ export const useAppStore = create<AppState>()(
             r.id === id ? { ...r, ...patch } : r
           ),
         })),
-      addLOA: (req) =>
-        set((s) => ({ loaRequests: [req, ...s.loaRequests] })),
+      addLOA: (req) => set((s) => ({ loaRequests: [req, ...s.loaRequests] })),
 
       // Notifications
       notifications: [],
@@ -149,13 +154,14 @@ export const useAppStore = create<AppState>()(
       setAvatarUri: (avatarUri) => set({ avatarUri }),
     }),
     {
-      name: "paramedic-store",
+      name: "paramedic-store-v2",
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (state) => ({
         user: state.user,
         isAuthenticated: state.isAuthenticated,
         theme: state.theme,
         language: state.language,
+        tealUnlocked: state.tealUnlocked,
         dutyStatus: state.dutyStatus,
         avatarUri: state.avatarUri,
       }),
