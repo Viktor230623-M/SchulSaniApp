@@ -46,12 +46,17 @@ export default function SettingsScreen() {
   const themeKey = useAppStore((s) => s.theme);
   const theme = getTheme(themeKey);
   const user = useAppStore((s) => s.user);
-  const avatarUri = useAppStore((s) => s.avatarUri);
-  const tealUnlocked = useAppStore((s) => s.tealUnlocked);
+  const avatarUriMap = useAppStore((s) => s.avatarUriMap);
   const setTheme = useAppStore((s) => s.setTheme);
   const setLanguage = useAppStore((s) => s.setLanguage);
   const setAvatarUri = useAppStore((s) => s.setAvatarUri);
   const logout = useAppStore((s) => s.logout);
+
+  // Per-user avatar — never shared across accounts
+  const avatarUri = user ? (avatarUriMap[user.id] ?? null) : null;
+
+  // Teal is available exclusively for CTO accounts — no global flag needed
+  const tealUnlocked = user?.role === "cto";
 
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
@@ -70,6 +75,7 @@ export default function SettingsScreen() {
   }, [canSeeAllUsers]);
 
   async function handlePickImage() {
+    if (!user) return;
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== "granted") {
       Alert.alert("Berechtigung", "Fotobibliothek-Zugriff wird benötigt.");
@@ -82,7 +88,7 @@ export default function SettingsScreen() {
       quality: 0.8,
     });
     if (!result.canceled && result.assets[0]) {
-      setAvatarUri(result.assets[0].uri);
+      setAvatarUri(user.id, result.assets[0].uri);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
   }
@@ -295,7 +301,7 @@ export default function SettingsScreen() {
       </Pressable>
 
       <Text style={[styles.version, { color: theme.textTertiary }]}>
-        {t("settings.version", lang)} 1.0.0 · SchulSanitäter
+        {t("settings.version", lang)} 1.0.0 · SchulSanitäter · gymbla.de
       </Text>
     </ScrollView>
   );

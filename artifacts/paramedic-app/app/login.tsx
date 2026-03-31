@@ -1,4 +1,4 @@
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import React, { useState } from "react";
@@ -26,7 +26,6 @@ export default function LoginScreen() {
   const insets = useSafeAreaInsets();
   const login = useAppStore((s) => s.login);
   const setTheme = useAppStore((s) => s.setTheme);
-  const unlockTeal = useAppStore((s) => s.unlockTeal);
   const lang = useAppStore((s) => s.language);
   const theme = getTheme(useAppStore((s) => s.theme));
 
@@ -38,7 +37,11 @@ export default function LoginScreen() {
 
   async function handleLogin() {
     if (!username.trim()) {
-      setError("Benutzername erforderlich");
+      setError(t("auth.usernameRequired", lang));
+      return;
+    }
+    if (!password.trim()) {
+      setError(t("auth.passwordRequired", lang));
       return;
     }
     setLoading(true);
@@ -48,24 +51,14 @@ export default function LoginScreen() {
       const { user, isTealUnlocked } = await ApiService.login({ username, password });
       if (isTealUnlocked) {
         setTheme("teal");
-        unlockTeal();
       }
       login(user);
       router.replace("/(tabs)/news");
-    } catch {
-      setError("Anmeldung fehlgeschlagen. Bitte erneut versuchen.");
+    } catch (err: any) {
+      setError(err?.message ?? t("auth.loginFailed", lang));
     } finally {
       setLoading(false);
     }
-  }
-
-  async function handleIServLogin() {
-    setLoading(true);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    await new Promise((r) => setTimeout(r, 800));
-    const { user } = await ApiService.login({ username: "max.mueller", password: "" });
-    login(user);
-    router.replace("/(tabs)/news");
   }
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
@@ -89,7 +82,7 @@ export default function LoginScreen() {
             <MedicalCross size={64} color={theme.tint} animate />
             <Text style={[styles.appName, { color: theme.text }]}>SchulSanitäter</Text>
             <Text style={[styles.appSubtitle, { color: theme.textSecondary }]}>
-              Verwaltungssystem
+              Verwaltungssystem · gymbla.de
             </Text>
           </View>
 
@@ -99,30 +92,14 @@ export default function LoginScreen() {
               { backgroundColor: theme.card, borderColor: theme.cardBorder },
             ]}
           >
-            <Pressable
-              onPress={handleIServLogin}
-              disabled={loading}
-              style={({ pressed }) => [
-                styles.iservButton,
-                { backgroundColor: "#005BAA", opacity: pressed ? 0.85 : 1 },
-              ]}
-            >
-              {loading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <>
-                  <MaterialCommunityIcons name="school" size={20} color="#fff" />
-                  <Text style={styles.iservButtonText}>{t("auth.iserv", lang)}</Text>
-                </>
-              )}
-            </Pressable>
-
-            <View style={styles.dividerRow}>
-              <View style={[styles.divider, { backgroundColor: theme.cardBorder }]} />
-              <Text style={[styles.dividerText, { color: theme.textTertiary }]}>
-                {t("auth.or", lang)}
+            {/* IServ Logo / Title */}
+            <View style={styles.iservHeader}>
+              <View style={[styles.iservBadge, { backgroundColor: "#EFF6FF" }]}>
+                <Text style={styles.iservBadgeText}>IServ</Text>
+              </View>
+              <Text style={[styles.iservTitle, { color: theme.text }]}>
+                {t("auth.iservLogin", lang)}
               </Text>
-              <View style={[styles.divider, { backgroundColor: theme.cardBorder }]} />
             </View>
 
             <View style={styles.inputGroup}>
@@ -139,11 +116,14 @@ export default function LoginScreen() {
                 <TextInput
                   value={username}
                   onChangeText={setUsername}
-                  placeholder="viktor.gnjatic"
+                  placeholder="benutzername"
                   placeholderTextColor={theme.textTertiary}
                   autoCapitalize="none"
                   autoCorrect={false}
+                  autoComplete="username"
                   style={[styles.input, { color: theme.text }]}
+                  onSubmitEditing={handleLogin}
+                  returnKeyType="next"
                 />
               </View>
             </View>
@@ -165,7 +145,10 @@ export default function LoginScreen() {
                   placeholder="••••••••"
                   placeholderTextColor={theme.textTertiary}
                   secureTextEntry={!showPass}
+                  autoComplete="password"
                   style={[styles.input, { color: theme.text, flex: 1 }]}
+                  onSubmitEditing={handleLogin}
+                  returnKeyType="done"
                 />
                 <Pressable onPress={() => setShowPass(!showPass)}>
                   <Ionicons
@@ -178,7 +161,7 @@ export default function LoginScreen() {
             </View>
 
             {!!error && (
-              <View style={[styles.errorBox]}>
+              <View style={styles.errorBox}>
                 <Ionicons name="alert-circle" size={16} color="#EF4444" />
                 <Text style={styles.errorText}>{error}</Text>
               </View>
@@ -189,49 +172,22 @@ export default function LoginScreen() {
               disabled={loading}
               style={({ pressed }) => [
                 styles.loginButton,
-                { backgroundColor: theme.tint, opacity: pressed ? 0.85 : 1 },
+                { backgroundColor: "#005BAA", opacity: loading ? 0.7 : pressed ? 0.9 : 1 },
               ]}
             >
               {loading ? (
-                <ActivityIndicator color="#fff" />
+                <View style={styles.loadingRow}>
+                  <ActivityIndicator color="#fff" size="small" />
+                  <Text style={styles.loginButtonText}>{t("auth.loginLoading", lang)}</Text>
+                </View>
               ) : (
                 <Text style={styles.loginButtonText}>{t("auth.loginButton", lang)}</Text>
               )}
             </Pressable>
 
-            <Text style={[styles.hintText, { color: theme.textTertiary }]}>
-              {t("auth.hint", lang)}
+            <Text style={[styles.footerNote, { color: theme.textTertiary }]}>
+              {t("auth.iservNote", lang)}
             </Text>
-
-            <View style={styles.accountsHint}>
-              {[
-                { u: "viktor.gnjatic", role: "CTO 🩵", special: true },
-                { u: "anna.schmidt", role: "Admin" },
-                { u: "peter.weber", role: "Sanitäter Ltg." },
-                { u: "dr.bauer", role: "Lehrer" },
-                { u: "max.mueller", role: "Sanitäter" },
-                { u: "lena.fischer", role: "Sanitäter" },
-              ].map((acc) => (
-                <Pressable
-                  key={acc.u}
-                  onPress={() => setUsername(acc.u)}
-                  style={[
-                    styles.accountChip,
-                    {
-                      backgroundColor: acc.special ? "#CCFBF1" : theme.backgroundTertiary,
-                      borderColor: acc.special ? "#0D9488" : theme.cardBorder,
-                    },
-                  ]}
-                >
-                  <Text style={[styles.accountChipText, { color: acc.special ? "#0F766E" : theme.textSecondary }]}>
-                    {acc.u}
-                  </Text>
-                  <Text style={[styles.accountChipRole, { color: acc.special ? "#0D9488" : theme.textTertiary }]}>
-                    {acc.role}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -244,27 +200,47 @@ const styles = StyleSheet.create({
   scroll: { paddingHorizontal: 24, alignItems: "center" },
   header: { alignItems: "center", gap: 8, marginBottom: 32 },
   appName: { fontSize: 26, fontFamily: "Inter_700Bold", marginTop: 12 },
-  appSubtitle: { fontSize: 14, fontFamily: "Inter_400Regular" },
+  appSubtitle: { fontSize: 13, fontFamily: "Inter_400Regular" },
   card: {
-    width: "100%", maxWidth: 400, borderRadius: 20, padding: 24, borderWidth: 1, gap: 16,
-    shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 16, elevation: 4,
+    width: "100%",
+    maxWidth: 400,
+    borderRadius: 20,
+    padding: 24,
+    borderWidth: 1,
+    gap: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 4,
   },
-  iservButton: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 14, borderRadius: 12 },
-  iservButtonText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: "#fff" },
-  dividerRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  divider: { flex: 1, height: 1 },
-  dividerText: { fontSize: 12, fontFamily: "Inter_400Regular" },
+  iservHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
+  iservBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+  iservBadgeText: { fontSize: 12, fontFamily: "Inter_700Bold", color: "#1D4ED8", letterSpacing: 0.5 },
+  iservTitle: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
   inputGroup: { gap: 6 },
   label: { fontSize: 13, fontFamily: "Inter_500Medium" },
-  inputWrap: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 12, borderWidth: 1 },
+  inputWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
   input: { flex: 1, fontSize: 15, fontFamily: "Inter_400Regular" },
-  errorBox: { flexDirection: "row", alignItems: "center", gap: 8, padding: 12, borderRadius: 10, backgroundColor: "#FEF2F2" },
+  errorBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: "#FEF2F2",
+  },
   errorText: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#EF4444", flex: 1 },
   loginButton: { paddingVertical: 15, borderRadius: 12, alignItems: "center" },
+  loadingRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   loginButtonText: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: "#fff" },
-  hintText: { fontSize: 11, fontFamily: "Inter_400Regular", textAlign: "center" },
-  accountsHint: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  accountChip: { paddingHorizontal: 10, paddingVertical: 7, borderRadius: 10, borderWidth: 1, alignItems: "center" },
-  accountChipText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
-  accountChipRole: { fontSize: 10, fontFamily: "Inter_400Regular" },
+  footerNote: { fontSize: 11, fontFamily: "Inter_400Regular", textAlign: "center" },
 });

@@ -7,118 +7,19 @@ import type {
   User,
 } from "@/models";
 
+// ─── Config ───────────────────────────────────────────────────────────────────
+
+const API_BASE = `https://${process.env["EXPO_PUBLIC_DOMAIN"]}/api`;
+
 const MOCK_DELAY = 600;
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 function uid() {
-  return Date.now().toString() + Math.random().toString(36).substring(2, 9);
+  return Date.now().toString(36) + Math.random().toString(36).substring(2, 9);
 }
 
-// ─── Mock Users ───────────────────────────────────────────────────────────────
-
-export const MOCK_USERS: User[] = [
-  {
-    id: "u-001",
-    firstName: "Viktor",
-    lastName: "Gnjatić",
-    email: "viktor.gnjatic@schule.de",
-    phone: "+49 151 99988877",
-    role: "cto",
-    schoolId: "school-001",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "u-002",
-    firstName: "Anna",
-    lastName: "Schmidt",
-    email: "anna.schmidt@schule.de",
-    phone: "+49 151 87654321",
-    role: "admin",
-    schoolId: "school-001",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "u-003",
-    firstName: "Peter",
-    lastName: "Weber",
-    email: "peter.weber@schule.de",
-    phone: "+49 151 11223344",
-    role: "sanitaeter_leitung",
-    schoolId: "school-001",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "u-004",
-    firstName: "Dr. Klaus",
-    lastName: "Bauer",
-    email: "k.bauer@schule.de",
-    phone: "+49 151 55667788",
-    role: "teacher",
-    schoolId: "school-001",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "u-005",
-    firstName: "Max",
-    lastName: "Müller",
-    email: "max.mueller@schule.de",
-    phone: "+49 151 12345678",
-    role: "student_paramedic",
-    schoolId: "school-001",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "u-006",
-    firstName: "Lena",
-    lastName: "Fischer",
-    email: "lena.fischer@schule.de",
-    phone: "+49 151 22334455",
-    role: "student_paramedic",
-    schoolId: "school-001",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "u-007",
-    firstName: "Jonas",
-    lastName: "Braun",
-    email: "jonas.braun@schule.de",
-    phone: "+49 151 33445566",
-    role: "student_paramedic",
-    schoolId: "school-001",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-];
-
-// Login credential map: username (lowercase) → user id
-const CREDENTIAL_MAP: Record<string, string> = {
-  "viktor.gnjatic": "u-001",
-  "viktor": "u-001",
-  "admin": "u-002",
-  "anna.schmidt": "u-002",
-  "anna": "u-002",
-  "leitung": "u-003",
-  "peter.weber": "u-003",
-  "peter": "u-003",
-  "lehrer": "u-004",
-  "dr.bauer": "u-004",
-  "bauer": "u-004",
-  "max.mueller": "u-005",
-  "max": "u-005",
-  "lena.fischer": "u-006",
-  "lena": "u-006",
-  "jonas.braun": "u-007",
-  "jonas": "u-007",
-};
-
-// ─── Mock Missions ────────────────────────────────────────────────────────────
+// ─── Mock Data ────────────────────────────────────────────────────────────────
 
 const MOCK_MISSIONS: Mission[] = [
   {
@@ -167,8 +68,6 @@ const MOCK_MISSIONS: Mission[] = [
   },
 ];
 
-// ─── Mock News ────────────────────────────────────────────────────────────────
-
 const MOCK_NEWS: NewsItem[] = [
   {
     id: "n-001",
@@ -180,7 +79,7 @@ const MOCK_NEWS: NewsItem[] = [
     status: "approved",
     publishedAt: new Date(Date.now() - 2 * 86400000).toISOString(),
     author: "Dr. Klaus Bauer",
-    authorId: "u-004",
+    authorId: "teacher-bauer",
     isRead: false,
   },
   {
@@ -192,8 +91,8 @@ const MOCK_NEWS: NewsItem[] = [
     category: "update",
     status: "approved",
     publishedAt: new Date(Date.now() - 5 * 86400000).toISOString(),
-    author: "Anna Schmidt",
-    authorId: "u-002",
+    author: "Schulverwaltung",
+    authorId: "admin-verwaltung",
     isRead: true,
   },
   {
@@ -205,130 +104,37 @@ const MOCK_NEWS: NewsItem[] = [
     category: "announcement",
     status: "pending",
     publishedAt: new Date(Date.now() - 7 * 86400000).toISOString(),
-    author: "Max Müller",
-    authorId: "u-005",
-    isRead: false,
-  },
-  {
-    id: "n-004",
-    title: "CTO-Update: App Roadmap Q2",
-    summary: "Viktor teilt die geplanten Features für Q2 mit.",
-    content:
-      "Hallo zusammen! Als CTO möchte ich euch über unsere Q2-Roadmap informieren: 1. Echtzeit-Benachrichtigungen via Push, 2. Integration mit dem Schulverwaltungssystem, 3. Offline-Modus für kritische Daten. Feedback willkommen!",
-    category: "announcement",
-    status: "approved",
-    publishedAt: new Date(Date.now() - 3 * 86400000).toISOString(),
-    author: "Viktor Gnjatić",
-    authorId: "u-001",
-    isRead: false,
-  },
-  {
-    id: "n-005",
-    title: "Hygieneregelung überarbeitet",
-    summary: "Neue Hygienerichtlinien für den Sanitätsdienst wurden erlassen.",
-    content: "Bitte überarbeite diesen Beitrag mit mehr Details zu den Richtlinien.",
-    category: "alert",
-    status: "rejected",
-    publishedAt: new Date(Date.now() - 10 * 86400000).toISOString(),
-    author: "Lena Fischer",
-    authorId: "u-006",
-    isRead: false,
-    rejectionReason: "Zu wenig Informationen. Bitte ergänze konkrete Maßnahmen.",
-  },
-  {
-    id: "n-006",
-    title: "Sanitäterdienst bei Schulfest",
-    summary: "Für das Schulfest am 20.03. werden 4 Sanitäter benötigt.",
-    content:
-      "Beim diesjährigen Schulfest am 20.03. von 12:00 bis 18:00 Uhr sind 4 Sanitäter im Einsatz. Bitte tragt euch bis Freitag in die Liste ein.",
-    category: "announcement",
-    status: "pending",
-    publishedAt: new Date(Date.now() - 1 * 86400000).toISOString(),
-    author: "Peter Weber",
-    authorId: "u-003",
+    author: "Sanitäter Leitung",
+    authorId: "leitung-001",
     isRead: false,
   },
 ];
 
-// ─── Mock LOA ────────────────────────────────────────────────────────────────
-
 const MOCK_LOA: LOARequest[] = [
   {
     id: "loa-001",
-    userId: "u-005",
-    userName: "Max Müller",
+    userId: "my-user",
+    userName: "Ich",
     fromDate: "2025-04-14",
     toDate: "2025-04-18",
     reason: "Familienurlaub über Ostern",
     status: "approved",
     createdAt: new Date(Date.now() - 14 * 86400000).toISOString(),
     adminNote: "Genehmigt. Schöne Ostern!",
-    reviewedBy: "Anna Schmidt",
+    reviewedBy: "Admin",
     reviewedAt: new Date(Date.now() - 12 * 86400000).toISOString(),
   },
   {
     id: "loa-002",
-    userId: "u-005",
-    userName: "Max Müller",
+    userId: "my-user",
+    userName: "Ich",
     fromDate: "2025-05-05",
     toDate: "2025-05-07",
     reason: "Arzttermin und Erholung",
     status: "pending",
     createdAt: new Date(Date.now() - 2 * 86400000).toISOString(),
   },
-  {
-    id: "loa-003",
-    userId: "u-003",
-    userName: "Peter Weber",
-    fromDate: "2025-03-20",
-    toDate: "2025-03-21",
-    reason: "Fortbildung außerhalb",
-    status: "rejected",
-    createdAt: new Date(Date.now() - 20 * 86400000).toISOString(),
-    adminNote: "Wir brauchen dich zu diesem Zeitpunkt.",
-    reviewedBy: "Anna Schmidt",
-    reviewedAt: new Date(Date.now() - 18 * 86400000).toISOString(),
-  },
-  {
-    id: "loa-004",
-    userId: "u-006",
-    userName: "Lena Fischer",
-    fromDate: "2025-04-28",
-    toDate: "2025-04-30",
-    reason: "Abitur-Prüfungsvorbereitung",
-    status: "pending",
-    createdAt: new Date(Date.now() - 5 * 86400000).toISOString(),
-  },
-  {
-    id: "loa-005",
-    userId: "u-001",
-    userName: "Viktor Gnjatić",
-    fromDate: "2025-06-01",
-    toDate: "2025-06-10",
-    reason: "Tech-Konferenz in Berlin",
-    status: "approved",
-    createdAt: new Date(Date.now() - 30 * 86400000).toISOString(),
-    adminNote: "Genehmigt – viel Erfolg auf der Konferenz!",
-    reviewedBy: "Anna Schmidt",
-    reviewedAt: new Date(Date.now() - 28 * 86400000).toISOString(),
-  },
-  {
-    id: "loa-006",
-    userId: "u-007",
-    userName: "Jonas Braun",
-    fromDate: "2025-03-25",
-    toDate: "2025-03-26",
-    reason: "Familienangelegenheit",
-    status: "appealed",
-    createdAt: new Date(Date.now() - 25 * 86400000).toISOString(),
-    adminNote: "Kurzfristig nicht möglich.",
-    appealNote: "Dringende Familienangelegenheit, bitte nochmals prüfen.",
-    reviewedBy: "Dr. Klaus Bauer",
-    reviewedAt: new Date(Date.now() - 22 * 86400000).toISOString(),
-  },
 ];
-
-// ─── Mock Notifications ───────────────────────────────────────────────────────
 
 const MOCK_NOTIFICATIONS: NotificationItem[] = [
   {
@@ -353,8 +159,8 @@ const MOCK_NOTIFICATIONS: NotificationItem[] = [
   {
     id: "notif-003",
     type: "loa_update",
-    title: "LOA genehmigt",
-    body: "Dein LOA-Antrag vom 14.04.–18.04. wurde genehmigt.",
+    title: "LoA genehmigt",
+    body: "Dein LoA-Antrag vom 14.04.–18.04. wurde genehmigt.",
     isRead: false,
     priority: "normal",
     createdAt: new Date(Date.now() - 2 * 3600000).toISOString(),
@@ -384,25 +190,26 @@ const MOCK_NOTIFICATIONS: NotificationItem[] = [
 // ─── ApiService ───────────────────────────────────────────────────────────────
 
 const ApiService = {
-  // POST /auth/login
+  // POST /auth/login — real IServ authentication via backend
   async login(credentials: { username: string; password: string }): Promise<{
     user: User;
     isTealUnlocked: boolean;
   }> {
-    await delay(MOCK_DELAY);
-    const key = credentials.username.toLowerCase().trim().replace(/\s+/g, ".");
-    const userId = CREDENTIAL_MAP[key];
+    const resp = await fetch(`${API_BASE}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: credentials.username.trim(),
+        password: credentials.password,
+      }),
+    });
 
-    // Special CTO teal unlock
-    const isTealUnlocked =
-      credentials.username.toLowerCase() === "viktor.gnjatic" &&
-      credentials.password === "viktor.gnjatic";
+    const data = await resp.json();
+    if (!resp.ok) {
+      throw new Error(data.error ?? "Anmeldung fehlgeschlagen");
+    }
 
-    const user = userId
-      ? MOCK_USERS.find((u) => u.id === userId)!
-      : MOCK_USERS[4]; // default: Max Müller (student)
-
-    return { user: { ...user }, isTealUnlocked };
+    return { user: data.user as User, isTealUnlocked: data.isTealUnlocked };
   },
 
   // POST /auth/logout
@@ -413,13 +220,13 @@ const ApiService = {
   // GET /users
   async getAllUsers(): Promise<User[]> {
     await delay(MOCK_DELAY);
-    return [...MOCK_USERS];
+    return [];
   },
 
   // GET /users/on-duty
   async getOnDutyUsers(): Promise<User[]> {
     await delay(MOCK_DELAY);
-    return [MOCK_USERS[2], MOCK_USERS[4]]; // Peter Weber + Max Müller
+    return [];
   },
 
   // GET /missions
@@ -450,7 +257,6 @@ const ApiService = {
     return [...MOCK_NEWS];
   },
 
-  // POST /news
   async createNews(
     item: Omit<NewsItem, "id" | "publishedAt" | "status" | "isRead">
   ): Promise<NewsItem> {
@@ -503,7 +309,7 @@ const ApiService = {
   // GET /loa
   async getLOARequests(userId?: string): Promise<LOARequest[]> {
     await delay(MOCK_DELAY);
-    if (userId) return MOCK_LOA.filter((r) => r.userId === userId);
+    if (userId) return MOCK_LOA.filter((r) => r.userId === userId || r.userId === "my-user");
     return [...MOCK_LOA];
   },
 
