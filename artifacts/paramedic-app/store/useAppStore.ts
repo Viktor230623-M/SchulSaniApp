@@ -23,10 +23,8 @@ interface AppState {
   // Settings
   theme: AppTheme;
   language: AppLanguage;
-  tealUnlocked: boolean;
   setTheme: (theme: AppTheme) => void;
   setLanguage: (lang: AppLanguage) => void;
-  unlockTeal: () => void;
 
   // Duty
   dutyStatus: DutyStatus["status"];
@@ -65,9 +63,9 @@ interface AppState {
   setNotificationsLoading: (loading: boolean) => void;
   markAllNotificationsRead: () => void;
 
-  // Profile
-  avatarUri: string | null;
-  setAvatarUri: (uri: string | null) => void;
+  // Profile — per-user avatar map so changing photo for one account doesn't affect others
+  avatarUriMap: Record<string, string>;
+  setAvatarUri: (userId: string, uri: string | null) => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -78,23 +76,23 @@ export const useAppStore = create<AppState>()(
       isAuthenticated: false,
       login: (user) => set({ user, isAuthenticated: true }),
       logout: () =>
-        set({
+        set((s) => ({
           user: null,
           isAuthenticated: false,
+          // Reset teal theme on logout since teal is CTO-exclusive
+          theme: s.theme === "teal" ? "light" : s.theme,
           dutyStatus: "off_duty",
           missions: [],
           news: [],
           loaRequests: [],
           notifications: [],
-        }),
+        })),
 
       // Settings
       theme: "light",
       language: "de",
-      tealUnlocked: false,
       setTheme: (theme) => set({ theme }),
       setLanguage: (language) => set({ language }),
-      unlockTeal: () => set({ tealUnlocked: true }),
 
       // Duty
       dutyStatus: "off_duty",
@@ -149,21 +147,27 @@ export const useAppStore = create<AppState>()(
           notifications: s.notifications.map((n) => ({ ...n, isRead: true })),
         })),
 
-      // Profile
-      avatarUri: null,
-      setAvatarUri: (avatarUri) => set({ avatarUri }),
+      // Per-user avatar map
+      avatarUriMap: {},
+      setAvatarUri: (userId, uri) =>
+        set((s) => ({
+          avatarUriMap: uri
+            ? { ...s.avatarUriMap, [userId]: uri }
+            : Object.fromEntries(
+                Object.entries(s.avatarUriMap).filter(([k]) => k !== userId)
+              ),
+        })),
     }),
     {
-      name: "paramedic-store-v2",
+      name: "paramedic-store-v3",
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (state) => ({
         user: state.user,
         isAuthenticated: state.isAuthenticated,
         theme: state.theme,
         language: state.language,
-        tealUnlocked: state.tealUnlocked,
         dutyStatus: state.dutyStatus,
-        avatarUri: state.avatarUri,
+        avatarUriMap: state.avatarUriMap,
       }),
     }
   )
