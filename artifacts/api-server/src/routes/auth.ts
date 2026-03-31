@@ -1,3 +1,5 @@
+import * as https from "https";
+import * as http from "http";
 import { Router } from "express";
 import jwt from "jsonwebtoken";
 import { requireAuth, type AuthRequest } from "../middlewares/auth";
@@ -6,122 +8,238 @@ const router = Router();
 
 const JWT_SECRET = process.env["JWT_SECRET"] ?? "schulsan-dev-secret-change-in-prod";
 const ISERV_BASE = "https://gymbla.de";
+const UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1 SchulSanitaeter/1.0";
 
-// ─── Role map (username → app role) ──────────────────────────────────────────
+// ─── Role map ─────────────────────────────────────────────────────────────────
+
 const ROLE_MAP: Record<string, string> = {
   "viktor.gnjatic": "cto",
 };
 
 function getRoleForUser(username: string): string {
-  const key = username.toLowerCase().trim();
-  return ROLE_MAP[key] ?? "student_paramedic";
+  return ROLE_MAP[username.toLowerCase().trim()] ?? "student_paramedic";
 }
 
-// ─── Cookie helpers ───────────────────────────────────────────────────────────
-function parseSetCookies(header: string | null): Record<string, string> {
+// ─── Low-level HTTP helper ────────────────────────────────────────────────────
+
+interface HttpResponse {
+  status: number;
+  headers: http.IncomingHttpHeaders;
+  rawHeaders: string[];
+  body: string;
+  location: string;
+}
+
+function httpRequest(
+  method: "GET" | "POST",
+  urlStr: string,
+  reqHeaders: Record<string, string> = {},
+  body?: string
+): Promise<HttpResponse> {
+  return new Promise((resolve, reject) => {
+    const url = new URL(urlStr);
+    const lib = url.protocol === "https:" ? https : http;
+
+    const options: https.RequestOptions = {
+      hostname: url.hostname,
+      port: url.port ? Number(url.port) : url.protocol === "https:" ? 443 : 80,
+      path: url.pathname + url.search,
+      method,
+      headers: {
+        ...reqHeaders,
+        ...(body ? { "Content-Length": Buffer.byteLength(body).toString() } : {}),
+      },
+    };
+
+    const req = lib.request(options, (res) => {
+      const chunks: Buffer[] = [];
+      res.on("data", (chunk: Buffer) => chunks.push(chunk));
+      res.on("end", () => {
+        const rawLoc = res.headers["location"];
+        const location = Array.isArray(rawLoc) ? rawLoc[0] : (rawLoc ?? "");
+        resolve({
+          status: res.statusCode ?? 0,
+          headers: res.headers,
+          rawHeaders: res.rawHeaders,
+          body: Buffer.concat(chunks).toString("utf-8"),
+          location,
+        });
+      });
+    });
+
+    req.on("error", reject);
+    if (body) req.write(body);
+    req.end();
+  });
+}
+
+// Extract all Set-Cookie values from raw headers array
+function extractSetCookies(rawHeaders: string[]): Record<string, string> {
   const result: Record<string, string> = {};
-  if (!header) return result;
-  for (const segment of header.split(/,\s*(?=[A-Za-z_-]+=)/)) {
-    const kv = segment.split(";")[0]?.trim() ?? "";
-    const eq = kv.indexOf("=");
-    if (eq > 0) result[kv.slice(0, eq).trim()] = kv.slice(eq + 1).trim();
+  for (let i = 0; i < rawHeaders.length - 1; i++) {
+    if (rawHeaders[i].toLowerCase() === "set-cookie") {
+      const cookieStr = rawHeaders[i + 1];
+      const kv = cookieStr.split(";")[0]?.trim() ?? "";
+      const eq = kv.indexOf("=");
+      if (eq > 0) {
+        result[kv.slice(0, eq).trim()] = kv.slice(eq + 1).trim();
+      }
+    }
   }
   return result;
 }
 
-function cookieHeader(cookies: Record<string, string>): string {
-  return Object.entries(cookies).map(([k, v]) => `${k}=${v}`).join("; ");
+function buildCookieHeader(cookies: Record<string, string>): string {
+  return Object.entries(cookies)
+    .map(([k, v]) => `${k}=${v}`)
+    .join("; ");
 }
 
-// ─── IServ HTTP auth ──────────────────────────────────────────────────────────
-async function iServAuth(username: string, password: string) {
-  const UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1 SchulSanitaeter/1.0";
+function resolveUrl(base: string, location: string): string {
+  if (location.startsWith("http://") || location.startsWith("https://")) {
+    return location;
+  }
+  const b = new URL(base);
+  return `${b.protocol}//${b.host}${location}`;
+}
 
-  // Step 1: GET login page → extract CSRF token + initial cookie
-  let pageResp: Response;
-  try {
-    pageResp = await fetch(`${ISERV_BASE}/iserv/app/login`, {
-      headers: { "User-Agent": UA, "Accept": "text/html" },
+// ─── IServ OAuth2 authentication ──────────────────────────────────────────────
+
+async function iServAuth(
+  username: string,
+  password: string
+): Promise<{ firstName: string; lastName: string; email: string; phone: string }> {
+  let cookies: Record<string, string> = {};
+  let loginFormUrl = `${ISERV_BASE}/iserv/app/login`;
+
+  // ── Phase 1: Follow redirect chain to reach the actual login form ──────────
+  // /iserv/app/login → 302 → /iserv/auth/auth?...state=JWT
+  //                        → 302 → /iserv/auth/login?_target_path=... (sets IServAuthSession)
+  //                               → 200 login form
+  for (let i = 0; i < 6; i++) {
+    const resp = await httpRequest("GET", loginFormUrl, {
+      "User-Agent": UA,
+      "Accept": "text/html,application/xhtml+xml,*/*",
+      "Cookie": buildCookieHeader(cookies),
     });
-  } catch {
-    throw new Error("IServ server nicht erreichbar. Bitte Internetverbindung prüfen.");
+
+    Object.assign(cookies, extractSetCookies(resp.rawHeaders));
+
+    if (resp.status === 301 || resp.status === 302) {
+      loginFormUrl = resolveUrl(loginFormUrl, resp.location);
+    } else if (resp.status === 200) {
+      break;
+    } else {
+      throw new Error(`IServ antwortet nicht (${resp.status})`);
+    }
   }
 
-  if (!pageResp.ok) throw new Error(`IServ antwortet nicht (${pageResp.status})`);
+  if (!cookies["IServAuthSession"]) {
+    throw new Error("IServ-Sitzung konnte nicht gestartet werden. Bitte erneut versuchen.");
+  }
 
-  const html = await pageResp.text();
-  const csrfMatch = html.match(/name="_csrf_token"[^>]*value="([^"]+)"/);
-  if (!csrfMatch) throw new Error("Login-Seite konnte nicht geladen werden.");
-  const csrfToken = csrfMatch[1];
+  // ── Phase 2: POST credentials to the login form URL ───────────────────────
+  const formBody = new URLSearchParams({
+    _username: username,
+    _password: password,
+  }).toString();
 
-  const initCookies = parseSetCookies(pageResp.headers.get("set-cookie"));
-
-  // Step 2: POST credentials
-  const loginResp = await fetch(`${ISERV_BASE}/iserv/app/login`, {
-    method: "POST",
-    headers: {
+  const loginResp = await httpRequest(
+    "POST",
+    loginFormUrl,
+    {
       "Content-Type": "application/x-www-form-urlencoded",
-      "Cookie": cookieHeader(initCookies),
       "User-Agent": UA,
-      "Referer": `${ISERV_BASE}/iserv/app/login`,
+      "Cookie": buildCookieHeader(cookies),
+      "Referer": loginFormUrl,
+      "Accept": "text/html,application/xhtml+xml,*/*",
     },
-    body: new URLSearchParams({
-      _username: username,
-      _password: password,
-      _csrf_token: csrfToken,
-    }).toString(),
-    redirect: "manual",
-  });
+    formBody
+  );
+
+  Object.assign(cookies, extractSetCookies(loginResp.rawHeaders));
+
+  // Login failed if:
+  // - Response is 200 (stayed on login page with error message)
+  // - Response is 302 but redirects back to the login URL
+  if (loginResp.status === 200) {
+    throw new Error("Ungültige Zugangsdaten");
+  }
 
   if (loginResp.status !== 302) {
+    throw new Error(`Unerwartete Antwort vom Server (${loginResp.status})`);
+  }
+
+  const postRedirectLoc = loginResp.location;
+  if (
+    postRedirectLoc.includes("/auth/login") ||
+    postRedirectLoc.includes("error") ||
+    postRedirectLoc.includes("login?")
+  ) {
     throw new Error("Ungültige Zugangsdaten");
   }
 
-  const location = loginResp.headers.get("location") ?? "";
-  if (location.includes("/login") || location.includes("error")) {
-    throw new Error("Ungültige Zugangsdaten");
+  // ── Phase 3: Follow post-login redirects to establish session ─────────────
+  let nextUrl = resolveUrl(loginFormUrl, postRedirectLoc);
+
+  for (let i = 0; i < 6; i++) {
+    const resp = await httpRequest("GET", nextUrl, {
+      "User-Agent": UA,
+      "Cookie": buildCookieHeader(cookies),
+      "Accept": "text/html,*/*",
+    });
+
+    Object.assign(cookies, extractSetCookies(resp.rawHeaders));
+
+    if (resp.status === 301 || resp.status === 302) {
+      nextUrl = resolveUrl(nextUrl, resp.location);
+    } else {
+      break;
+    }
   }
 
-  const loginCookies = parseSetCookies(loginResp.headers.get("set-cookie"));
-  const sessionCookies = { ...initCookies, ...loginCookies };
-  const session = cookieHeader(sessionCookies);
-
-  // Step 3: Try to get user info from IServ API
+  // ── Phase 4: Fetch profile to get real name ───────────────────────────────
   let firstName = username;
   let lastName = "";
   let email = `${username}@gymbla.de`;
-  let phone = "";
+  const phone = "";
 
   try {
-    const profileResp = await fetch(`${ISERV_BASE}/iserv/profile`, {
-      headers: { "Cookie": session, "User-Agent": UA },
+    const profileResp = await httpRequest("GET", `${ISERV_BASE}/iserv/profile`, {
+      "User-Agent": UA,
+      "Cookie": buildCookieHeader(cookies),
+      "Accept": "text/html,*/*",
     });
 
-    if (profileResp.ok) {
-      const profileHtml = await profileResp.text();
+    if (profileResp.status === 200) {
+      const html = profileResp.body;
 
-      // Extract full name from <title> or <h1>
-      const h1 = profileHtml.match(/<h1[^>]*>\s*([^<]+)\s*<\/h1>/)?.[1]?.trim();
-      const titleMatch = profileHtml.match(/<title>([^<|–-]+)/)?.[1]?.trim();
-      const rawName = h1 ?? titleMatch ?? "";
-      if (rawName && !rawName.toLowerCase().includes("iserv")) {
-        const parts = rawName.trim().split(/\s+/);
-        firstName = parts.slice(0, -1).join(" ") || parts[0] || username;
-        lastName = parts[parts.length - 1] || "";
+      // Try to extract full name from <h1>
+      const h1Match = html.match(/<h1[^>]*>\s*([^<]+)\s*<\/h1>/);
+      if (h1Match?.[1]) {
+        const fullName = h1Match[1].trim();
+        if (fullName && !fullName.toLowerCase().includes("iserv") && fullName.length < 60) {
+          const parts = fullName.split(/\s+/);
+          firstName = parts.slice(0, -1).join(" ") || parts[0] || username;
+          lastName = parts.length > 1 ? (parts[parts.length - 1] ?? "") : "";
+        }
       }
 
-      // Extract email
-      const emailMatch = profileHtml.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
-      if (emailMatch) email = emailMatch[1];
+      // Try to extract email
+      const emailMatch = html.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
+      if (emailMatch?.[1]) {
+        email = emailMatch[1];
+      }
     }
   } catch {
-    // Profile fetch failed, use defaults — login still succeeded
+    // Profile fetch optional — login already succeeded
   }
 
   return { firstName, lastName, email, phone };
 }
 
-// ─── POST /api/auth/login ─────────────────────────────────────────────────────
+// ─── Routes ───────────────────────────────────────────────────────────────────
+
 router.post("/login", async (req, res) => {
   const { username, password } = req.body as { username: string; password: string };
 
@@ -160,12 +278,10 @@ router.post("/login", async (req, res) => {
   }
 });
 
-// ─── POST /api/auth/logout ────────────────────────────────────────────────────
 router.post("/logout", requireAuth, (_req, res) => {
   res.json({ message: "Logged out" });
 });
 
-// ─── GET /api/auth/me ─────────────────────────────────────────────────────────
 router.get("/me", requireAuth, (req: AuthRequest, res) => {
   res.json({ userId: req.user!.userId, role: req.user!.role });
 });
