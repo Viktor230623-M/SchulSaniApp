@@ -116,7 +116,7 @@ export default function LoginScreen() {
                 <TextInput
                   value={username}
                   onChangeText={setUsername}
-                  placeholder="benutzername"
+                  placeholder="Benutzername"
                   placeholderTextColor={theme.textTertiary}
                   autoCapitalize="none"
                   autoCorrect={false}

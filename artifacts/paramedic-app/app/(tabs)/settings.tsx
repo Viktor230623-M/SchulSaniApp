@@ -52,11 +52,10 @@ export default function SettingsScreen() {
   const setAvatarUri = useAppStore((s) => s.setAvatarUri);
   const logout = useAppStore((s) => s.logout);
 
-  // Per-user avatar — never shared across accounts
   const avatarUri = user ? (avatarUriMap[user.id] ?? null) : null;
 
-  // Teal is available exclusively for CTO accounts — no global flag needed
-  const tealUnlocked = user?.role === "cto";
+  // Exklusive Themes nur für CTO
+  const exclusiveUnlocked = user?.role === "cto";
 
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
@@ -119,14 +118,17 @@ export default function SettingsScreen() {
     { key: "red", label: t("settings.themeRed", lang), color: "#EF4444", border: "#FECACA" },
   ];
 
-  const tealThemeOption: { key: AppTheme; label: string; color: string; border: string } = {
-    key: "teal",
-    label: t("settings.themeTeal", lang),
-    color: "#0D9488",
-    border: "#99F6E4",
-  };
+  const exclusiveThemes: { key: AppTheme; label: string; color: string; border: string }[] = [
+    { key: "teal", label: t("settings.themeTeal", lang), color: "#0D9488", border: "#99F6E4" },
+    { key: "crimson", label: t("settings.themeCrimson", lang), color: "#E8001C", border: "#3D0000" },
+    { key: "midnight", label: t("settings.themeMidnight", lang), color: "#0A1628", border: "#1A3055" },
+    { key: "sunset", label: t("settings.themeSunset", lang), color: "#F97316", border: "#FDDBA6" },
+    { key: "amethyst", label: t("settings.themeAmethyst", lang), color: "#8B5CF6", border: "#D8B4FE" },
+  ];
 
-  const themes = tealUnlocked ? [...baseThemes, tealThemeOption] : baseThemes;
+  const exclusiveKeys: AppTheme[] = ["teal", "crimson", "midnight", "sunset", "amethyst"];
+
+  const themes = exclusiveUnlocked ? [...baseThemes, ...exclusiveThemes] : baseThemes;
 
   const langs: { key: AppLanguage; label: string; flag: string }[] = [
     { key: "de", label: "Deutsch", flag: "🇩🇪" },
@@ -229,17 +231,17 @@ export default function SettingsScreen() {
           >
             <View style={[styles.themePreview, { backgroundColor: th.color, borderColor: th.border }]} />
             <Text style={[styles.themeLabel, { color: theme.text }]}>{th.label}</Text>
-            {th.key === "teal" && (
-              <Text style={styles.tealSecret}>✨ Exklusiv</Text>
+            {exclusiveKeys.includes(th.key) && (
+              <Text style={styles.exclusiveTag}>✨ Exklusiv</Text>
             )}
             {themeKey === th.key && (
               <Ionicons name="checkmark-circle" size={18} color={theme.tint} />
             )}
           </Pressable>
         ))}
-        {!tealUnlocked && (
-          <Text style={[styles.tealHint, { color: theme.textTertiary }]}>
-            🔒 Ein weiteres exklusives Design ist versteckt...
+        {!exclusiveUnlocked && (
+          <Text style={[styles.exclusiveHint, { color: theme.textTertiary }]}>
+            🔒 Weitere exklusive Designs sind versteckt...
           </Text>
         )}
       </View>
@@ -336,8 +338,8 @@ const styles = StyleSheet.create({
   themeBtn: { flexDirection: "row", alignItems: "center", gap: 12, padding: 12, borderRadius: 12 },
   themePreview: { width: 28, height: 28, borderRadius: 8, borderWidth: 1 },
   themeLabel: { flex: 1, fontSize: 15, fontFamily: "Inter_500Medium" },
-  tealSecret: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: "#0D9488" },
-  tealHint: { fontSize: 11, fontFamily: "Inter_400Regular", textAlign: "center", paddingTop: 4 },
+  exclusiveTag: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: "#E8001C" },
+  exclusiveHint: { fontSize: 11, fontFamily: "Inter_400Regular", textAlign: "center", paddingTop: 4 },
   userRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingTop: 12, borderTopWidth: 1 },
   userAvatar: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   userAvatarText: { fontSize: 13, fontFamily: "Inter_700Bold" },
