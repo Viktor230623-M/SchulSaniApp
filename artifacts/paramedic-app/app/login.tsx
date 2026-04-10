@@ -19,7 +19,7 @@ import { MedicalCross } from "@/components/MedicalCross";
 import { WaveBackground } from "@/components/WaveBackground";
 import { t } from "@/constants/i18n";
 import { getTheme } from "@/constants/theme";
-import ApiService from "@/services/ApiService";
+import ApiService, { setAuthToken } from "@/services/ApiService";
 import { useAppStore } from "@/store/useAppStore";
 
 export default function LoginScreen() {
@@ -48,10 +48,9 @@ export default function LoginScreen() {
     setError("");
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      const { user, isTealUnlocked } = await ApiService.login({ username, password });
-      if (isTealUnlocked) {
-        setTheme("teal");
-      }
+      const { user, isTealUnlocked, token } = await ApiService.login({ username, password });
+      if (isTealUnlocked) setTheme("teal");
+      if (token) setAuthToken(token);
       login(user);
       router.replace("/(tabs)/news");
     } catch (err: any) {
@@ -92,7 +91,6 @@ export default function LoginScreen() {
               { backgroundColor: theme.card, borderColor: theme.cardBorder },
             ]}
           >
-            {/* IServ Logo / Title */}
             <View style={styles.iservHeader}>
               <View style={[styles.iservBadge, { backgroundColor: "#EFF6FF" }]}>
                 <Text style={styles.iservBadgeText}>IServ</Text>
