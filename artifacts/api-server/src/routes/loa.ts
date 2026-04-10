@@ -1,79 +1,79 @@
 import { Router } from "express";
-import { LOA_REQUESTS, USERS, uid } from "../data/store";
-import type { LOARequest } from "../data/store";
+import { eq } from "drizzle-orm";
+import { db, loaTable } from "@workspace/db";
 import { requireAuth, requireRole, type AuthRequest } from "../middlewares/auth";
 
 const router = Router();
 
-// GET /api/loa
-router.get("/", requireAuth, (req: AuthRequest, res) => {
+function uid() {
+  return Date.now().toString(36) + Math.random().toString(36).substring(2, 9);
+}
+
+router.get("/", requireAuth, async (req: AuthRequest, res) => {
   const { userId, role } = req.user!;
   const canSeeAll = ["admin", "teacher", "sanitaeter_leitung", "cto"].includes(role);
-  const items = canSeeAll ? LOA_REQUESTS : LOA_REQUESTS.filter((r) => r.userId === userId);
+  const items = canSeeAll
+    ? await db.select().from(loaTable)
+    : await db.select().from(loaTable).where(eq(loaTable.userId, userId));
   res.json(items);
 });
 
-// POST /api/loa
-router.post("/", requireAuth, (req: AuthRequest, res) => {
+router.post("/", requireAuth, async (req: AuthRequest, res) => {
   const { userId } = req.user!;
-  const user = USERS.find((u) => u.id === userId);
-  const { fromDate, toDate, reason } = req.body as Partial<LOARequest>;
-
+  const { fromDate, toDate, reason, userName } = req.body;
   if (!fromDate || !toDate || !reason) {
     res.status(400).json({ error: "fromDate, toDate, reason required" });
     return;
   }
-
-  const newReq: LOARequest = {
+  const newReq = {
     id: uid(),
     userId,
-    userName: user ? `${user.firstName} ${user.lastName}` : "Unbekannt",
+    userName: userName ?? userId,
     fromDate,
     toDate,
     reason,
-    status: "pending",
-    createdAt: new Date().toISOString(),
+    status: "pending" as const,
+    createdAt: new Date(),
+    adminNote: null,
+    appealNote: null,
+    reviewedBy: null,
+    reviewedAt: null,
   };
-
-  LOA_REQUESTS.unshift(newReq);
+  await db.insert(loaTable).values(newReq);
   res.status(201).json(newReq);
 });
 
-// POST /api/loa/:id/approve
-router.post("/:id/approve", requireAuth, requireRole("admin", "teacher", "sanitaeter_leitung", "cto"), (req: AuthRequest, res) => {
-  const r = LOA_REQUESTS.find((r) => r.id === req.params["id"]);
+router.post("/:id/approve", requireAuth, requireRole("admin", "teacher", "sanitaeter_leitung", "cto"), async (req: AuthRequest, res) => {
+  const [r] = await db.update(loaTable).set({
+    status: "approved",
+    adminNote: req.body.note ?? null,
+    reviewedBy: req.user!.userId,
+    reviewedAt: new Date(),
+  }).where(eq(loaTable.id, req.params["id"]!)).returning();
   if (!r) { res.status(404).json({ error: "Not found" }); return; }
-
-  const reviewer = USERS.find((u) => u.id === req.user!.userId);
-  r.status = "approved";
-  r.adminNote = req.body.note;
-  r.reviewedBy = reviewer ? `${reviewer.firstName} ${reviewer.lastName}` : "Admin";
-  r.reviewedAt = new Date().toISOString();
   res.json(r);
 });
 
-// POST /api/loa/:id/reject
-router.post("/:id/reject", requireAuth, requireRole("admin", "teacher", "sanitaeter_leitung", "cto"), (req: AuthRequest, res) => {
-  const r = LOA_REQUESTS.find((r) => r.id === req.params["id"]);
+router.post("/:id/reject", requireAuth, requireRole("admin", "teacher", "sanitaeter_leitung", "cto"), async (req: AuthRequest, res) => {
+  const [r] = await db.update(loaTable).set({
+    status: "rejected",
+    adminNote: req.body.reason ?? "Nicht möglich.",
+    reviewedBy: req.user!.userId,
+    reviewedAt: new Date(),
+  }).where(eq(loaTable.id, req.params["id"]!)).returning();
   if (!r) { res.status(404).json({ error: "Not found" }); return; }
-
-  const reviewer = USERS.find((u) => u.id === req.user!.userId);
-  r.status = "rejected";
-  r.adminNote = req.body.reason ?? "Nicht möglich.";
-  r.reviewedBy = reviewer ? `${reviewer.firstName} ${reviewer.lastName}` : "Admin";
-  r.reviewedAt = new Date().toISOString();
   res.json(r);
 });
 
-// POST /api/loa/:id/appeal
-router.post("/:id/appeal", requireAuth, (req: AuthRequest, res) => {
+router.post("/:id/appeal", requireAuth, async (req: AuthRequest, res) => {
   const { userId } = req.user!;
-  const r = LOA_REQUESTS.find((r) => r.id === req.params["id"]);
-  if (!r) { res.status(404).json({ error: "Not found" }); return; }
-  if (r.userId !== userId) { res.status(403).json({ error: "Forbidden" }); return; }
-
-  r.status = "appealed";
-  r.appealNote = req.body.appealNote;
+  const [existing] = await db.select().from(loaTable).where(eq(loaTable.id, req.params["id"]!));
+  if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+  if (existing.userId !== userId) { res.status(403).json({ error: "Forbidden" }); return; }
+  const [r] = await db.update(loaTable).set({
+    status: "appealed",
+    appealNote: req.body.appealNote ?? null,
+  }).where(eq(loaTable.id, req.params["id"]!)).returning();
   res.json(r);
 });
 
