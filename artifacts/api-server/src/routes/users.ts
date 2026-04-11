@@ -1,32 +1,27 @@
 import { Router } from "express";
-import { USERS, DUTY_STATUS } from "../data/store";
+import { eq } from "drizzle-orm";
+import { db, usersTable } from "@workspace/db";
 import { requireAuth, requireRole, type AuthRequest } from "../middlewares/auth";
 
 const router = Router();
 
-function safeUser(u: (typeof USERS)[0]) {
+function safeUser(u: typeof usersTable.$inferSelect) {
   const { passwordHash: _, ...rest } = u;
   return rest;
 }
 
-// GET /api/users — admin/cto only
-router.get("/", requireAuth, requireRole("admin", "cto"), (_req, res) => {
-  res.json(USERS.map(safeUser));
+router.get("/", requireAuth, requireRole("admin", "cto"), async (_req, res) => {
+  const users = await db.select().from(usersTable);
+  res.json(users.map(safeUser));
 });
 
-// GET /api/users/on-duty
-router.get("/on-duty", requireAuth, (_req, res) => {
-  const onDuty = [...DUTY_STATUS.entries()]
-    .filter(([, entry]) => entry.status === "on_duty")
-    .map(([userId]) => USERS.find((u) => u.id === userId))
-    .filter(Boolean)
-    .map((u) => safeUser(u!));
-  res.json(onDuty);
+router.get("/on-duty", requireAuth, async (_req, res) => {
+  const users = await db.select().from(usersTable);
+  res.json(users.map(safeUser));
 });
 
-// GET /api/users/:id
-router.get("/:id", requireAuth, (req: AuthRequest, res) => {
-  const user = USERS.find((u) => u.id === req.params["id"]);
+router.get("/:id", requireAuth, async (req: AuthRequest, res) => {
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.params["id"]!));
   if (!user) {
     res.status(404).json({ error: "Not found" });
     return;
