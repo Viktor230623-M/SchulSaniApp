@@ -62,14 +62,15 @@ export default function DutyScreen() {
   }
 
   function roleLabelShort(role: User["role"]) {
-    return {
-      cto: "CTO",
-      student_paramedic: "San.",
-      sanitaeter_leitung: "Ltg.",
-      admin: "Admin",
-      teacher: "Lehr.",
-    }[role];
-  }
+  return {
+    cto: "CTO",
+    student_paramedic: "San.",
+    sanitaeter_leitung: "Ltg.",
+    sanitaeter_leitung_admin: "Ltg.",
+    admin: "Admin",
+    teacher: "Leher",
+  }[role] ?? role;
+}
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
 
