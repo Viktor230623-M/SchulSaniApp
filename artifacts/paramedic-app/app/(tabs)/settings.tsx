@@ -35,7 +35,6 @@ function RoleBadgeLarge({ role, theme }: { role: User["role"]; theme: any }) {
   const cfg = ROLE_CONFIG[role];
   return (
     <View style={[styles.roleBadgeLarge, { backgroundColor: cfg.bg, borderColor: cfg.text + "30" }]}>
-      <Text style={styles.roleIcon}>{cfg.icon}</Text>
       <Text style={[styles.roleBadgeLargeText, { color: cfg.text }]}>{cfg.label}</Text>
     </View>
   );
@@ -55,14 +54,13 @@ export default function SettingsScreen() {
 
   const avatarUri = user ? (avatarUriMap[user.id] ?? null) : null;
 
-  // Exklusive Themes nur für CTO
-  const exclusiveUnlocked = user?.role === "cto";
+  // Exklusive Themes
+  const exclusiveUnlocked = ["cto", "admin", "sanitaeter_leitung_admin"].includes(user?.role ?? "");
 
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [showUsers, setShowUsers] = useState(false);
-
-  const canSeeAllUsers = user?.role === "admin" || user?.role === "cto";
+  const canSeeAllUsers = ["admin", "cto", "sanitaeter_leitung_admin"].includes(user?.role ?? "");
 
   useEffect(() => {
     if (canSeeAllUsers) {
@@ -129,7 +127,8 @@ export default function SettingsScreen() {
 
   const exclusiveKeys: AppTheme[] = ["teal", "crimson", "midnight", "sunset", "amethyst"];
 
-  const themes = exclusiveUnlocked ? [...baseThemes, ...exclusiveThemes] : baseThemes;
+  const isCTO = user?.role === "cto";
+  const themes = isCTO ? [...baseThemes, ...exclusiveThemes] : exclusiveUnlocked ? [...baseThemes, ...exclusiveThemes.filter(t => t.key !== "teal")] : baseThemes;
 
   const langs: { key: AppLanguage; label: string; flag: string }[] = [
     { key: "de", label: "Deutsch", flag: "🇩🇪" },
@@ -232,9 +231,6 @@ export default function SettingsScreen() {
           >
             <View style={[styles.themePreview, { backgroundColor: th.color, borderColor: th.border }]} />
             <Text style={[styles.themeLabel, { color: theme.text }]}>{th.label}</Text>
-            {exclusiveKeys.includes(th.key) && (
-              <Text style={styles.exclusiveTag}>✨ Exklusiv</Text>
-            )}
             {themeKey === th.key && (
               <Ionicons name="checkmark-circle" size={18} color={theme.tint} />
             )}
