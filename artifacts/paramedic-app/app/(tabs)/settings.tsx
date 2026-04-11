@@ -257,12 +257,12 @@ export default function SettingsScreen() {
               <ActivityIndicator color={theme.tint} />
             ) : (
               allUsers.map((u) => {
-                const cfg = ROLE_CONFIG[u.role];
+                const cfg = ROLE_CONFIG[u.role] ?? { label: u.role, bg: "#F3F4F6", text: "#6B7280", icon: "" };
                 return (
                   <View key={u.id} style={[styles.userRow, { borderTopColor: theme.cardBorder }]}>
                     <View style={[styles.userAvatar, { backgroundColor: cfg.bg }]}>
                       <Text style={[styles.userAvatarText, { color: cfg.text }]}>
-                        {u.firstName[0]}{u.lastName[0]}
+                        {u.firstName?.[0] ?? "?"}{u.lastName?.[0] ?? ""}
                       </Text>
                     </View>
                     <View style={styles.userInfo}>
