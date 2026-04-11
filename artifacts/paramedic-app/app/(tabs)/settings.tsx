@@ -60,7 +60,7 @@ export default function SettingsScreen() {
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [showUsers, setShowUsers] = useState(false);
-  const canSeeAllUsers = ["admin", "cto", "sanitaeter_leitung_admin"].includes(user?.role ?? "");
+  const canSeeAllUsers = ["admin", "cto", "sanitaeter_leitung_admin", "teacher"].includes(user?.role ?? "");
 
   useEffect(() => {
   if (canSeeAllUsers && user) {
