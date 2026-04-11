@@ -15,153 +15,22 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
 import { t } from "@/constants/i18n";
 import { getTheme } from "@/constants/theme";
 import type { LOARequest, LOAStatus } from "@/models";
 import ApiService from "@/services/ApiService";
 import { useAppStore } from "@/store/useAppStore";
 
-function StatusBadge({ status, theme }: { status: LOAStatus; theme: any }) {
+function StatusBadge({ status }: { status: LOAStatus }) {
   const cfg = {
-    pending: { color: "#F97316", bg: "#FFF7ED" },
-    approved: { color: "#22C55E", bg: "#F0FDF4" },
-    rejected: { color: "#EF4444", bg: "#FEF2F2" },
-    appealed: { color: "#8B5CF6", bg: "#F5F3FF" },
-  }[status];
-  const label = {
-    pending: "Ausstehend",
-    approved: "Genehmigt",
-    rejected: "Abgelehnt",
-    appealed: "Einspruch",
+    pending: { label: "Ausstehend", color: "#F97316", bg: "#FFF7ED" },
+    approved: { label: "Genehmigt", color: "#22C55E", bg: "#F0FDF4" },
+    rejected: { label: "Abgelehnt", color: "#EF4444", bg: "#FEF2F2" },
+    appealed: { label: "Einspruch", color: "#8B5CF6", bg: "#F5F3FF" },
   }[status];
   return (
     <View style={[styles.badge, { backgroundColor: cfg.bg }]}>
-      <Text style={[styles.badgeText, { color: cfg.color }]}>{label}</Text>
-    </View>
-  );
-}
-
-function LOACard({ req, canModerate, onApprove, onReject, onAppeal, theme, lang, currentUserId }: any) {
-  const [showAppeal, setShowAppeal] = useState(false);
-  const [appealText, setAppealText] = useState("");
-  const [showReject, setShowReject] = useState(false);
-  const [rejectReason, setRejectReason] = useState("");
-
-  const isOwn = req.userId === currentUserId;
-
-  function fmtDate(d: string) {
-    return new Date(d).toLocaleDateString("de-DE", { day: "2-digit", month: "short", year: "numeric" });
-  }
-
-  return (
-    <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
-      <View style={styles.cardHeader}>
-        <View>
-          <Text style={[styles.cardName, { color: theme.text }]}>{req.userName}</Text>
-          <Text style={[styles.cardDates, { color: theme.textSecondary }]}>
-            {fmtDate(req.fromDate)} → {fmtDate(req.toDate)}
-          </Text>
-        </View>
-        <StatusBadge status={req.status} theme={theme} />
-      </View>
-
-      <Text style={[styles.cardReason, { color: theme.textSecondary }]}>{req.reason}</Text>
-
-      {req.adminNote && (
-        <View style={[styles.noteBox, { backgroundColor: theme.backgroundTertiary }]}>
-          <Ionicons name="chatbubble-outline" size={13} color={theme.textTertiary} />
-          <Text style={[styles.noteText, { color: theme.textSecondary }]}>{req.adminNote}</Text>
-        </View>
-      )}
-
-      {req.appealNote && (
-        <View style={[styles.noteBox, { backgroundColor: "#F5F3FF" }]}>
-          <Ionicons name="arrow-undo" size={13} color="#8B5CF6" />
-          <Text style={[styles.noteText, { color: "#8B5CF6" }]}>{req.appealNote}</Text>
-        </View>
-      )}
-
-      <View style={styles.cardActions}>
-        {isOwn && req.status === "rejected" && !req.appealNote && (
-          <>
-            {!showAppeal ? (
-              <Pressable
-                onPress={() => setShowAppeal(true)}
-                style={[styles.actionBtn, { borderColor: "#8B5CF6" }]}
-              >
-                <Ionicons name="arrow-undo" size={14} color="#8B5CF6" />
-                <Text style={[styles.actionBtnText, { color: "#8B5CF6" }]}>{t("loa.appeal", lang)}</Text>
-              </Pressable>
-            ) : (
-              <View style={styles.appealInput}>
-                <TextInput
-                  value={appealText}
-                  onChangeText={setAppealText}
-                  placeholder={t("loa.appealPlaceholder", lang)}
-                  placeholderTextColor={theme.textTertiary}
-                  style={[styles.inlineInput, { backgroundColor: theme.inputBackground, borderColor: theme.inputBorder, color: theme.text }]}
-                />
-                <View style={styles.row}>
-                  <Pressable onPress={() => setShowAppeal(false)} style={[styles.actionBtn, { borderColor: theme.cardBorder }]}>
-                    <Text style={[styles.actionBtnText, { color: theme.textSecondary }]}>{t("common.cancel", lang)}</Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={() => { onAppeal(req.id, appealText); setShowAppeal(false); }}
-                    style={[styles.actionBtn, { backgroundColor: "#8B5CF6", borderColor: "#8B5CF6" }]}
-                  >
-                    <Text style={[styles.actionBtnText, { color: "#fff" }]}>{t("common.send", lang)}</Text>
-                  </Pressable>
-                </View>
-              </View>
-            )}
-          </>
-        )}
-
-        {canModerate && req.status === "pending" && (
-          <>
-            {!showReject ? (
-              <>
-                <Pressable
-                  onPress={() => setShowReject(true)}
-                  style={[styles.actionBtn, { borderColor: theme.danger }]}
-                >
-                  <Ionicons name="close" size={14} color={theme.danger} />
-                  <Text style={[styles.actionBtnText, { color: theme.danger }]}>{t("loa.reject", lang)}</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); onApprove(req.id); }}
-                  style={[styles.actionBtn, { backgroundColor: theme.tint, borderColor: theme.tint }]}
-                >
-                  <Ionicons name="checkmark" size={14} color="#fff" />
-                  <Text style={[styles.actionBtnText, { color: "#fff" }]}>{t("loa.approve", lang)}</Text>
-                </Pressable>
-              </>
-            ) : (
-              <View style={styles.appealInput}>
-                <TextInput
-                  value={rejectReason}
-                  onChangeText={setRejectReason}
-                  placeholder={t("loa.rejectReason", lang)}
-                  placeholderTextColor={theme.textTertiary}
-                  style={[styles.inlineInput, { backgroundColor: theme.inputBackground, borderColor: theme.inputBorder, color: theme.text }]}
-                />
-                <View style={styles.row}>
-                  <Pressable onPress={() => setShowReject(false)} style={[styles.actionBtn, { borderColor: theme.cardBorder }]}>
-                    <Text style={[styles.actionBtnText, { color: theme.textSecondary }]}>{t("common.cancel", lang)}</Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={() => { onReject(req.id, rejectReason); setShowReject(false); }}
-                    style={[styles.actionBtn, { backgroundColor: theme.danger, borderColor: theme.danger }]}
-                  >
-                    <Text style={[styles.actionBtnText, { color: "#fff" }]}>{t("loa.reject", lang)}</Text>
-                  </Pressable>
-                </View>
-              </View>
-            )}
-          </>
-        )}
-      </View>
+      <Text style={[styles.badgeText, { color: cfg.color }]}>{cfg.label}</Text>
     </View>
   );
 }
@@ -172,24 +41,31 @@ export default function LOAScreen() {
   const themeKey = useAppStore((s) => s.theme);
   const theme = getTheme(themeKey);
   const user = useAppStore((s) => s.user);
-  const { loaRequests, loaLoading, setLOARequests, setLOALoading, updateLOA, addLOA } = useAppStore();
+  const { loaRequests, setLOARequests, addLOA, updateLOA } = useAppStore();
 
-  const canModerate = user?.role === "admin" || user?.role === "teacher" || user?.role === "sanitaeter_leitung";
-  const [showAll, setShowAll] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
+  const [appealText, setAppealText] = useState("");
+  const [appealId, setAppealId] = useState<string | null>(null);
+  const [rejectId, setRejectId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
+
+  const role = user?.role ?? "";
+  const canModerate = ["admin", "sanitaeter_leitung_admin", "teacher", "cto"].includes(role);
+  const canCreate = ["student_paramedic", "sanitaeter_leitung", "sanitaeter_leitung_admin", "admin", "cto"].includes(role);
 
   useEffect(() => { load(); }, []);
 
   async function load() {
-    setLOALoading(true);
-    const data = await ApiService.getLOARequests(canModerate && showAll ? undefined : user?.id);
+    setLoading(true);
+    const data = await ApiService.getLOARequests();
     setLOARequests(data);
-    setLOALoading(false);
+    setLoading(false);
   }
 
   async function onRefresh() {
@@ -198,44 +74,59 @@ export default function LOAScreen() {
     setRefreshing(false);
   }
 
-  async function handleApprove(id: string) {
-    const updated = await ApiService.approveLOA(id);
-    updateLOA(id, { status: "approved", adminNote: updated.adminNote });
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-  }
-
-  async function handleReject(id: string, reason: string) {
-    const updated = await ApiService.rejectLOA(id, reason);
-    updateLOA(id, { status: "rejected", adminNote: reason });
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-  }
-
-  async function handleAppeal(id: string, note: string) {
-    const updated = await ApiService.appealLOA(id, note);
-    updateLOA(id, { status: "appealed", appealNote: note });
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-  }
-
   async function handleCreate() {
-    if (!fromDate || !toDate || !reason.trim()) return;
+    if (!fromDate.trim() || !toDate.trim() || !reason.trim()) return;
     setSubmitting(true);
-    const req = await ApiService.createLOA({
-      userId: user?.id ?? "",
-      userName: user ? `${user.firstName} ${user.lastName}` : "",
-      fromDate,
-      toDate,
-      reason,
-    });
-    addLOA(req);
-    setFromDate("");
-    setToDate("");
-    setReason("");
-    setSubmitting(false);
-    setShowCreate(false);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    try {
+      const req = await ApiService.createLOA({
+        userId: user?.id ?? "",
+        userName: `${user?.firstName} ${user?.lastName}`.trim(),
+        fromDate,
+        toDate,
+        reason,
+      });
+      // CTO LOA gets auto-approved
+      if (role === "cto") {
+        const approved = await ApiService.approveLOA(req.id, "Automatisch genehmigt");
+        addLOA(approved);
+      } else {
+        addLOA(req);
+      }
+      setFromDate("");
+      setToDate("");
+      setReason("");
+      setShowCreate(false);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } finally {
+      setSubmitting(false);
+    }
   }
 
-  const displayed = canModerate && showAll
+  async function handleApprove(id: string) {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const updated = await ApiService.approveLOA(id);
+    updateLOA(id, updated);
+  }
+
+  async function handleReject(id: string) {
+    if (!rejectReason.trim()) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const updated = await ApiService.rejectLOA(id, rejectReason);
+    updateLOA(id, updated);
+    setRejectId(null);
+    setRejectReason("");
+  }
+
+  async function handleAppeal(id: string) {
+    if (!appealText.trim()) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const updated = await ApiService.appealLOA(id, appealText);
+    updateLOA(id, updated);
+    setAppealId(null);
+    setAppealText("");
+  }
+
+  const visible = canModerate
     ? loaRequests
     : loaRequests.filter((r) => r.userId === user?.id);
 
@@ -244,7 +135,7 @@ export default function LOAScreen() {
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <FlatList
-        data={displayed}
+        data={visible}
         keyExtractor={(r) => r.id}
         contentContainerStyle={{
           paddingTop: topPad + 20,
@@ -254,44 +145,23 @@ export default function LOAScreen() {
           flexGrow: 1,
         }}
         ListHeaderComponent={
-          <View>
-            <View style={styles.headerRow}>
-              <Text style={[styles.heading, { color: theme.text }]}>{t("loa.title", lang)}</Text>
+          <View style={styles.headerRow}>
+            <Text style={[styles.heading, { color: theme.text }]}>{t("tabs.loa", lang)}</Text>
+            {canCreate && (
               <Pressable
                 onPress={() => setShowCreate(true)}
-                style={[styles.addBtn, { backgroundColor: theme.tint }]}
+                style={[styles.iconBtn, { backgroundColor: theme.tint }]}
               >
                 <Ionicons name="add" size={20} color="#fff" />
               </Pressable>
-            </View>
-            {canModerate && (
-              <View style={styles.toggleRow}>
-                <Pressable
-                  onPress={() => setShowAll(false)}
-                  style={[styles.toggleBtn, !showAll && { backgroundColor: theme.tint }]}
-                >
-                  <Text style={[styles.toggleBtnText, { color: !showAll ? "#fff" : theme.textSecondary }]}>
-                    {t("loa.myRequests", lang)}
-                  </Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => setShowAll(true)}
-                  style={[styles.toggleBtn, showAll && { backgroundColor: theme.tint }]}
-                >
-                  <Text style={[styles.toggleBtnText, { color: showAll ? "#fff" : theme.textSecondary }]}>
-                    {t("loa.allRequests", lang)}
-                  </Text>
-                </Pressable>
-              </View>
             )}
           </View>
         }
         ListEmptyComponent={
-          !loaLoading ? (
+          !loading ? (
             <View style={styles.empty}>
               <Ionicons name="calendar-outline" size={52} color={theme.textTertiary} />
-              <Text style={[styles.emptyTitle, { color: theme.text }]}>{t("loa.noRequests", lang)}</Text>
-              <Text style={[styles.emptyDesc, { color: theme.textSecondary }]}>{t("loa.noRequestsDesc", lang)}</Text>
+              <Text style={[styles.emptyTitle, { color: theme.text }]}>Keine Anträge</Text>
             </View>
           ) : (
             <ActivityIndicator size="large" color={theme.tint} style={{ marginTop: 60 }} />
@@ -299,69 +169,149 @@ export default function LOAScreen() {
         }
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.tint} />}
         renderItem={({ item }) => (
-          <LOACard
-            req={item}
-            canModerate={canModerate}
-            onApprove={handleApprove}
-            onReject={handleReject}
-            onAppeal={handleAppeal}
-            theme={theme}
-            lang={lang}
-            currentUserId={user?.id}
-          />
+          <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
+            <View style={styles.cardRow}>
+              <Text style={[styles.name, { color: theme.text }]}>{item.userName}</Text>
+              <StatusBadge status={item.status} />
+            </View>
+            <Text style={[styles.dates, { color: theme.textSecondary }]}>
+              {item.fromDate} – {item.toDate}
+            </Text>
+            <Text style={[styles.reason, { color: theme.text }]}>{item.reason}</Text>
+            {item.adminNote && (
+              <View style={[styles.noteBox, { backgroundColor: theme.backgroundTertiary }]}>
+                <Text style={[styles.noteText, { color: theme.textSecondary }]}>📝 {item.adminNote}</Text>
+              </View>
+            )}
+            {/* Moderator actions */}
+            {canModerate && item.status === "pending" && (
+              <View style={styles.actions}>
+                <Pressable
+                  onPress={() => { setRejectId(item.id); }}
+                  style={[styles.btn, { borderColor: theme.danger }]}
+                >
+                  <Text style={[styles.btnText, { color: theme.danger }]}>Ablehnen</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => handleApprove(item.id)}
+                  style={[styles.btn, { backgroundColor: theme.tint, borderColor: theme.tint }]}
+                >
+                  <Text style={[styles.btnText, { color: "#fff" }]}>Genehmigen</Text>
+                </Pressable>
+              </View>
+            )}
+            {/* Appeal for own rejected */}
+            {item.userId === user?.id && item.status === "rejected" && (
+              <Pressable
+                onPress={() => setAppealId(item.id)}
+                style={[styles.btn, { borderColor: "#8B5CF6", marginTop: 8 }]}
+              >
+                <Text style={[styles.btnText, { color: "#8B5CF6" }]}>Einspruch einlegen</Text>
+              </Pressable>
+            )}
+          </View>
         )}
-        showsVerticalScrollIndicator={false}
       />
 
+      {/* Create Modal */}
       <Modal visible={showCreate} animationType="slide" presentationStyle="formSheet">
         <View style={[styles.modal, { backgroundColor: theme.background }]}>
           <View style={[styles.modalHeader, { borderBottomColor: theme.cardBorder }]}>
-            <Text style={[styles.modalTitle, { color: theme.text }]}>{t("loa.newRequest", lang)}</Text>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>Neuer LOA Antrag</Text>
             <Pressable onPress={() => setShowCreate(false)}>
               <Ionicons name="close" size={24} color={theme.text} />
             </Pressable>
           </View>
-          <ScrollView contentContainerStyle={{ padding: 20, gap: 16 }} keyboardShouldPersistTaps="handled">
-            <View>
-              <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>{t("loa.from", lang)}</Text>
-              <TextInput
-                value={fromDate}
-                onChangeText={setFromDate}
-                placeholder="2025-04-14"
-                placeholderTextColor={theme.textTertiary}
-                style={[styles.fieldInput, { backgroundColor: theme.inputBackground, borderColor: theme.inputBorder, color: theme.text }]}
-              />
-            </View>
-            <View>
-              <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>{t("loa.to", lang)}</Text>
-              <TextInput
-                value={toDate}
-                onChangeText={setToDate}
-                placeholder="2025-04-18"
-                placeholderTextColor={theme.textTertiary}
-                style={[styles.fieldInput, { backgroundColor: theme.inputBackground, borderColor: theme.inputBorder, color: theme.text }]}
-              />
-            </View>
-            <View>
-              <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>{t("loa.reason", lang)}</Text>
-              <TextInput
-                value={reason}
-                onChangeText={setReason}
-                placeholder={t("loa.reasonPlaceholder", lang)}
-                placeholderTextColor={theme.textTertiary}
-                multiline
-                numberOfLines={4}
-                style={[styles.fieldInput, { backgroundColor: theme.inputBackground, borderColor: theme.inputBorder, color: theme.text, height: 100, textAlignVertical: "top" }]}
-              />
-            </View>
+          <ScrollView contentContainerStyle={{ padding: 20, gap: 14 }}>
+            <TextInput
+              value={fromDate}
+              onChangeText={setFromDate}
+              placeholder="Von (z.B. 2025-04-14)"
+              placeholderTextColor={theme.textTertiary}
+              style={[styles.input, { backgroundColor: theme.inputBackground, borderColor: theme.inputBorder, color: theme.text }]}
+            />
+            <TextInput
+              value={toDate}
+              onChangeText={setToDate}
+              placeholder="Bis (z.B. 2025-04-18)"
+              placeholderTextColor={theme.textTertiary}
+              style={[styles.input, { backgroundColor: theme.inputBackground, borderColor: theme.inputBorder, color: theme.text }]}
+            />
+            <TextInput
+              value={reason}
+              onChangeText={setReason}
+              placeholder="Grund"
+              placeholderTextColor={theme.textTertiary}
+              multiline
+              numberOfLines={4}
+              style={[styles.input, { backgroundColor: theme.inputBackground, borderColor: theme.inputBorder, color: theme.text, height: 100, textAlignVertical: "top" }]}
+            />
             <Pressable
               onPress={handleCreate}
               disabled={submitting}
               style={[styles.submitBtn, { backgroundColor: theme.tint }]}
             >
-              {submitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitBtnText}>{t("loa.submit", lang)}</Text>}
+              {submitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitBtnText}>Einreichen</Text>}
             </Pressable>
           </ScrollView>
+        </View>
+      </Modal>
+
+      {/* Reject Modal */}
+      <Modal visible={!!rejectId} animationType="slide" presentationStyle="formSheet">
+        <View style={[styles.modal, { backgroundColor: theme.background }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: theme.cardBorder }]}>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>Grund für Ablehnung</Text>
+            <Pressable onPress={() => setRejectId(null)}>
+              <Ionicons name="close" size={24} color={theme.text} />
+            </Pressable>
+          </View>
+          <View style={{ padding: 20, gap: 14 }}>
+            <TextInput
+              value={rejectReason}
+              onChangeText={setRejectReason}
+              placeholder="Begründung..."
+              placeholderTextColor={theme.textTertiary}
+              multiline
+              numberOfLines={4}
+              style={[styles.input, { backgroundColor: theme.inputBackground, borderColor: theme.inputBorder, color: theme.text, height: 100, textAlignVertical: "top" }]}
+            />
+            <Pressable
+              onPress={() => rejectId && handleReject(rejectId)}
+              style={[styles.submitBtn, { backgroundColor: "#EF4444" }]}
+            >
+              <Text style={styles.submitBtnText}>Ablehnen</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Appeal Modal */}
+      <Modal visible={!!appealId} animationType="slide" presentationStyle="formSheet">
+        <View style={[styles.modal, { backgroundColor: theme.background }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: theme.cardBorder }]}>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>Einspruch einlegen</Text>
+            <Pressable onPress={() => setAppealId(null)}>
+              <Ionicons name="close" size={24} color={theme.text} />
+            </Pressable>
+          </View>
+          <View style={{ padding: 20, gap: 14 }}>
+            <TextInput
+              value={appealText}
+              onChangeText={setAppealText}
+              placeholder="Dein Einspruch..."
+              placeholderTextColor={theme.textTertiary}
+              multiline
+              numberOfLines={4}
+              style={[styles.input, { backgroundColor: theme.inputBackground, borderColor: theme.inputBorder, color: theme.text, height: 100, textAlignVertical: "top" }]}
+            />
+            <Pressable
+              onPress={() => appealId && handleAppeal(appealId)}
+              style={[styles.submitBtn, { backgroundColor: "#8B5CF6" }]}
+            >
+              <Text style={styles.submitBtnText}>Einspruch einreichen</Text>
+            </Pressable>
+          </View>
         </View>
       </Modal>
     </View>
@@ -370,35 +320,27 @@ export default function LOAScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 14 },
   heading: { fontSize: 28, fontFamily: "Inter_700Bold" },
-  addBtn: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
-  toggleRow: { flexDirection: "row", gap: 8, marginBottom: 10, backgroundColor: "transparent" },
-  toggleBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: "transparent", borderWidth: 1, borderColor: "transparent" },
-  toggleBtnText: { fontSize: 13, fontFamily: "Inter_500Medium" },
-  card: { borderRadius: 16, padding: 16, borderWidth: 1, gap: 10, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
-  cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
-  cardName: { fontSize: 15, fontFamily: "Inter_700Bold" },
-  cardDates: { fontSize: 13, fontFamily: "Inter_400Regular", marginTop: 2 },
-  cardReason: { fontSize: 13, fontFamily: "Inter_400Regular", lineHeight: 18 },
+  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
+  iconBtn: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  card: { borderRadius: 16, padding: 14, borderWidth: 1, gap: 8 },
+  cardRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  name: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
+  dates: { fontSize: 13, fontFamily: "Inter_400Regular" },
+  reason: { fontSize: 14, fontFamily: "Inter_400Regular" },
+  noteBox: { padding: 10, borderRadius: 8 },
+  noteText: { fontSize: 12, fontFamily: "Inter_400Regular" },
   badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
   badgeText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
-  noteBox: { flexDirection: "row", alignItems: "flex-start", gap: 6, padding: 10, borderRadius: 10 },
-  noteText: { fontSize: 12, fontFamily: "Inter_400Regular", flex: 1, lineHeight: 16 },
-  cardActions: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
-  actionBtn: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, borderWidth: 1 },
-  actionBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
-  appealInput: { width: "100%", gap: 8 },
-  inlineInput: { padding: 10, borderRadius: 10, borderWidth: 1, fontSize: 14, fontFamily: "Inter_400Regular" },
-  row: { flexDirection: "row", gap: 8 },
+  actions: { flexDirection: "row", gap: 8, marginTop: 8 },
+  btn: { flex: 1, paddingVertical: 8, borderRadius: 10, borderWidth: 1, alignItems: "center" },
+  btnText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
   empty: { flex: 1, alignItems: "center", justifyContent: "center", paddingTop: 80, gap: 12 },
   emptyTitle: { fontSize: 18, fontFamily: "Inter_600SemiBold" },
-  emptyDesc: { fontSize: 14, fontFamily: "Inter_400Regular", textAlign: "center", paddingHorizontal: 40 },
   modal: { flex: 1 },
   modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 20, borderBottomWidth: 1 },
   modalTitle: { fontSize: 18, fontFamily: "Inter_700Bold" },
-  fieldLabel: { fontSize: 13, fontFamily: "Inter_500Medium", marginBottom: 6 },
-  fieldInput: { padding: 14, borderRadius: 12, borderWidth: 1, fontSize: 15, fontFamily: "Inter_400Regular" },
+  input: { padding: 14, borderRadius: 12, borderWidth: 1, fontSize: 15, fontFamily: "Inter_400Regular" },
   submitBtn: { paddingVertical: 15, borderRadius: 12, alignItems: "center" },
   submitBtnText: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: "#fff" },
 });
