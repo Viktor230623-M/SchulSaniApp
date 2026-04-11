@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { eq } from "drizzle-orm";
-import { db, dutyTable } from "@workspace/db";
+import { db, dutyTable, usersTable } from "@workspace/db";
 import { requireAuth, type AuthRequest } from "../middlewares/auth";
 
 const router = Router();
@@ -28,7 +28,15 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
 
 router.get("/on-duty", requireAuth, async (_req, res) => {
   const onDuty = await db.select().from(dutyTable).where(eq(dutyTable.status, "on_duty"));
-  res.json(onDuty);
+  const users = await Promise.all(
+    onDuty.map(async (entry) => {
+      const [user] = await db.select().from(usersTable).where(eq(usersTable.id, entry.userId));
+      if (!user) return null;
+      const { passwordHash: _, ...rest } = user;
+      return rest;
+    })
+  );
+  res.json(users.filter(Boolean));
 });
 
 export default router;
