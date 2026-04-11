@@ -14,7 +14,35 @@ const ISERV_BASE = "https://gymbla.de";
 const UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1 SchulSanitaeter/1.0";
 
 const ROLE_MAP: Record<string, string> = {
+  // CTO
   "viktor.gnjatic": "cto",
+  // Admin
+  "david.gnjatic": "admin",
+  // Sanitäter Leitung Admin
+  "oliver.petz": "sanitaeter_leitung_admin",
+  // Sanitäter Leitung
+  "hannah.hentschel": "sanitaeter_leitung",
+  "lena.nendel": "sanitaeter_leitung",
+  // Student Paramedic
+  "elisabeth.hengstmann": "student_paramedic",
+  "fanni.wahl": "student_paramedic",
+  "frida.muehlenhoff": "student_paramedic",
+  "greta.hinrichsen": "student_paramedic",
+  "greta.paffrath": "student_paramedic",
+  "henriette.sancken": "student_paramedic",
+  "jacob.huettmann": "student_paramedic",
+  "john.podgorsky": "student_paramedic",
+  "lana.landskron": "student_paramedic",
+  "laura.hornborstel": "student_paramedic",
+  "leana.witte": "student_paramedic",
+  "livia.farenholtz": "student_paramedic",
+  "mariella.eilers": "student_paramedic",
+  "marlene.volquardsen": "student_paramedic",
+  "pauline.kubis": "student_paramedic",
+  "pia.jacobi": "student_paramedic",
+  "romy.böcker": "student_paramedic",
+  "sophia.kayenburg": "student_paramedic",
+  "valentina.dekker": "student_paramedic",
 };
 
 function getRoleForUser(username: string): string {
