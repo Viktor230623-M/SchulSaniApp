@@ -63,14 +63,14 @@ export default function SettingsScreen() {
   const canSeeAllUsers = ["admin", "cto", "sanitaeter_leitung_admin"].includes(user?.role ?? "");
 
   useEffect(() => {
-    if (canSeeAllUsers) {
-      setLoadingUsers(true);
-      ApiService.getAllUsers().then((data) => {
-        setAllUsers(data);
-        setLoadingUsers(false);
-      });
-    }
-  }, [canSeeAllUsers]);
+  if (canSeeAllUsers && user) {
+    setLoadingUsers(true);
+    ApiService.getAllUsers().then((data) => {
+      setAllUsers(Array.isArray(data) ? data : []);
+      setLoadingUsers(false);
+    });
+  }
+}, [canSeeAllUsers, user]);
 
   async function handlePickImage() {
     if (!user) return;
