@@ -296,7 +296,7 @@ export default function NewsScreen() {
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll}>
               {(["all", "approved", "pending", "rejected"] as const).map((f) => {
-                const label = f === "all" ? "Alle" : f === "approved" ? t("news.filterApproved", lang) : f === "pending" ? t("news.filterPending", lang) : t("news.filterRejected", lang);
+                const label = f === "all" ? t("news.allArticles", lang) : f === "approved" ? t("news.filterApproved", lang) : f === "pending" ? t("news.filterPending", lang) : t("news.filterRejected", lang);const label = f === "all" ? t("news.allArticles", lang) : f === "approved" ? t("news.filterApproved", lang) : f === "pending" ? t("news.filterPending", lang) : t("news.filterRejected", lang);
                 return (
                   <Pressable
                     key={f}
