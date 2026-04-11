@@ -23,11 +23,12 @@ import ApiService from "@/services/ApiService";
 import { useAppStore } from "@/store/useAppStore";
 
 const ROLE_CONFIG: Record<User["role"], { label: string; bg: string; text: string; icon: string }> = {
-  cto: { label: "CTO", bg: "#CCFBF1", text: "#0F766E", icon: "🩵" },
-  student_paramedic: { label: "Sanitäter", bg: "#F0FDF4", text: "#16A34A", icon: "🟢" },
-  sanitaeter_leitung: { label: "Sanitäter Leitung", bg: "#EFF6FF", text: "#2563EB", icon: "🔵" },
-  admin: { label: "Administrator", bg: "#FEF2F2", text: "#DC2626", icon: "🔴" },
-  teacher: { label: "Lehrer", bg: "#FFF7ED", text: "#EA580C", icon: "🟠" },
+  cto: { label: "CTO", bg: "#CCFBF1", text: "#0F766E", icon: "" },
+  admin: { label: "Administrator", bg: "#FEF2F2", text: "#DC2626", icon: "" },
+  sanitaeter_leitung_admin: { label: "Sanitäter Leitung", bg: "#EFF6FF", text: "#2563EB", icon: "" },
+  sanitaeter_leitung: { label: "Sanitäter Leitung", bg: "#EFF6FF", text: "#2563EB", icon: "" },
+  teacher: { label: "Lehrer", bg: "#FFF7ED", text: "#EA580C", icon: "" },
+  student_paramedic: { label: "Sanitäter", bg: "#F0FDF4", text: "#16A34A", icon: "" },
 };
 
 function RoleBadgeLarge({ role, theme }: { role: User["role"]; theme: any }) {
