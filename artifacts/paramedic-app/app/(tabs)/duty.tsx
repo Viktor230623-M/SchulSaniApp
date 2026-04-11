@@ -143,7 +143,7 @@ export default function DutyScreen() {
               <View key={u.id} style={styles.userRow}>
                 <View style={[styles.avatar, { backgroundColor: theme.tintLight }]}>
                   <Text style={[styles.avatarText, { color: theme.tint }]}>
-                    {u.firstName[0]}{u.lastName[0]}
+                    {u.firstName?.[0] ?? "?"}{u.lastName?.[0] ?? ""}
                   </Text>
                 </View>
                 <View style={styles.userInfo}>
