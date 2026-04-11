@@ -1,5 +1,6 @@
 import * as https from "https";
 import * as http from "http";
+import fs from "fs";
 import { Router } from "express";
 import jwt from "jsonwebtoken";
 import { eq } from "drizzle-orm";
@@ -144,6 +145,15 @@ router.post("/login", async (req, res) => {
 
   const cleanUsername = username.toLowerCase().trim();
 
+  // Whitelist check
+  try {
+    const whitelist = JSON.parse(fs.readFileSync("/var/www/SchulSaniApp/whitelist.json", "utf-8"));
+    if (!whitelist.allowed.includes(cleanUsername)) {
+      res.status(403).json({ error: "Zugriff verweigert. Du bist nicht berechtigt diese App zu nutzen." });
+      return;
+    }
+  } catch {}
+
   try {
     const { firstName, lastName, email, phone } = await iServAuth(cleanUsername, password);
     const role = getRoleForUser(cleanUsername);
@@ -162,7 +172,6 @@ router.post("/login", async (req, res) => {
       updatedAt: new Date(),
     };
 
-    // Upsert user in DB
     await db.insert(usersTable).values(user).onConflictDoUpdate({
       target: usersTable.id,
       set: { firstName, lastName, email, updatedAt: new Date() },
