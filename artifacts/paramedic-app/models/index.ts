@@ -2,6 +2,7 @@ export type UserRole =
   | "cto"
   | "student_paramedic"
   | "sanitaeter_leitung"
+  | "sanitaeter_leitung_admin"
   | "admin"
   | "teacher";
 
