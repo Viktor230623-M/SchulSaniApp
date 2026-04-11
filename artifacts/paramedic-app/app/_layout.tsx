@@ -6,7 +6,7 @@ import {
   useFonts,
 } from "@expo-google-fonts/inter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Redirect, Stack } from "expo-router";
+import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -14,6 +14,7 @@ import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { setAuthToken } from "@/services/ApiService";
 import { useAppStore } from "@/store/useAppStore";
 
 SplashScreen.preventAutoHideAsync();
@@ -22,6 +23,11 @@ const queryClient = new QueryClient();
 
 function RootLayoutNav() {
   const isAuthenticated = useAppStore((s) => s.isAuthenticated);
+  const token = useAppStore((s) => s.token);
+
+  useEffect(() => {
+    if (token) setAuthToken(token);
+  }, [token]);
 
   if (!isAuthenticated) {
     return (
