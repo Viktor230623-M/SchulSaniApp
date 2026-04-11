@@ -17,8 +17,10 @@ interface AppState {
   // Auth
   user: User | null;
   isAuthenticated: boolean;
+  token: string | null;
   login: (user: User) => void;
   logout: () => void;
+  setToken: (token: string | null) => void;
 
   // Settings
   theme: AppTheme;
@@ -63,7 +65,7 @@ interface AppState {
   setNotificationsLoading: (loading: boolean) => void;
   markAllNotificationsRead: () => void;
 
-  // Profile — per-user avatar map so changing photo for one account doesn't affect others
+  // Profile
   avatarUriMap: Record<string, string>;
   setAvatarUri: (userId: string, uri: string | null) => void;
 }
@@ -74,12 +76,13 @@ export const useAppStore = create<AppState>()(
       // Auth
       user: null,
       isAuthenticated: false,
+      token: null,
       login: (user) => set({ user, isAuthenticated: true }),
       logout: () =>
         set((s) => ({
           user: null,
           isAuthenticated: false,
-          // Reset teal theme on logout since teal is CTO-exclusive
+          token: null,
           theme: s.theme === "teal" ? "light" : s.theme,
           dutyStatus: "off_duty",
           missions: [],
@@ -87,6 +90,7 @@ export const useAppStore = create<AppState>()(
           loaRequests: [],
           notifications: [],
         })),
+      setToken: (token) => set({ token }),
 
       // Settings
       theme: "light",
@@ -159,11 +163,10 @@ export const useAppStore = create<AppState>()(
         })),
     }),
     {
-      name: "paramedic-store-v3",
+      name: "paramedic-store-v6",
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (state) => ({
-        user: state.user,
-        isAuthenticated: state.isAuthenticated,
+        token: state.token,
         theme: state.theme,
         language: state.language,
         dutyStatus: state.dutyStatus,
