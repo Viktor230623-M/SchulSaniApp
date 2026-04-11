@@ -10,7 +10,7 @@ function safeUser(u: typeof usersTable.$inferSelect) {
   return rest;
 }
 
-router.get("/", requireAuth, requireRole("admin", "cto"), async (_req, res) => {
+router.get("/", requireAuth, requireRole("admin", "cto", "sanitaeter_leitung_admin"), async (_req, res) => {
   const users = await db.select().from(usersTable);
   res.json(users.map(safeUser));
 });
