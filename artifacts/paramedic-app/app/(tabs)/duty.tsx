@@ -162,8 +162,8 @@ export default function DutyScreen() {
 
         <View style={[styles.section, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
           <Text style={[styles.sectionTitle, { color: theme.textTertiary }]}>{t("duty.notes", lang)}</Text>
-          {[t("duty.hint1", lang), t("duty.hint2", lang), t("duty.hint3", lang)].map((hint, i) => (
-            <View key={i} style={styles.hintRow}>
+          {[t("duty.hint1", lang), t("duty.hint2", lang), t("duty.hint3", lang)].map((hint) => (
+            <View key={hint} style={styles.hintRow}>
               <Ionicons name="information-circle-outline" size={16} color={theme.textTertiary} />
               <Text style={[styles.hintText, { color: theme.textSecondary }]}>{hint}</Text>
             </View>
