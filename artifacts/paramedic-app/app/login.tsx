@@ -26,6 +26,7 @@ export default function LoginScreen() {
   const insets = useSafeAreaInsets();
   const login = useAppStore((s) => s.login);
   const setTheme = useAppStore((s) => s.setTheme);
+  const setToken = useAppStore((s) => s.setToken);
   const lang = useAppStore((s) => s.language);
   const theme = getTheme(useAppStore((s) => s.theme));
 
@@ -50,7 +51,10 @@ export default function LoginScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       const { user, isTealUnlocked, token } = await ApiService.login({ username, password });
       if (isTealUnlocked) setTheme("teal");
-      if (token) setAuthToken(token);
+      if (token) {
+        setAuthToken(token);
+        setToken(token);
+      }
       login(user);
       router.replace("/(tabs)/news");
     } catch (err: any) {
