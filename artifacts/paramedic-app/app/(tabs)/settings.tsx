@@ -239,11 +239,6 @@ export default function SettingsScreen() {
             )}
           </Pressable>
         ))}
-        {!exclusiveUnlocked && (
-          <Text style={[styles.exclusiveHint, { color: theme.textTertiary }]}>
-            🔒 Weitere exklusive Designs sind versteckt...
-          </Text>
-        )}
       </View>
 
       {/* Admin: All Users */}
