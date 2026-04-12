@@ -56,6 +56,23 @@ router.post("/:id/reject", requireAuth, requireRole("admin", "teacher", "cto"), 
   res.json(item);
 });
 
+router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
+  const { userId, role } = req.user!;
+  const [item] = await db.select().from(newsTable).where(eq(newsTable.id, req.params["id"]!));
+  if (!item) { res.status(404).json({ error: "Not found" }); return; }
+  if (item.authorId !== userId) { res.status(403).json({ error: "Forbidden" }); return; }
+  if (item.status !== "rejected") { res.status(400).json({ error: "Nur abgelehnte News können bearbeitet werden" }); return; }
+  const { title, summary, content } = req.body;
+  const [updated] = await db.update(newsTable).set({
+    title: title ?? item.title,
+    summary: summary ?? item.summary,
+    content: content ?? item.content,
+    status: "pending",
+    rejectionReason: null,
+  }).where(eq(newsTable.id, req.params["id"]!)).returning();
+  res.json(updated);
+});
+
 router.post("/:id/read", requireAuth, async (req, res) => {
   await db.update(newsTable).set({ isRead: true }).where(eq(newsTable.id, req.params["id"]!));
   res.json({ ok: true });
