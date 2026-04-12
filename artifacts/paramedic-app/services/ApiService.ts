@@ -24,7 +24,7 @@ function headers() {
 }
 
 const ApiService = {
-  async login(credentials: { username: string; password: string }): Promise<{ user: User; isTealUnlocked: boolean }> {
+  async login(credentials: { username: string; password: string }): Promise<{ user: User; isTealUnlocked: boolean; token: string }> {
     const resp = await fetch(`${API_BASE}/auth/login`, {
       method: "POST",
       headers: headers(),
@@ -33,7 +33,7 @@ const ApiService = {
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error ?? "Anmeldung fehlgeschlagen");
     if (data.token) setAuthToken(data.token);
-    return { user: data.user as User, isTealUnlocked: data.isTealUnlocked };
+    return { user: data.user as User, isTealUnlocked: data.isTealUnlocked, token: data.token };
   },
 
   async logout(): Promise<void> {
@@ -57,6 +57,11 @@ const ApiService = {
 
   async rejectNews(id: string, reason: string): Promise<NewsItem> {
     const resp = await fetch(`${API_BASE}/news/${id}/reject`, { method: "POST", headers: headers(), body: JSON.stringify({ reason }) });
+    return resp.json();
+  },
+
+  async editNews(id: string, data: { title: string; summary: string; content: string }): Promise<NewsItem> {
+    const resp = await fetch(`${API_BASE}/news/${id}`, { method: "PATCH", headers: headers(), body: JSON.stringify(data) });
     return resp.json();
   },
 
