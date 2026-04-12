@@ -50,7 +50,7 @@ function StatusChip({ status }: { status: NewsStatus }) {
 
 function NewsCard({
   item, canModerate, isOwner,
-  onMarkRead, onApprove, onReject, onDelete,
+  onMarkRead, onApprove, onReject, onDelete, onEdit,
   theme, lang,
 }: any) {
   const [expanded, setExpanded] = useState(false);
