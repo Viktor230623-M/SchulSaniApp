@@ -55,8 +55,6 @@ function NewsCard({
 }: any) {
   const [expanded, setExpanded] = useState(false);
   const cat = categoryConfig(item.category, theme.tint);
-
-  // Can delete if: owner (any status) OR moderator OR article is read
   const canDelete = isOwner || canModerate || item.isRead;
 
   function handleDelete() {
@@ -96,11 +94,7 @@ function NewsCard({
           <View style={[styles.unreadDot, { backgroundColor: theme.tint }]} />
         )}
         {canDelete && (
-          <Pressable
-            onPress={handleDelete}
-            hitSlop={8}
-            style={styles.deleteIconBtn}
-          >
+          <Pressable onPress={handleDelete} hitSlop={8} style={styles.deleteIconBtn}>
             <Ionicons name="trash-outline" size={15} color={theme.textTertiary} />
           </Pressable>
         )}
@@ -118,7 +112,11 @@ function NewsCard({
       {item.rejectionReason && (
         <View style={styles.rejectionBox}>
           <Ionicons name="alert-circle" size={13} color="#EF4444" />
-          <Text style={styles.rejectionText}>{item.rejectionReason}</Text>
+          <Text style={styles.rejectionText}>
+            {canModerate
+              ? `Abgelehnt: ${item.rejectionReason}`
+              : `Dein Beitrag wurde abgelehnt: ${item.rejectionReason} – Du kannst ihn bearbeiten und erneut einreichen.`}
+          </Text>
         </View>
       )}
 
@@ -151,6 +149,14 @@ function NewsCard({
               </Pressable>
             </>
           )}
+          {isOwner && item.status === "rejected" && (
+            <Pressable
+              onPress={() => onEdit(item)}
+              style={[styles.smallBtn, { borderColor: "#8B5CF6" }]}
+            >
+              <Text style={[styles.smallBtnText, { color: "#8B5CF6" }]}>Bearbeiten</Text>
+            </Pressable>
+          )}
         </View>
       </View>
     </Pressable>
@@ -172,8 +178,13 @@ export default function NewsScreen() {
   const [newSummary, setNewSummary] = useState("");
   const [newContent, setNewContent] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [editItem, setEditItem] = useState<NewsItem | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editSummary, setEditSummary] = useState("");
+  const [editContent, setEditContent] = useState("");
+  const [editSubmitting, setEditSubmitting] = useState(false);
 
-  const canModerate = user?.role === "admin" || user?.role === "teacher" || user?.role === "cto";
+  const canModerate = ["admin", "teacher", "cto"].includes(user?.role ?? "");
 
   useEffect(() => { load(); }, []);
 
@@ -217,6 +228,27 @@ export default function NewsScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     await ApiService.deleteNews(id);
     removeNewsItem(id);
+  }
+
+  function handleEdit(item: NewsItem) {
+    setEditItem(item);
+    setEditTitle(item.title);
+    setEditSummary(item.summary);
+    setEditContent(item.content);
+  }
+
+  async function handleEditSubmit() {
+    if (!editItem || !editTitle.trim() || !editContent.trim()) return;
+    setEditSubmitting(true);
+    const updated = await ApiService.editNews(editItem.id, {
+      title: editTitle,
+      summary: editSummary || editContent.substring(0, 80) + "...",
+      content: editContent,
+    });
+    updateNewsItem(editItem.id, updated);
+    setEditItem(null);
+    setEditSubmitting(false);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }
 
   async function handleCreate() {
@@ -335,6 +367,7 @@ export default function NewsScreen() {
             onApprove={handleApprove}
             onReject={handleReject}
             onDelete={handleDelete}
+            onEdit={handleEdit}
             theme={theme}
             lang={lang}
           />
@@ -342,6 +375,7 @@ export default function NewsScreen() {
         showsVerticalScrollIndicator={false}
       />
 
+      {/* Create Modal */}
       <Modal visible={showCreate} animationType="slide" presentationStyle="formSheet">
         <View style={[styles.modal, { backgroundColor: theme.background }]}>
           <View style={[styles.modalHeader, { borderBottomColor: theme.cardBorder }]}>
@@ -350,10 +384,7 @@ export default function NewsScreen() {
               <Ionicons name="close" size={24} color={theme.text} />
             </Pressable>
           </View>
-          <ScrollView
-            contentContainerStyle={{ padding: 20, gap: 14 }}
-            keyboardShouldPersistTaps="handled"
-          >
+          <ScrollView contentContainerStyle={{ padding: 20, gap: 14 }} keyboardShouldPersistTaps="handled">
             <TextInput
               value={newTitle}
               onChangeText={setNewTitle}
@@ -378,16 +409,49 @@ export default function NewsScreen() {
               style={[styles.textIn, { backgroundColor: theme.inputBackground, borderColor: theme.inputBorder, color: theme.text, height: 120, textAlignVertical: "top" }]}
             />
             <Text style={[styles.hint, { color: theme.textTertiary }]}>{t("news.submitHint", lang)}</Text>
-            <Pressable
-              onPress={handleCreate}
-              disabled={submitting}
-              style={[styles.submitBtn, { backgroundColor: theme.tint }]}
-            >
-              {submitting ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.submitBtnText}>{t("news.submit", lang)}</Text>
-              )}
+            <Pressable onPress={handleCreate} disabled={submitting} style={[styles.submitBtn, { backgroundColor: theme.tint }]}>
+              {submitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitBtnText}>{t("news.submit", lang)}</Text>}
+            </Pressable>
+          </ScrollView>
+        </View>
+      </Modal>
+
+      {/* Edit Modal */}
+      <Modal visible={!!editItem} animationType="slide" presentationStyle="formSheet">
+        <View style={[styles.modal, { backgroundColor: theme.background }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: theme.cardBorder }]}>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>Beitrag bearbeiten</Text>
+            <Pressable onPress={() => setEditItem(null)}>
+              <Ionicons name="close" size={24} color={theme.text} />
+            </Pressable>
+          </View>
+          <ScrollView contentContainerStyle={{ padding: 20, gap: 14 }} keyboardShouldPersistTaps="handled">
+            <TextInput
+              value={editTitle}
+              onChangeText={setEditTitle}
+              placeholder={t("news.newsTitle", lang)}
+              placeholderTextColor={theme.textTertiary}
+              style={[styles.textIn, { backgroundColor: theme.inputBackground, borderColor: theme.inputBorder, color: theme.text }]}
+            />
+            <TextInput
+              value={editSummary}
+              onChangeText={setEditSummary}
+              placeholder={t("news.summary", lang)}
+              placeholderTextColor={theme.textTertiary}
+              style={[styles.textIn, { backgroundColor: theme.inputBackground, borderColor: theme.inputBorder, color: theme.text }]}
+            />
+            <TextInput
+              value={editContent}
+              onChangeText={setEditContent}
+              placeholder={t("news.content", lang)}
+              placeholderTextColor={theme.textTertiary}
+              multiline
+              numberOfLines={6}
+              style={[styles.textIn, { backgroundColor: theme.inputBackground, borderColor: theme.inputBorder, color: theme.text, height: 120, textAlignVertical: "top" }]}
+            />
+            <Text style={[styles.hint, { color: theme.textTertiary }]}>Dein Beitrag wird nach dem Bearbeiten erneut zur Überprüfung eingereicht.</Text>
+            <Pressable onPress={handleEditSubmit} disabled={editSubmitting} style={[styles.submitBtn, { backgroundColor: "#8B5CF6" }]}>
+              {editSubmitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitBtnText}>Erneut einreichen</Text>}
             </Pressable>
           </ScrollView>
         </View>
