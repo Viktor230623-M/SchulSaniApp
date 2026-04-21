@@ -18,6 +18,8 @@ const ROLE_MAP: Record<string, string> = {
   "viktor.gnjatic": "cto",
   // Admin
   "david.gnjatic": "admin",
+  // Teacher
+  "katharina.merouani": "teacher",
   // Sanitäter Leitung Admin
   "oliver.petz": "sanitaeter_leitung_admin",
   // Sanitäter Leitung
