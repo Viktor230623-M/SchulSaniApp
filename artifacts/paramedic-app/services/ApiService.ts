@@ -2,6 +2,7 @@ import type {
   DutyStatus,
   LOARequest,
   Mission,
+  MissionPriority,
   NewsItem,
   NotificationItem,
   User,
@@ -80,6 +81,24 @@ const ApiService = {
   async getMissions(): Promise<Mission[]> {
     const resp = await fetch(`${API_BASE}/missions`, { headers: headers() });
     return resp.json();
+  },
+
+  async createMission(m: {
+    title: string;
+    location: string;
+    description?: string;
+    priority?: MissionPriority;
+    patientInfo?: string;
+    scheduledFor?: string;
+  }): Promise<Mission> {
+    const resp = await fetch(`${API_BASE}/missions`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify(m),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error ?? "Einsatz konnte nicht erstellt werden");
+    return data as Mission;
   },
 
   async acceptMission(id: string): Promise<Mission> {
