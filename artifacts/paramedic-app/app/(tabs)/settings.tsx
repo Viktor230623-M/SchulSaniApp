@@ -295,7 +295,7 @@ export default function SettingsScreen() {
       </Pressable>
 
       <Text style={[styles.version, { color: theme.textTertiary }]}>
-        {t("settings.version", lang)} 1.0.0 · SchulSanitäter · gymbla.de
+        {t("settings.version", lang)} 1.0.0-beta.1 · SchulSanitäter · gymbla.de
       </Text>
     </ScrollView>
   );
