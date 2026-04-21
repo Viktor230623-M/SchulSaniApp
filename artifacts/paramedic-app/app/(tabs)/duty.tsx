@@ -68,7 +68,7 @@ export default function DutyScreen() {
     sanitaeter_leitung: "Ltg.",
     sanitaeter_leitung_admin: "Ltg.",
     admin: "Admin",
-    teacher: "Leher",
+    teacher: "Lehrer",
   }[role] ?? role;
 }
 
