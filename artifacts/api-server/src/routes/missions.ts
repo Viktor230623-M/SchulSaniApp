@@ -14,7 +14,7 @@ router.get("/", requireAuth, async (_req, res) => {
   res.json(missions);
 });
 
-router.post("/", requireAuth, requireRole("admin", "sanitaeter_leitung", "cto"), async (req, res) => {
+router.post("/", requireAuth, requireRole("admin", "sanitaeter_leitung", "sanitaeter_leitung_admin", "cto", "teacher"), async (req, res) => {
   const { title, description, location, priority, scheduledFor, patientInfo } = req.body;
   if (!title || !location) {
     res.status(400).json({ error: "title and location required" });
