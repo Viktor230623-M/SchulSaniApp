@@ -14,7 +14,6 @@ import type {
 } from "@/models";
 
 interface AppState {
-  // Auth
   user: User | null;
   isAuthenticated: boolean;
   token: string | null;
@@ -22,26 +21,23 @@ interface AppState {
   logout: () => void;
   setToken: (token: string | null) => void;
 
-  // Settings
   theme: AppTheme;
   language: AppLanguage;
   setTheme: (theme: AppTheme) => void;
   setLanguage: (lang: AppLanguage) => void;
 
-  // Duty
   dutyStatus: DutyStatus["status"];
   dutyLoading: boolean;
   setDutyStatus: (status: DutyStatus["status"]) => void;
   setDutyLoading: (loading: boolean) => void;
 
-  // Missions
   missions: Mission[];
   missionsLoading: boolean;
   setMissions: (missions: Mission[]) => void;
   setMissionsLoading: (loading: boolean) => void;
   updateMission: (id: string, patch: Partial<Mission>) => void;
+  removeMission: (id: string) => void;
 
-  // News
   news: NewsItem[];
   newsLoading: boolean;
   setNews: (news: NewsItem[]) => void;
@@ -50,7 +46,6 @@ interface AppState {
   addNewsItem: (item: NewsItem) => void;
   removeNewsItem: (id: string) => void;
 
-  // LOA
   loaRequests: LOARequest[];
   loaLoading: boolean;
   setLOARequests: (reqs: LOARequest[]) => void;
@@ -58,14 +53,12 @@ interface AppState {
   updateLOA: (id: string, patch: Partial<LOARequest>) => void;
   addLOA: (req: LOARequest) => void;
 
-  // Notifications
   notifications: NotificationItem[];
   notificationsLoading: boolean;
   setNotifications: (notifs: NotificationItem[]) => void;
   setNotificationsLoading: (loading: boolean) => void;
   markAllNotificationsRead: () => void;
 
-  // Profile
   avatarUriMap: Record<string, string>;
   setAvatarUri: (userId: string, uri: string | null) => void;
 }
@@ -73,7 +66,6 @@ interface AppState {
 export const useAppStore = create<AppState>()(
   persist(
     (set) => ({
-      // Auth
       user: null,
       isAuthenticated: false,
       token: null,
@@ -92,19 +84,16 @@ export const useAppStore = create<AppState>()(
         })),
       setToken: (token) => set({ token }),
 
-      // Settings
       theme: "light",
       language: "de",
       setTheme: (theme) => set({ theme }),
       setLanguage: (language) => set({ language }),
 
-      // Duty
       dutyStatus: "off_duty",
       dutyLoading: false,
       setDutyStatus: (dutyStatus) => set({ dutyStatus }),
       setDutyLoading: (dutyLoading) => set({ dutyLoading }),
 
-      // Missions
       missions: [],
       missionsLoading: false,
       setMissions: (missions) => set({ missions }),
@@ -113,8 +102,9 @@ export const useAppStore = create<AppState>()(
         set((s) => ({
           missions: s.missions.map((m) => (m.id === id ? { ...m, ...patch } : m)),
         })),
+      removeMission: (id) =>
+        set((s) => ({ missions: s.missions.filter((m) => m.id !== id) })),
 
-      // News
       news: [],
       newsLoading: false,
       setNews: (news) => set({ news }),
@@ -127,7 +117,6 @@ export const useAppStore = create<AppState>()(
       removeNewsItem: (id) =>
         set((s) => ({ news: s.news.filter((n) => n.id !== id) })),
 
-      // LOA
       loaRequests: [],
       loaLoading: false,
       setLOARequests: (loaRequests) => set({ loaRequests }),
@@ -140,7 +129,6 @@ export const useAppStore = create<AppState>()(
         })),
       addLOA: (req) => set((s) => ({ loaRequests: [req, ...s.loaRequests] })),
 
-      // Notifications
       notifications: [],
       notificationsLoading: false,
       setNotifications: (notifications) => set({ notifications }),
@@ -151,7 +139,6 @@ export const useAppStore = create<AppState>()(
           notifications: s.notifications.map((n) => ({ ...n, isRead: true })),
         })),
 
-      // Per-user avatar map
       avatarUriMap: {},
       setAvatarUri: (userId, uri) =>
         set((s) => ({
@@ -163,9 +150,11 @@ export const useAppStore = create<AppState>()(
         })),
     }),
     {
-      name: "paramedic-store-v6",
+      name: "paramedic-store-v3",
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (state) => ({
+        user: state.user,
+        isAuthenticated: state.isAuthenticated,
         token: state.token,
         theme: state.theme,
         language: state.language,
