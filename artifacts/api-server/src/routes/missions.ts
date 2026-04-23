@@ -2,6 +2,7 @@ import { Router } from "express";
 import { eq } from "drizzle-orm";
 import { db, missionsTable } from "@workspace/db";
 import { requireAuth, requireRole, type AuthRequest } from "../middlewares/auth";
+import { addDismissal, getDismissedFor, removeDismissal } from "../data/dismissals";
 
 const router = Router();
 
@@ -9,9 +10,11 @@ function uid() {
   return Date.now().toString(36) + Math.random().toString(36).substring(2, 9);
 }
 
-router.get("/", requireAuth, async (_req, res) => {
-  const missions = await db.select().from(missionsTable);
-  res.json(missions);
+router.get("/", requireAuth, async (req: AuthRequest, res) => {
+  const all = await db.select().from(missionsTable);
+  const dismissed = getDismissedFor(req.user!.userId);
+  const visible = all.filter((m: any) => !dismissed.has(m.id));
+  res.json(visible);
 });
 
 router.post("/", requireAuth, requireRole("admin", "sanitaeter_leitung", "sanitaeter_leitung_admin", "cto", "teacher"), async (req, res) => {
@@ -41,6 +44,18 @@ router.post("/:id/accept", requireAuth, async (req: AuthRequest, res) => {
   const [m] = await db.update(missionsTable).set({ status: "accepted", assignedParamedicId: req.user!.userId }).where(eq(missionsTable.id, req.params["id"]!)).returning();
   if (!m) { res.status(404).json({ error: "Not found" }); return; }
   res.json(m);
+});
+
+router.post("/:id/dismiss", requireAuth, async (req: AuthRequest, res) => {
+  const missionId = req.params["id"]!;
+  addDismissal(req.user!.userId, missionId);
+  res.json({ success: true, missionId });
+});
+
+router.post("/:id/undismiss", requireAuth, async (req: AuthRequest, res) => {
+  const missionId = req.params["id"]!;
+  removeDismissal(req.user!.userId, missionId);
+  res.json({ success: true, missionId });
 });
 
 router.post("/:id/reject", requireAuth, async (req, res) => {
