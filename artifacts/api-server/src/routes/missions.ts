@@ -13,7 +13,9 @@ function uid() {
 router.get("/", requireAuth, async (req: AuthRequest, res) => {
   const all = await db.select().from(missionsTable);
   const dismissed = getDismissedFor(req.user!.userId);
-  const visible = all.filter((m: any) => !dismissed.has(m.id));
+  const visible = all.filter(
+    (m: any) => m.status !== "rejected" && !dismissed.has(m.id)
+  );
   res.json(visible);
 });
 
