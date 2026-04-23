@@ -111,6 +111,14 @@ const ApiService = {
     return resp.json();
   },
 
+    async dismissMission(id: string): Promise<void> {
+    const resp = await fetch(`${API_BASE}/missions/${id}/dismiss`, { method: "POST", headers: headers() });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      throw new Error(data.error ?? "Konnte Einsatz nicht ausblenden");
+    }
+  },
+
   async getLOARequests(userId?: string): Promise<LOARequest[]> {
     const resp = await fetch(`${API_BASE}/loa`, { headers: headers() });
     return resp.json();
