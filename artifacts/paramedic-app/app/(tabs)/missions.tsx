@@ -305,7 +305,14 @@ export default function MissionsScreen() {
   const themeKey = useAppStore((s) => s.theme);
   const user = useAppStore((s) => s.user);
   const theme = getTheme(themeKey);
-  const { missions, missionsLoading, setMissions, setMissionsLoading, updateMission } = useAppStore();
+  const {
+    missions,
+    missionsLoading,
+    setMissions,
+    setMissionsLoading,
+    updateMission,
+    removeMission,
+  } = useAppStore();
   const [refreshing, setRefreshing] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
 
@@ -346,10 +353,26 @@ export default function MissionsScreen() {
         }}
         ListHeaderComponent={
           <View style={styles.headerRow}>
-            <Text style={[styles.heading, { color: theme.text }]}>{t("missions.title", lang)}</Text>
-            <View style={[styles.countBadge, { backgroundColor: theme.tint }]}>
-              <Text style={styles.countText}>{missions.length}</Text>
+            <View style={styles.headerLeft}>
+              <Text style={[styles.heading, { color: theme.text }]}>{t("missions.title", lang)}</Text>
+              <View style={[styles.countBadge, { backgroundColor: theme.tint }]}>
+                <Text style={styles.countText}>{missions.length}</Text>
+              </View>
             </View>
+            {canCreate && (
+              <Pressable
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  setCreateOpen(true);
+                }}
+                style={({ pressed }) => [
+                  styles.iconBtn,
+                  { backgroundColor: theme.tint, opacity: pressed ? 0.8 : 1 },
+                ]}
+              >
+                <Ionicons name="add" size={20} color="#fff" />
+              </Pressable>
+            )}
           </View>
         }
         ListEmptyComponent={
@@ -367,34 +390,24 @@ export default function MissionsScreen() {
         renderItem={({ item }) => (
           <MissionCard
             mission={item}
-            onAccept={() => { ApiService.acceptMission(item.id).then(() => updateMission(item.id, { status: "accepted" })); }}
-            onReject={() => { ApiService.rejectMission(item.id).then(() => updateMission(item.id, { status: "rejected" })); }}
+            onAccept={async () => {
+              await ApiService.acceptMission(item.id);
+              updateMission(item.id, { status: "accepted" });
+            }}
+            onReject={async () => {
+              removeMission(item.id);
+              try {
+                await ApiService.dismissMission(item.id);
+              } catch {
+                load();
+              }
+            }}
             theme={theme}
             lang={lang}
           />
         )}
         showsVerticalScrollIndicator={false}
       />
-
-      {canCreate && (
-        <Pressable
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            setCreateOpen(true);
-          }}
-          style={({ pressed }) => [
-            styles.fab,
-            {
-              backgroundColor: theme.tint,
-              bottom: insets.bottom + 90,
-              opacity: pressed ? 0.85 : 1,
-              transform: [{ scale: pressed ? 0.96 : 1 }],
-            },
-          ]}
-        >
-          <Ionicons name="add" size={28} color="#fff" />
-        </Pressable>
-      )}
 
       <CreateMissionModal
         visible={createOpen}
@@ -408,10 +421,12 @@ export default function MissionsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  headerRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 8 },
+  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
+  headerLeft: { flexDirection: "row", alignItems: "center", gap: 10 },
   heading: { fontSize: 28, fontFamily: "Inter_700Bold" },
   countBadge: { borderRadius: 12, minWidth: 24, height: 24, alignItems: "center", justifyContent: "center", paddingHorizontal: 6 },
   countText: { color: "#fff", fontSize: 12, fontFamily: "Inter_700Bold" },
+  iconBtn: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   card: { borderRadius: 16, padding: 16, borderWidth: 1, gap: 8, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 },
   cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
   badges: { flexDirection: "row", gap: 6, flexWrap: "wrap", flex: 1 },
@@ -434,20 +449,6 @@ const styles = StyleSheet.create({
   empty: { flex: 1, alignItems: "center", justifyContent: "center", paddingTop: 80, gap: 12 },
   emptyTitle: { fontSize: 18, fontFamily: "Inter_600SemiBold" },
   emptyDesc: { fontSize: 14, fontFamily: "Inter_400Regular", textAlign: "center", paddingHorizontal: 40 },
-  fab: {
-    position: "absolute",
-    right: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 6,
-  },
   modalHeader: {
     flexDirection: "row",
     alignItems: "center",
