@@ -299,6 +299,7 @@ export default function SettingsScreen() {
               })
             )
           )}
+</View>
   {canSeeAllUsers && (
   <Pressable
     onPress={() => {
