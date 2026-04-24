@@ -138,6 +138,8 @@ const translations = {
       logoutConfirm: "Wirklich abmelden?",
       version: "Version",
       myRank: "Mein Rang",
+        activityLog: "Mein Aktivitätslog",
+        saniActivity: "Sani-Aktivität",
     },
     common: {
       loading: "Laden...",
@@ -295,6 +297,8 @@ const translations = {
       myRank: "My Rank",
     },
     common: {
+        activityLog: "My Activity Log",
+        saniActivity: "Paramedic Activity",
       loading: "Loading...",
       error: "Error",
       retry: "Retry",

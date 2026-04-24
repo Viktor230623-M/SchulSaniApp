@@ -1,6 +1,7 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
+import Constants from 'expo-constants';
 import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
@@ -181,6 +182,25 @@ export default function SettingsScreen() {
         </View>
       </View>
 
+      {/* My Activity Log */}
+      <Pressable
+        onPress={() => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          router.push("/activity-log");
+        }}
+        style={({ pressed }) => [
+          styles.section,
+          { backgroundColor: theme.card, borderColor: theme.cardBorder, opacity: pressed ? 0.96 : 1 },
+        ]}
+      >
+        <View style={styles.sectionHeaderRow}>
+          <Text style={[styles.sectionTitle, { color: theme.textTertiary }]}>
+            {t("settings.activityLog", lang)}
+          </Text>
+          <Ionicons name="chevron-forward-outline" size={16} color={theme.textTertiary} />
+        </View>
+      </Pressable>
+
       {/* Language */}
       <View style={[styles.section, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
         <Text style={[styles.sectionTitle, { color: theme.textTertiary }]}>
@@ -279,10 +299,27 @@ export default function SettingsScreen() {
               })
             )
           )}
-        </View>
-      )}
+  {canSeeAllUsers && (
+  <Pressable
+    onPress={() => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      router.push("/admin/sani-activity");
+    }}
+    style={({ pressed }) => [
+      styles.section,
+      { backgroundColor: theme.card, borderColor: theme.cardBorder, opacity: pressed ? 0.96 : 1 },
+    ]}
+  >
+    <View style={styles.sectionHeaderRow}>
+      <Text style={[styles.sectionTitle, { color: theme.textTertiary }]}>
+        {t("settings.saniActivity", lang)}
+      </Text>
+      <Ionicons name="chevron-forward-outline" size={16} color={theme.textTertiary} />
+    </View>
+  </Pressable>
+)}
 
-      {/* Logout */}
+        {/* Logout */}
       <Pressable
         onPress={handleLogout}
         style={({ pressed }) => [
@@ -295,7 +332,7 @@ export default function SettingsScreen() {
       </Pressable>
 
       <Text style={[styles.version, { color: theme.textTertiary }]}>
-        {t("settings.version", lang)} 1.0.0-beta.1 · SchulSanitäter · gymbla.de
+        {t("settings.version", lang)} {Constants.expoConfig?.version ?? '1.0.0-beta.1'} · SchulSanitäter · gymbla.de
       </Text>
     </ScrollView>
   );
