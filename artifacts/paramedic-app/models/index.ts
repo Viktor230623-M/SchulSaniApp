@@ -122,13 +122,30 @@ export interface ActivityLog {
   metadata?: Record<string, any>;
 }
 
+export interface MissionActivityLog {
+  id: string;
+  userId: string;
+  userName: string;
+  missionId: string;
+  missionTitle: string;
+  action: "accepted" | "dismissed" | "unanswered" | "completed";
+  weekKey: string;
+  dayKey: string;
+  createdAt: string;
+  metadata?: Record<string, any>;
+}
+
 export interface ActivitySummary {
+  id: string;
   userId: string;
   userName: string;
   role: UserRole;
-  lastActivity: string;
-  activityCount: number;
-  recentActivities: ActivityLog[];
+  missionId: string;
+  missionTitle: string;
+  action: "accepted" | "dismissed" | "unanswered" | "completed";
+  weekKey: string;
+  dayKey: string;
+  createdAt: string;
 }
 
 export type AppTheme = "light" | "dark" | "red" | "teal" | "crimson" | "midnight" | "sunset" | "amethyst";

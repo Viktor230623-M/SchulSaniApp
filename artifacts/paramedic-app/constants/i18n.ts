@@ -10,6 +10,32 @@ const translations = {
       notifications: "Meldungen",
       settings: "Einstellungen",
     },
+    activityLog: {
+      title: "Mein Aktivitätslog",
+      week: "Woche",
+      noActivity: "Keine Aktivitäten",
+      noActivityDesc: "Du hast noch keine Einsätze oder Aktivitäten in dieser Woche.",
+      actions: {
+        accepted: "Angenommen",
+        dismissed: "Abgelehnt",
+        unanswered: "Unbeantwortet",
+        completed: "Abgeschlossen",
+      },
+      actionLabel: "Aktion",
+      missionLabel: "Einsatz",
+      dateLabel: "Datum",
+    },
+    adminActivity: {
+      title: "Sani-Aktivität",
+      subtitle: "Paramedic-Aktivitätsübersicht",
+      userList: "Mitarbeiterübersicht",
+      noUsers: "Keine Mitarbeiter",
+      noUsersDesc: "Es wurden keine Paramedics mit Aktivitäten gefunden.",
+      totalLogs: "Einträge",
+      lastActivity: "Letzte Aktivität",
+      viewDetails: "Details anzeigen",
+      userActivity: "Benutzeraktivitäten",
+    },
     auth: {
       login: "Anmelden",
       logout: "Abmelden",
@@ -167,6 +193,32 @@ const translations = {
       notifications: "Alerts",
       settings: "Settings",
     },
+    activityLog: {
+      title: "My Activity Log",
+      week: "Week",
+      noActivity: "No activities",
+      noActivityDesc: "You haven't had any missions or activities this week.",
+      actions: {
+        accepted: "Accepted",
+        dismissed: "Dismissed",
+        unanswered: "Unanswered",
+        completed: "Completed",
+      },
+      actionLabel: "Action",
+      missionLabel: "Mission",
+      dateLabel: "Date",
+    },
+    adminActivity: {
+      title: "Paramedic Activity",
+      subtitle: "Activity Overview",
+      userList: "Staff Overview",
+      noUsers: "No staff members",
+      noUsersDesc: "No paramedics with activity records found.",
+      totalLogs: "Entries",
+      lastActivity: "Last Activity",
+      viewDetails: "View Details",
+      userActivity: "User Activities",
+    },
     auth: {
       login: "Sign In",
       logout: "Sign Out",
@@ -295,10 +347,12 @@ const translations = {
       logoutConfirm: "Are you sure you want to sign out?",
       version: "Version",
       myRank: "My Rank",
+
+
     },
     common: {
-        activityLog: "My Activity Log",
-        saniActivity: "Paramedic Activity",
+  
+  
       loading: "Loading...",
       error: "Error",
       retry: "Retry",
