@@ -1,4 +1,6 @@
 import type {
+  ActivityLog,
+  ActivitySummary,
   DutyStatus,
   LOARequest,
   Mission,
@@ -170,6 +172,33 @@ const ApiService = {
 
   async getOnDutyUsers(): Promise<User[]> {
     const resp = await fetch(`${API_BASE}/status/on-duty`, { headers: headers() });
+    return resp.json();
+  },
+
+  async getMyActivity(): Promise<ActivityLog[]> {
+    const resp = await fetch(`${API_BASE}/activity/my`, { headers: headers() });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      throw new Error(data.error ?? "Aktivitäten konnten nicht geladen werden");
+    }
+    return resp.json();
+  },
+
+  async getUserActivity(userId: string): Promise<ActivityLog[]> {
+    const resp = await fetch(`${API_BASE}/activity/user/${userId}`, { headers: headers() });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      throw new Error(data.error ?? "Benutzeraktivitäten konnten nicht geladen werden");
+    }
+    return resp.json();
+  },
+
+  async getActivityUsers(): Promise<ActivitySummary[]> {
+    const resp = await fetch(`${API_BASE}/activity/users`, { headers: headers() });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      throw new Error(data.error ?? "Benutzerübersicht konnte nicht geladen werden");
+    }
     return resp.json();
   },
 };

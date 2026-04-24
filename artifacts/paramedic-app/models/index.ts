@@ -98,5 +98,38 @@ export interface LOARequest {
   reviewedAt?: string;
 }
 
+export type ActivityType =
+  | "login"
+  | "logout"
+  | "mission_accepted"
+  | "mission_rejected"
+  | "mission_completed"
+  | "duty_status_changed"
+  | "loa_requested"
+  | "loa_approved"
+  | "loa_rejected"
+  | "news_created"
+  | "news_approved"
+  | "news_rejected";
+
+export interface ActivityLog {
+  id: string;
+  userId: string;
+  userName: string;
+  activityType: ActivityType;
+  description: string;
+  timestamp: string;
+  metadata?: Record<string, any>;
+}
+
+export interface ActivitySummary {
+  userId: string;
+  userName: string;
+  role: UserRole;
+  lastActivity: string;
+  activityCount: number;
+  recentActivities: ActivityLog[];
+}
+
 export type AppTheme = "light" | "dark" | "red" | "teal" | "crimson" | "midnight" | "sunset" | "amethyst";
 export type AppLanguage = "de" | "en";
