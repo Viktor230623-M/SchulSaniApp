@@ -1,553 +1,478 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import { router, useLocalSearchParams } from "expo-router";
-import React, { useState } from "react";
+import { router } from "expo-router";
+import React, { useEffect, useState } from "react";
 import {
- ActivityIndicator,
- Alert,
- FlatList,
- Platform,
- Pressable,
- RefreshControl,
- StyleSheet,
- Text,
- View,
+  ActivityIndicator,
+  Platform,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { t } from "@/constants/i18n";
 import { getTheme } from "@/constants/theme";
-import type { ActivityLog, ActivitySummary, User } from "@/models";
+import type { ActivitySummary, User } from "@/models";
 import ApiService from "@/services/ApiService";
 import { useAppStore } from "@/store/useAppStore";
 
+interface ActivityUser {
+  userId: string;
+  userName: string;
+  role: User["role"];
+  totalLogs: number;
+  lastActivityAt: string;
+}
+
 const ROLE_CONFIG: Record<User["role"], { label: string; bg: string; text: string }> = {
- cto: { label: "CTO", bg: "#CCFBF1", text: "#0F766E" },
- admin: { label: "Administrator", bg: "#FEF2F2", text: "#DC2626" },
- sanitaeter_leitung_admin: { label: "Sanitäter Leitung", bg: "#EFF6FF", text: "#2563EB" },
- sanitaeter_leitung: { label: "Sanitäter Leitung", bg: "#EFF6FF", text: "#2563EB" },
- teacher: { label: "Lehrer", bg: "#FFF7ED", text: "#EA580C" },
- student_paramedic: { label: "Sanitäter", bg: "#F0FDF4", text: "#16A34A" },
+  cto: { label: "CTO", bg: "#CCFBF1", text: "#0F766E" },
+  admin: { label: "Administrator", bg: "#FEF2F2", text: "#DC2626" },
+  sanitaeter_leitung_admin: { label: "Sanitäter Leitung", bg: "#EFF6FF", text: "#2563EB" },
+  sanitaeter_leitung: { label: "Sanitäter Leitung", bg: "#EFF6FF", text: "#2563EB" },
+  teacher: { label: "Lehrer", bg: "#FFF7ED", text: "#EA580C" },
+  student_paramedic: { label: "Sanitäter", bg: "#F0FDF4", text: "#16A34A" },
 };
 
-function formatLastActivity(timestamp: string) {
- const date = new Date(timestamp);
- const now = new Date();
- const diffMs = now.getTime() - date.getTime();
- const diffMins = Math.floor(diffMs / 60000);
- const diffHours = Math.floor(diffMs / 3600000);
- const diffDays = Math.floor(diffMs / 86400000);
-
- if (diffMins < 1) return "Gerade eben";
- if (diffMins < 60) return `${diffMins} min`;
- if (diffHours < 24) return `${diffHours} h`;
- if (diffDays < 7) return `${diffDays} Tag${diffDays > 1 ? "e" : ""}`;
-
- return date.toLocaleDateString("de-DE", { month: "short", day: "numeric" });
-}
-
-function UserActivityItem({
- summary,
- onPress,
- theme,
-}: {
- summary: ActivitySummary;
- onPress: (userId: string) => void;
- theme: any;
-}) {
- const cfg = ROLE_CONFIG[summary.role] || { label: summary.role, bg: "#F3F4F6", text: "#6B7280" };
-
- return (
- <Pressable
- onPress={() => onPress(summary.userId)}
- style={({ pressed }) => [
- styles.userItem,
- {
- backgroundColor: theme.card,
- borderColor: theme.cardBorder,
- opacity: pressed ? 0.96 : 1,
- },
- ]}
- >
- <View style={[styles.userAvatar, { backgroundColor: cfg.bg }]}>
- <Text style={[styles.userAvatarText, { color: cfg.text }]}>
- {summary.userName.split(" ").map((n) => n[0]).join("")}
- </Text>
- </View>
-
- <View style={styles.userInfo}>
- <Text style={[styles.userName, { color: theme.text }]}>{summary.userName}</Text>
- <View style={styles.statsContainer}>
- <View style={[styles.statItem, { backgroundColor: theme.tint + "20" }]}>
- <Ionicons name="document-text-outline" size={14} color={theme.tint} />
- <Text style={[styles.statText, { color: theme.tint }]}>
- {summary.activityCount} Einträge
- </Text>
- </View>
- <View style={styles.statSeparator} />
- <Text style={[styles.lastActivityText, { color: theme.textTertiary }]}>
- Zuletzt: {formatLastActivity(summary.lastActivity)}
- </Text>
- </View>
- </View>
-
- <Ionicons
- name="chevron-forward-outline"
- size={20}
- color={theme.textTertiary}
- />
- </Pressable>
- );
-}
-
-function Header({
- onBack,
- title,
- theme,
-}: {
- onBack: () => void;
- title: string;
- theme: any;
-}) {
- return (
- <View style={[styles.header, { backgroundColor: theme.background }]}>
- <Pressable onPress={onBack} style={styles.backButton} hitSlop={12}>
- <Ionicons name="arrow-back-outline" size={24} color={theme.text} />
- </Pressable>
- <Text style={[styles.headerTitle, { color: theme.text }]}>{title}</Text>
- </View>
- );
-}
-
-interface DetailModalProps {
- userId: string;
- userName: string;
- isVisible: boolean;
- onClose: () => void;
-}
-
-function UserActivityDetail({ userId, userName, isVisible, onClose }: DetailModalProps) {
- const lang = useAppStore((s) => s.language);
- const themeKey = useAppStore((s) => s.theme);
- const theme = getTheme(themeKey);
-
- const [activities, setActivities] = useState<ActivityLog[]>([]);
- const [loading, setLoading] = useState(true);
- const [error, setError] = useState<string | null>(null);
-
- const loadUserActivity = async () => {
- setLoading(true);
- setError(null);
-
- try {
- const data = await ApiService.getUserActivity(userId);
- setActivities(Array.isArray(data) ? data : []);
- } catch (err) {
- setError(err instanceof Error ? err.message : "Failed to load user activity");
- } finally {
- setLoading(false);
- }
- };
-
- React.useEffect(() => {
- if (isVisible) {
- loadUserActivity();
- } else {
- setActivities([]);
- };
- }, [isVisible, userId]);
-
- if (!isVisible) return null;
-
- return (
- <View style={[styles.modalContainer, { backgroundColor: theme.background }]}>
- <View style={[styles.modalHeader, { borderBottomColor: theme.cardBorder }]}>
- <Pressable onPress={onClose} style={styles.modalBackButton} hitSlop={12}>
- <Ionicons name="arrow-back-outline" size={24} color={theme.text} />
- </Pressable>
- <Text style={[styles.modalTitle, { color: theme.text }]}>{userName}</Text>
- </View>
-
- {loading ? (
- <View style={styles.modalContent}>
- <ActivityIndicator size="large" color={theme.tint} />
- </View>
- ) : error ? (
- <View style={styles.modalContent}>
- <Text style={[styles.errorText, { color: theme.text }]}>{error}</Text>
- <Pressable
- onPress={loadUserActivity}
- style={({ pressed }) => [
- styles.retryButton,
- { backgroundColor: theme.tint, opacity: pressed ? 0.8 : 1 },
- ]}
- >
- <Text style={styles.retryButtonText}>Erneut versuchen</Text>
- </Pressable>
- </View>
- ) : (
- <FlatList
- data={activities}
- style={styles.modalContent}
- keyExtractor={(item) => item.id}
- renderItem={({ item }) => (
- <View
- style={[
- styles.activityItem,
- { backgroundColor: theme.card, borderColor: theme.cardBorder },
- ]}
- >
- <Ionicons
- name={getActivityIcon(item.activityType).name as any}
- size={20}
- color={getActivityIcon(item.activityType).color}
- />
- <View style={styles.activityContent}>
- <Text style={[styles.activityDescription, { color: theme.text }]}>
- {item.description}
- </Text>
- <Text style={[styles.activityTimestamp, { color: theme.textTertiary }]}>
- {formatLastActivity(item.timestamp)}
- </Text>
- </View>
- </View>
- )}
- ListEmptyComponent={
- <View style={styles.emptyContainer}>
- <Ionicons name="time-outline" size={48} color={theme.textTertiary} />
- <Text style={[styles.emptyText, { color: theme.textTertiary }]}>
- Noch keine Aktivitäten
- </Text>
- </View>
- }
- />
- )}
- </View>
- );
-}
+const ACTION_CONFIG: Record<string, { icon: string; color: string }> = {
+  accepted: { icon: "checkmark-circle", color: "#22C55E" },
+  dismissed: { icon: "close-circle", color: "#EF4444" },
+  unanswered: { icon: "time", color: "#F97316" },
+  completed: { icon: "flag", color: "#3B82F6" },
+};
 
 export default function SaniActivityScreen() {
- const insets = useSafeAreaInsets();
- const lang = useAppStore((s) => s.language);
- const themeKey = useAppStore((s) => s.theme);
- const theme = getTheme(themeKey);
- const user = useAppStore((s) => s.user);
+  const insets = useSafeAreaInsets();
+  const lang = useAppStore((s) => s.language);
+  const themeKey = useAppStore((s) => s.theme);
+  const theme = getTheme(themeKey);
+  const user = useAppStore((s) => s.user);
 
- const [activityUsers, setActivityUsers] = useState<ActivitySummary[]>([]);
- const [loading, setLoading] = useState(true);
- const [error, setError] = useState<string | null>(null);
- const [refreshing, setRefreshing] = useState(false);
- const [selectedUser, setSelectedUser] = useState<{ id: string; name: string } | null>(null);
+  const [users, setUsers] = useState<ActivityUser[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<string | null>(null);
+  const [userActivities, setUserActivities] = useState<ActivitySummary[]>([]);
+  const [loadingActivities, setLoadingActivities] = useState(false);
 
- const hasAccess = ["cto", "admin", "sanitaeter_leitung", "sanitaeter_leitung_admin"].includes(
- user?.role || ""
- );
+  const canView = ["cto", "admin", "sanitaeter_leitung", "sanitaeter_leitung_admin"].includes(
+    user?.role || ""
+  );
 
- const loadActivityUsers = async (isRefresh = false) => {
- if (!isRefresh) setLoading(true);
- setError(null);
+  const loadUsers = async () => {
+    try {
+      const data = await ApiService.getActivityUsers();
+      // Transform data to ActivityUser format
+      const transformedUsers: ActivityUser[] = (data || []).map((u: any) => ({
+        userId: u.userId,
+        userName: u.userName,
+        role: u.role || "student_paramedic",
+        totalLogs: u.activityCount || 0,
+        lastActivityAt: u.lastActivity,
+      }));
+      setUsers(transformedUsers);
+    } catch (err) {
+      console.error("Failed to load activity users:", err);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
 
- try {
- const data = await ApiService.getActivityUsers();
- setActivityUsers(Array.isArray(data) ? data : []);
- } catch (err) {
- setError(err instanceof Error ? err.message : "Failed to load user activities");
- } finally {
- setLoading(false);
- setRefreshing(false);
- }
- };
+  const loadUserActivities = async (userId: string) => {
+    setLoadingActivities(true);
+    try {
+      const data = await ApiService.getUserActivity(userId);
+      setUserActivities(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error("Failed to load user activities:", err);
+    } finally {
+      setLoadingActivities(false);
+    }
+  };
 
- React.useEffect(() => {
- if (hasAccess) {
- loadActivityUsers();
- } else {
- setError("Du hast keine Berechtigung, diese Seite zu sehen");
- setLoading(false);
- }
- }, [hasAccess]);
+  useEffect(() => {
+    if (canView) {
+      loadUsers();
+    }
+  }, [canView]);
 
- const handleRefresh = () => {
- setRefreshing(true);
- Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
- loadActivityUsers(true);
- };
+  const handleUserPress = async (userId: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setSelectedUser(selectedUser === userId ? null : userId);
+    if (selectedUser !== userId) {
+      await loadUserActivities(userId);
+    }
+  };
 
- const handleBack = () => {
- Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
- router.back();
- };
+  const formatLastActivity = (timestamp: string) => {
+    if (!timestamp) return "-";
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
 
- const handleUserPress = (userId: string) => {
- Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
- const userSummary = activityUsers.find((u) => u.userId === userId);
- if (userSummary) {
- setSelectedUser({ id: userId, name: userSummary.userName });
- }
- };
+    if (diffMins < 1) return lang === "de" ? "Gerade eben" : "Just now";
+    if (diffMins < 60) return `${diffMins} min`;
+    if (diffHours < 24) return `${diffHours} h`;
+    if (diffDays < 7) return `${diffDays}d`;
 
- const handleModalClose = () => {
- setSelectedUser(null);
- };
+    return date.toLocaleDateString(lang === "de" ? "de-DE" : "en-US", {
+      month: "short",
+      day: "numeric",
+    });
+  };
 
- const topPad = Platform.OS === "web" ? 67 : insets.top;
+  const formatDate = (timestamp: string) => {
+    if (!timestamp) return "-";
+    const date = new Date(timestamp);
+    return date.toLocaleDateString(lang === "de" ? "de-DE" : "en-US", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+  };
 
- if (!hasAccess) {
- return (
- <View style={[styles.container, { backgroundColor: theme.background, paddingTop: topPad + 20 }]}>
- <Header onBack={handleBack} title="Sani-Aktivität" theme={theme} />
- <View style={styles.errorContainer}>
- <Ionicons name="lock-closed-outline" size={48} color="#EF4444" />
- <Text style={[styles.errorText, { color: theme.text }]}>
- Zugriff verweigert
- </Text>
- <Text style={[styles.errorMessage, { color: theme.textTertiary }]}>
- Du hast keine Berechtigung, diese Seite zu sehen.
- </Text>
- </View>
- </View>
- );
- }
+  const topPad = Platform.OS === "web" ? 67 : insets.top;
 
- if (loading && !refreshing) {
- return (
- <View style={[styles.container, { backgroundColor: theme.background, paddingTop: topPad + 20 }]}>
- <Header onBack={handleBack} title="Sani-Aktivität" theme={theme} />
- <View style={styles.loadingContainer}>
- <ActivityIndicator size="large" color={theme.tint} />
- </View>
- </View>
- );
- }
+  if (!canView) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.background, paddingTop: topPad + 20 }]}>
+        <ScrollView
+          contentContainerStyle={styles.centerContent}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={loadUsers} tintColor={theme.tint} />
+          }
+        >
+          <Ionicons name="lock-closed-outline" size={64} color={theme.danger} />
+          <Text style={[styles.emptyTitle, { color: theme.text }]}>Zugriff verweigert</Text>
+          <Text style={[styles.emptySubtitle, { color: theme.textSecondary }]}>
+            {t("common.error", lang)}
+          </Text>
+        </ScrollView>
+      </View>
+    );
+  }
 
- return (
- <View style={[styles.container, { backgroundColor: theme.background, paddingTop: topPad + 10 }]}>
- <Header onBack={handleBack} title="Sani-Aktivität" theme={theme} />
+  if (loading) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.background, paddingTop: topPad + 20 }]}>
+        <ActivityIndicator size="large" color={theme.tint} />
+      </View>
+    );
+  }
 
- {error ? (
- <View style={styles.errorContainer}>
- <Ionicons name="alert-circle-outline" size={48} color="#EF4444" />
- <Text style={[styles.errorText, { color: theme.text }]}>{error}</Text>
- <Pressable
- onPress={() => loadActivityUsers()}
- style={({ pressed }) => [
- styles.retryButton,
- { backgroundColor: theme.tint, opacity: pressed ? 0.8 : 1 },
- ]}
- >
- <Text style={styles.retryButtonText}>Erneut versuchen</Text>
- </Pressable>
- </View>
- ) : (
- <FlatList
- data={activityUsers}
- keyExtractor={(item) => item.userId}
- renderItem={({ item }) => (
- <UserActivityItem
- summary={item}
- onPress={handleUserPress}
- theme={theme}
- />
- )}
- contentContainerStyle={{
- paddingBottom: insets.bottom + 100,
- paddingHorizontal: 16,
- }}
- ListEmptyComponent={
- <View style={styles.emptyContainer}>
- <Ionicons name="people-outline" size={48} color={theme.textTertiary} />
- <Text style={[styles.emptyText, { color: theme.textTertiary }]}>
- Noch keine Aktivitäten verfügbar
- </Text>
- </View>
- }
- refreshControl={
- <RefreshControl
- refreshing={refreshing}
- onRefresh={handleRefresh}
- tintColor={theme.tint}
- colors={[theme.tint]}
- />
- }
- />
- )}
+  if (users.length === 0) {
+    return (
+      <ScrollView
+        style={[styles.container, { backgroundColor: theme.background }]}
+        contentContainerStyle={{
+          paddingTop: topPad + 20,
+          paddingBottom: insets.bottom + 100,
+          alignItems: "center",
+          paddingHorizontal: 32,
+        }}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={loadUsers} tintColor={theme.tint} />
+        }
+      >
+        <Ionicons name="people-outline" size={64} color={theme.textTertiary} />
+        <Text style={[styles.emptyTitle, { color: theme.text }]}>
+          {t("adminActivity.noUsers", lang)}
+        </Text>
+        <Text style={[styles.emptySubtitle, { color: theme.textSecondary }]}>
+          {t("adminActivity.noUsersDesc", lang)}
+        </Text>
+      </ScrollView>
+    );
+  }
 
- <UserActivityDetail
- userId={selectedUser?.id || ""}
- userName={selectedUser?.name || ""}
- isVisible={!!selectedUser}
- onClose={handleModalClose}
- />
- </View>
- );
+  return (
+    <ScrollView
+      style={[styles.container, { backgroundColor: theme.background }]}
+      contentContainerStyle={{
+        paddingTop: topPad + 20,
+        paddingBottom: insets.bottom + 100,
+        paddingHorizontal: 16,
+      }}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={loadUsers} tintColor={theme.tint} />
+      }
+    >
+      {/* Header */}
+      <View style={[styles.header, { borderBottomColor: theme.cardBorder }]}>
+        <Pressable
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            router.back();
+          }}
+          style={styles.backButton}
+        >
+          <Ionicons name="chevron-back" size={28} color={theme.text} />
+        </Pressable>
+        <Text style={[styles.headerTitle, { color: theme.text }]}>
+          {t("settings.saniActivity", lang)}
+        </Text>
+      </View>
+
+      {/* Users List */}
+      <View style={styles.usersContainer}>
+        {users.map((activityUser) => {
+          const cfg = ROLE_CONFIG[activityUser.role] || ROLE_CONFIG.student_paramedic;
+          const isExpanded = selectedUser === activityUser.userId;
+
+          return (
+            <Pressable
+              key={activityUser.userId}
+              onPress={() => handleUserPress(activityUser.userId)}
+              style={({ pressed }) => [
+                styles.userCard,
+                { backgroundColor: theme.card, borderColor: theme.cardBorder },
+                isExpanded && { borderColor: theme.tint },
+                pressed && { opacity: 0.96 },
+              ]}
+            >
+              <View style={styles.userCardHeader}>
+                {/* Avatar */}
+                <View style={[styles.avatar, { backgroundColor: cfg.bg }]}>
+                  <Text style={[styles.avatarText, { color: cfg.text }]}>
+                    {activityUser.userName.split(" ").map((n) => n[0]).join("")}
+                  </Text>
+                </View>
+
+                {/* User Info */}
+                <View style={styles.userInfo}>
+                  <Text style={[styles.userName, { color: theme.text }]}>
+                    {activityUser.userName}
+                  </Text>
+                  <View style={[styles.roleBadge, { backgroundColor: cfg.bg }]}>
+                    <Text style={[styles.roleText, { color: cfg.text }]}>{cfg.label}</Text>
+                  </View>
+                </View>
+
+                {/* Stats */}
+                <View style={styles.statsContainer}>
+                  <View style={[styles.statBadge, { backgroundColor: theme.tintLight }]}>
+                    <Ionicons name="document-text-outline" size={14} color={theme.tint} />
+                    <Text style={[styles.statText, { color: theme.tint }]}>
+                      {activityUser.totalLogs}
+                    </Text>
+                  </View>
+                  <Ionicons
+                    name={isExpanded ? "chevron-up" : "chevron-down"}
+                    size={20}
+                    color={theme.textTertiary}
+                  />
+                </View>
+              </View>
+
+              {/* Expanded Activities */}
+              {isExpanded && (
+                <View
+                  style={[styles.activitiesContainer, { borderTopColor: theme.cardBorder }]}
+                >
+                  {loadingActivities ? (
+                    <ActivityIndicator size="small" color={theme.tint} style={{ margin: 16 }} />
+                  ) : userActivities.length === 0 ? (
+                    <View style={styles.noActivities}>
+                      <Text style={[styles.noActivitiesText, { color: theme.textSecondary }]}>
+                        {t("activityLog.noActivity", lang)}
+                      </Text>
+                    </View>
+                  ) : (
+                    <View style={styles.activitiesList}>
+                      {userActivities.map((activity, index) => {
+                        const actionConfig =
+                          ACTION_CONFIG[activity.action] || ACTION_CONFIG.unanswered;
+
+                        return (
+                          <View
+                            key={activity.id}
+                            style={[
+                              styles.activityItem,
+                              { borderBottomColor: theme.cardBorder },
+                              index === userActivities.length - 1 && { borderBottomWidth: 0 },
+                            ]}
+                          >
+                            <View
+                              style={[
+                                styles.miniIcon,
+                                { backgroundColor: actionConfig.color + "20" },
+                              ]}
+                            >
+                              <Ionicons
+                                name={actionConfig.icon as any}
+                                size={14}
+                                color={actionConfig.color}
+                              />
+                            </View>
+                            <View style={styles.activityContent}>
+                              <Text
+                                style={[styles.activityMission, { color: theme.text }]}
+                                numberOfLines={1}
+                              >
+                                {activity.missionTitle || "Mission"}
+                              </Text>
+                              <Text style={[styles.activityDate, { color: theme.textTertiary }]}>
+                                {formatDate(activity.createdAt)}
+                              </Text>
+                            </View>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  )}
+                </View>
+              )}
+            </Pressable>
+          );
+        })}
+      </View>
+    </ScrollView>
+  );
 }
 
 const styles = StyleSheet.create({
- container: {
- flex: 1,
- },
- header: {
- flexDirection: "row",
- alignItems: "center",
- paddingVertical: 12,
- paddingHorizontal: 4,
- borderBottomWidth: 1,
- },
- backButton: {
- padding: 4,
- },
- headerTitle: {
- fontSize: 20,
- fontFamily: "Inter_600SemiBold",
- marginLeft: 8,
- },
- loadingContainer: {
- flex: 1,
- alignItems: "center",
- justifyContent: "center",
- marginTop: 40,
- },
- errorContainer: {
- flex: 1,
- alignItems: "center",
- justifyContent: "center",
- paddingHorizontal: 32,
- gap: 8,
- },
- errorText: {
- fontSize: 18,
- fontFamily: "Inter_600SemiBold",
- textAlign: "center",
- marginBottom: 8,
- },
- errorMessage: {
- fontSize: 14,
- fontFamily: "Inter_400Regular",
- textAlign: "center",
- },
- retryButton: {
- paddingHorizontal: 16,
- paddingVertical: 10,
- borderRadius: 8,
- marginTop: 8,
- },
- retryButtonText: {
- color: "#fff",
- fontSize: 14,
- fontFamily: "Inter_600SemiBold",
- },
- emptyContainer: {
- alignItems: "center",
- justifyContent: "center",
- paddingTop: 60,
- gap: 8,
- },
- emptyText: {
- fontSize: 16,
- fontFamily: "Inter_500Medium",
- },
- userItem: {
- flexDirection: "row",
- alignItems: "center",
- padding: 16,
- borderRadius: 12,
- borderWidth: 1,
- marginBottom: 12,
- gap: 12,
- },
- userAvatar: {
- width: 44,
- height: 44,
- borderRadius: 12,
- alignItems: "center",
- justifyContent: "center",
- },
- userAvatarText: {
- fontSize: 15,
- fontFamily: "Inter_700Bold",
- },
- userInfo: {
- flex: 1,
- gap: 6,
- },
- userName: {
- fontSize: 16,
- fontFamily: "Inter_600SemiBold",
- },
- statsContainer: {
- flexDirection: "row",
- alignItems: "center",
- gap: 8,
- },
- statItem: {
- flexDirection: "row",
- alignItems: "center",
- paddingHorizontal: 8,
- paddingVertical: 4,
- borderRadius: 6,
- gap: 4,
- },
- statText: {
- fontSize: 12,
- fontFamily: "Inter_500Medium",
- },
- statSeparator: {
- width: 1,
- height: 12,
- backgroundColor: "#D1D5DB",
- marginHorizontal: 4,
- },
- lastActivityText: {
- fontSize: 13,
- fontFamily: "Inter_400Regular",
- },
- modalContainer: {
- position: "absolute",
- top: 0,
- left: 0,
- right: 0,
- bottom: 0,
- zIndex: 1000,
- },
- modalHeader: {
- flexDirection: "row",
- alignItems: "center",
- paddingVertical: 12,
- paddingHorizontal: 16,
- borderBottomWidth: 1,
- },
- modalBackButton: {
- padding: 4,
- },
- modalTitle: {
- fontSize: 20,
- fontFamily: "Inter_600SemiBold",
- marginLeft: 8,
- },
- modalContent: {
- flex: 1,
- padding: 16,
- },
- activityItem: {
- flexDirection: "row",
- alignItems: "flex-start",
- padding: 12,
- borderRadius: 8,
- borderWidth: 1,
- marginBottom: 8,
- gap: 12,
- },
- activityContent: {
- flex: 1,
- gap: 4,
- },
- activityDescription: {
- fontSize: 14,
- fontFamily: "Inter_400Regular",
- lineHeight: 18,
- },
- activityTimestamp: {
- fontSize: 12,
- fontFamily: "Inter_500Medium",
- },
+  container: {
+    flex: 1,
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+  },
+  backButton: {
+    padding: 8,
+    marginLeft: -8,
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontFamily: "Inter_700Bold",
+    marginLeft: 8,
+  },
+  centerContent: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 32,
+  },
+  emptyTitle: {
+    fontSize: 20,
+    fontFamily: "Inter_600SemiBold",
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
+    textAlign: "center",
+  },
+  usersContainer: {
+    gap: 12,
+  },
+  userCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  userCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 16,
+    gap: 12,
+  },
+  avatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarText: {
+    fontSize: 15,
+    fontFamily: "Inter_700Bold",
+  },
+  userInfo: {
+    flex: 1,
+    gap: 4,
+  },
+  userName: {
+    fontSize: 16,
+    fontFamily: "Inter_600SemiBold",
+  },
+  roleBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    alignSelf: "flex-start",
+  },
+  roleText: {
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+  },
+  statsContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  statBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    gap: 4,
+  },
+  statText: {
+    fontSize: 13,
+    fontFamily: "Inter_700Bold",
+  },
+  activitiesContainer: {
+    borderTopWidth: 1,
+    backgroundColor: "rgba(0,0,0,0.02)",
+  },
+  noActivities: {
+    padding: 20,
+    alignItems: "center",
+  },
+  noActivitiesText: {
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
+  },
+  activitiesList: {
+    padding: 12,
+  },
+  activityItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    gap: 10,
+  },
+  miniIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  activityContent: {
+    flex: 1,
+    gap: 2,
+  },
+  activityMission: {
+    fontSize: 14,
+    fontFamily: "Inter_500Medium",
+  },
+  activityDate: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+  },
 });

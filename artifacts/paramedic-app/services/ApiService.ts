@@ -4,6 +4,7 @@ import type {
   DutyStatus,
   LOARequest,
   Mission,
+  MissionActivityLog,
   MissionPriority,
   NewsItem,
   NotificationItem,
