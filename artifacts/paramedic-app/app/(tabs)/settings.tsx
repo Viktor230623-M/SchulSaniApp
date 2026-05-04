@@ -1,7 +1,7 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
-import Constants from 'expo-constants';
+import Constants from "expo-constants";
 import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
@@ -55,7 +55,6 @@ export default function SettingsScreen() {
 
   const avatarUri = user ? (avatarUriMap[user.id] ?? null) : null;
 
-  // Exklusive Themes
   const exclusiveUnlocked = ["cto", "admin", "sanitaeter_leitung_admin"].includes(user?.role ?? "");
 
   const [allUsers, setAllUsers] = useState<User[]>([]);
@@ -64,14 +63,14 @@ export default function SettingsScreen() {
   const canSeeAllUsers = ["admin", "cto", "sanitaeter_leitung_admin", "teacher"].includes(user?.role ?? "");
 
   useEffect(() => {
-  if (canSeeAllUsers && user) {
-    setLoadingUsers(true);
-    ApiService.getAllUsers().then((data) => {
-      setAllUsers(Array.isArray(data) ? data : []);
-      setLoadingUsers(false);
-    });
-  }
-}, [canSeeAllUsers, user]);
+    if (canSeeAllUsers && user) {
+      setLoadingUsers(true);
+      ApiService.getAllUsers().then((data) => {
+        setAllUsers(Array.isArray(data) ? data : []);
+        setLoadingUsers(false);
+      });
+    }
+  }, [canSeeAllUsers, user]);
 
   async function handlePickImage() {
     if (!user) return;
@@ -81,7 +80,7 @@ export default function SettingsScreen() {
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.8,
@@ -126,10 +125,12 @@ export default function SettingsScreen() {
     { key: "amethyst", label: t("settings.themeAmethyst", lang), color: "#8B5CF6", border: "#D8B4FE" },
   ];
 
-  const exclusiveKeys: AppTheme[] = ["teal", "crimson", "midnight", "sunset", "amethyst"];
-
   const isCTO = user?.role === "cto";
-  const themes = isCTO ? [...baseThemes, ...exclusiveThemes] : exclusiveUnlocked ? [...baseThemes, ...exclusiveThemes.filter(t => t.key !== "teal")] : baseThemes;
+  const themes = isCTO
+    ? [...baseThemes, ...exclusiveThemes]
+    : exclusiveUnlocked
+    ? [...baseThemes, ...exclusiveThemes.filter((th) => th.key !== "teal")]
+    : baseThemes;
 
   const langs: { key: AppLanguage; label: string; flag: string }[] = [
     { key: "de", label: "Deutsch", flag: "🇩🇪" },
@@ -151,7 +152,6 @@ export default function SettingsScreen() {
     >
       <Text style={[styles.heading, { color: theme.text }]}>{t("settings.title", lang)}</Text>
 
-      {/* Profile + Rank Card */}
       <View style={[styles.profileCard, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
         <Pressable onPress={handlePickImage} style={styles.avatarWrap}>
           {avatarUri ? (
@@ -182,7 +182,6 @@ export default function SettingsScreen() {
         </View>
       </View>
 
-      {/* My Activity Log */}
       <Pressable
         onPress={() => {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -201,7 +200,6 @@ export default function SettingsScreen() {
         </View>
       </Pressable>
 
-      {/* Language */}
       <View style={[styles.section, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
         <Text style={[styles.sectionTitle, { color: theme.textTertiary }]}>
           {t("settings.language", lang)}
@@ -228,7 +226,6 @@ export default function SettingsScreen() {
         </View>
       </View>
 
-      {/* Theme */}
       <View style={[styles.section, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
         <Text style={[styles.sectionTitle, { color: theme.textTertiary }]}>
           {t("settings.theme", lang)}
@@ -258,7 +255,6 @@ export default function SettingsScreen() {
         ))}
       </View>
 
-      {/* Admin: All Users */}
       {canSeeAllUsers && (
         <View style={[styles.section, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
           <Pressable onPress={() => setShowUsers(!showUsers)} style={styles.sectionHeaderRow}>
@@ -299,28 +295,29 @@ export default function SettingsScreen() {
               })
             )
           )}
-</View>
-  {canSeeAllUsers && (
-  <Pressable
-    onPress={() => {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      router.push("/admin/sani-activity");
-    }}
-    style={({ pressed }) => [
-      styles.section,
-      { backgroundColor: theme.card, borderColor: theme.cardBorder, opacity: pressed ? 0.96 : 1 },
-    ]}
-  >
-    <View style={styles.sectionHeaderRow}>
-      <Text style={[styles.sectionTitle, { color: theme.textTertiary }]}>
-        {t("settings.saniActivity", lang)}
-      </Text>
-      <Ionicons name="chevron-forward-outline" size={16} color={theme.textTertiary} />
-    </View>
-  </Pressable>
-)}
+        </View>
+      )}
 
-        {/* Logout */}
+      {canSeeAllUsers && (
+        <Pressable
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            router.push("/admin/sani-activity");
+          }}
+          style={({ pressed }) => [
+            styles.section,
+            { backgroundColor: theme.card, borderColor: theme.cardBorder, opacity: pressed ? 0.96 : 1 },
+          ]}
+        >
+          <View style={styles.sectionHeaderRow}>
+            <Text style={[styles.sectionTitle, { color: theme.textTertiary }]}>
+              {t("settings.saniActivity", lang)}
+            </Text>
+            <Ionicons name="chevron-forward-outline" size={16} color={theme.textTertiary} />
+          </View>
+        </Pressable>
+      )}
+
       <Pressable
         onPress={handleLogout}
         style={({ pressed }) => [
@@ -333,7 +330,7 @@ export default function SettingsScreen() {
       </Pressable>
 
       <Text style={[styles.version, { color: theme.textTertiary }]}>
-        {t("settings.version", lang)} {Constants.expoConfig?.version ?? '1.0.0-beta.1'} · SchulSanitäter · gymbla.de
+        {t("settings.version", lang)} {Constants.expoConfig?.version ?? "1.0.0-beta.1"} · SchulSanitäter · gymbla.de
       </Text>
     </ScrollView>
   );
@@ -353,7 +350,6 @@ const styles = StyleSheet.create({
   profileEmail: { fontSize: 13, fontFamily: "Inter_400Regular" },
   rankLabel: { fontSize: 11, fontFamily: "Inter_600SemiBold", textTransform: "uppercase", letterSpacing: 0.6, marginTop: 6 },
   roleBadgeLarge: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, borderWidth: 1, alignSelf: "flex-start" },
-  roleIcon: { fontSize: 14 },
   roleBadgeLargeText: { fontSize: 14, fontFamily: "Inter_700Bold" },
   section: { borderRadius: 16, padding: 16, gap: 12, borderWidth: 1 },
   sectionHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
