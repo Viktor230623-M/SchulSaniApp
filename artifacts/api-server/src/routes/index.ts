@@ -7,6 +7,7 @@ import loaRouter from "./loa";
 import missionsRouter from "./missions";
 import statusRouter from "./status";
 import notificationsRouter from "./notifications";
+import activityRouter from "./activity";
 
 const router: IRouter = Router();
 
@@ -18,5 +19,6 @@ router.use("/loa", loaRouter);
 router.use("/missions", missionsRouter);
 router.use("/status", statusRouter);
 router.use("/notifications", notificationsRouter);
+router.use("/activity", activityRouter);
 
 export default router;
