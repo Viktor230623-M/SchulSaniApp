@@ -9,10 +9,11 @@ interface WaveBackgroundProps {
 export function WaveBackground({ color = "#F0FDF4" }: WaveBackgroundProps) {
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      <View style={StyleSheet.absoluteFill} />
       <Svg
         height="100%"
         width="100%"
-        style={StyleSheet.absoluteFill}
+        style={[StyleSheet.absoluteFill, { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }]}
         viewBox="0 0 400 800"
         preserveAspectRatio="xMidYMid slice"
       >
