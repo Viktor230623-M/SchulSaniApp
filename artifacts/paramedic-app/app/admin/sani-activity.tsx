@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { WaveBackground } from "@/components/WaveBackground";
 import { t } from "@/constants/i18n";
 import { getTheme } from "@/constants/theme";
 import type { ActivitySummary, User } from "@/models";
@@ -65,7 +66,6 @@ export default function SaniActivityScreen() {
   const loadUsers = async () => {
     try {
       const data = await ApiService.getActivityUsers();
-      // Transform data to ActivityUser format
       const transformedUsers: ActivityUser[] = (data || []).map((u: any) => ({
         userId: u.userId,
         userName: u.userName,
@@ -142,18 +142,39 @@ export default function SaniActivityScreen() {
 
   if (!canView) {
     return (
-      <View style={[styles.container, { backgroundColor: theme.background, paddingTop: topPad + 20 }]}>
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
+        <WaveBackground color={theme.backgroundTertiary} />
         <ScrollView
-          contentContainerStyle={styles.centerContent}
+          contentContainerStyle={{
+            paddingTop: topPad + 20,
+            paddingBottom: insets.bottom + 100,
+            paddingHorizontal: 16,
+          }}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={loadUsers} tintColor={theme.tint} />
           }
         >
-          <Ionicons name="lock-closed-outline" size={64} color={theme.danger} />
-          <Text style={[styles.emptyTitle, { color: theme.text }]}>Zugriff verweigert</Text>
-          <Text style={[styles.emptySubtitle, { color: theme.textSecondary }]}>
-            {t("common.error", lang)}
-          </Text>
+          <View style={[styles.headerRow, { borderBottomColor: theme.cardBorder }]}>
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.back();
+              }}
+              style={styles.backButton}
+            >
+              <Ionicons name="chevron-back" size={28} color={theme.text} />
+            </Pressable>
+            <Text style={[styles.headerTitle, { color: theme.text }]}>
+              {t("settings.saniActivity", lang)}
+            </Text>
+          </View>
+          <View style={[styles.emptyCard, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
+            <Ionicons name="lock-closed-outline" size={52} color={theme.danger} />
+            <Text style={[styles.emptyTitle, { color: theme.text }]}>Zugriff verweigert</Text>
+            <Text style={[styles.emptySubtitle, { color: theme.textSecondary }]}>
+              {t("common.error", lang)}
+            </Text>
+          </View>
         </ScrollView>
       </View>
     );
@@ -161,267 +182,215 @@ export default function SaniActivityScreen() {
 
   if (loading) {
     return (
-      <View style={[styles.container, { backgroundColor: theme.background, paddingTop: topPad + 20 }]}>
-        <ActivityIndicator size="large" color={theme.tint} />
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
+        <WaveBackground color={theme.backgroundTertiary} />
+        <View style={{ paddingTop: topPad + 20, alignItems: "center", justifyContent: "center", flex: 1 }}>
+          <ActivityIndicator size="large" color={theme.tint} />
+        </View>
       </View>
-    );
-  }
-
-  if (users.length === 0) {
-    return (
-      <ScrollView
-        style={[styles.container, { backgroundColor: theme.background }]}
-        contentContainerStyle={{
-          paddingTop: topPad + 20,
-          paddingBottom: insets.bottom + 100,
-          alignItems: "center",
-          paddingHorizontal: 32,
-        }}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={loadUsers} tintColor={theme.tint} />
-        }
-      >
-        <Ionicons name="people-outline" size={64} color={theme.textTertiary} />
-        <Text style={[styles.emptyTitle, { color: theme.text }]}>
-          {t("adminActivity.noUsers", lang)}
-        </Text>
-        <Text style={[styles.emptySubtitle, { color: theme.textSecondary }]}>
-          {t("adminActivity.noUsersDesc", lang)}
-        </Text>
-      </ScrollView>
     );
   }
 
   return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: theme.background }]}
-      contentContainerStyle={{
-        paddingTop: topPad + 20,
-        paddingBottom: insets.bottom + 100,
-        paddingHorizontal: 16,
-      }}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={loadUsers} tintColor={theme.tint} />
-      }
-    >
-      {/* Header */}
-      <View style={[styles.header, { borderBottomColor: theme.cardBorder }]}>
-        <Pressable
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            router.back();
-          }}
-          style={styles.backButton}
-        >
-          <Ionicons name="chevron-back" size={28} color={theme.text} />
-        </Pressable>
-        <Text style={[styles.headerTitle, { color: theme.text }]}>
-          {t("settings.saniActivity", lang)}
-        </Text>
-      </View>
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <WaveBackground color={theme.backgroundTertiary} />
+      <ScrollView
+        contentContainerStyle={{
+          paddingTop: topPad + 16,
+          paddingBottom: insets.bottom + 100,
+          paddingHorizontal: 16,
+          gap: 16,
+        }}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={loadUsers} tintColor={theme.tint} />
+        }
+      >
+        <View style={[styles.headerRow, { borderBottomColor: theme.cardBorder }]}>
+          <Pressable
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              router.back();
+            }}
+            style={styles.backButton}
+          >
+            <Ionicons name="chevron-back" size={28} color={theme.text} />
+          </Pressable>
+          <Text style={[styles.headerTitle, { color: theme.text }]}>
+            {t("settings.saniActivity", lang)}
+          </Text>
+        </View>
 
-      {/* Users List */}
-      <View style={styles.usersContainer}>
-        {users.map((activityUser) => {
-          const cfg = ROLE_CONFIG[activityUser.role] || ROLE_CONFIG.student_paramedic;
-          const isExpanded = selectedUser === activityUser.userId;
+        {users.length === 0 ? (
+          <View style={[styles.emptyCard, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
+            <Ionicons name="people-outline" size={52} color={theme.textTertiary} />
+            <Text style={[styles.emptyTitle, { color: theme.text }]}>
+              {t("adminActivity.noUsers", lang)}
+            </Text>
+            <Text style={[styles.emptySubtitle, { color: theme.textTertiary }]}>
+              {t("adminActivity.noUsersDesc", lang)}
+            </Text>
+          </View>
+        ) : (
+          users.map((activityUser) => {
+            const cfg = ROLE_CONFIG[activityUser.role] || ROLE_CONFIG.student_paramedic;
+            const isExpanded = selectedUser === activityUser.userId;
 
-          return (
-            <Pressable
-              key={activityUser.userId}
-              onPress={() => handleUserPress(activityUser.userId)}
-              style={({ pressed }) => [
-                styles.userCard,
-                { backgroundColor: theme.card, borderColor: theme.cardBorder },
-                isExpanded && { borderColor: theme.tint },
-                pressed && { opacity: 0.96 },
-              ]}
-            >
-              <View style={styles.userCardHeader}>
-                {/* Avatar */}
-                <View style={[styles.avatar, { backgroundColor: cfg.bg }]}>
-                  <Text style={[styles.avatarText, { color: cfg.text }]}>
-                    {activityUser.userName.split(" ").map((n) => n[0]).join("")}
-                  </Text>
-                </View>
-
-                {/* User Info */}
-                <View style={styles.userInfo}>
-                  <Text style={[styles.userName, { color: theme.text }]}>
-                    {activityUser.userName}
-                  </Text>
-                  <View style={[styles.roleBadge, { backgroundColor: cfg.bg }]}>
-                    <Text style={[styles.roleText, { color: cfg.text }]}>{cfg.label}</Text>
-                  </View>
-                </View>
-
-                {/* Stats */}
-                <View style={styles.statsContainer}>
-                  <View style={[styles.statBadge, { backgroundColor: theme.tintLight }]}>
-                    <Ionicons name="document-text-outline" size={14} color={theme.tint} />
-                    <Text style={[styles.statText, { color: theme.tint }]}>
-                      {activityUser.totalLogs}
-                    </Text>
-                  </View>
-                  <Ionicons
-                    name={isExpanded ? "chevron-up" : "chevron-down"}
-                    size={20}
-                    color={theme.textTertiary}
-                  />
-                </View>
-              </View>
-
-              {/* Expanded Activities */}
-              {isExpanded && (
-                <View
-                  style={[styles.activitiesContainer, { borderTopColor: theme.cardBorder }]}
-                >
-                  {loadingActivities ? (
-                    <ActivityIndicator size="small" color={theme.tint} style={{ margin: 16 }} />
-                  ) : userActivities.length === 0 ? (
-                    <View style={styles.noActivities}>
-                      <Text style={[styles.noActivitiesText, { color: theme.textSecondary }]}>
-                        {t("activityLog.noActivity", lang)}
+            return (
+              <View
+                key={activityUser.userId}
+                style={[
+                  styles.card,
+                  { backgroundColor: theme.card, borderColor: isExpanded ? theme.tint : theme.cardBorder },
+                  isExpanded && styles.cardExpanded,
+                ]}
+              >
+                <Pressable onPress={() => handleUserPress(activityUser.userId)} style={styles.cardHeader}>
+                  <View style={styles.cardHeaderLeft}>
+                    <View style={[styles.avatar, { backgroundColor: cfg.bg }]}>
+                      <Text style={[styles.avatarText, { color: cfg.text }]}>
+                        {activityUser.userName.split(" ").map((n) => n[0]).join("")}
                       </Text>
                     </View>
-                  ) : (
-                    <View style={styles.activitiesList}>
-                      {userActivities.map((activity, index) => {
-                        const actionConfig =
-                          ACTION_CONFIG[activity.action] || ACTION_CONFIG.unanswered;
+                    <View style={styles.userInfo}>
+                      <Text style={[styles.userName, { color: theme.text }]}>
+                        {activityUser.userName}
+                      </Text>
+                      <View style={[styles.roleBadge, { backgroundColor: cfg.bg }]}>
+                        <Text style={[styles.roleText, { color: cfg.text }]}>{cfg.label}</Text>
+                      </View>
+                    </View>
+                  </View>
+                  <View style={styles.cardHeaderRight}>
+                    <View style={[styles.statBadge, { backgroundColor: theme.tintLight }]}>
+                      <Ionicons name="document-text-outline" size={12} color={theme.tint} />
+                      <Text style={[styles.statText, { color: theme.tint }]}>{activityUser.totalLogs}</Text>
+                    </View>
+                    <Ionicons
+                      name={isExpanded ? "chevron-up" : "chevron-down"}
+                      size={18}
+                      color={theme.textTertiary}
+                    />
+                  </View>
+                </Pressable>
 
-                        return (
-                          <View
-                            key={activity.id}
-                            style={[
-                              styles.activityItem,
-                              { borderBottomColor: theme.cardBorder },
-                              index === userActivities.length - 1 && { borderBottomWidth: 0 },
-                            ]}
-                          >
+                {isExpanded && (
+                  <View style={[styles.activitiesContainer, { borderTopColor: theme.cardBorder }]}>
+                    {loadingActivities ? (
+                      <ActivityIndicator size="small" color={theme.tint} style={{ margin: 20 }} />
+                    ) : userActivities.length === 0 ? (
+                      <View style={styles.noActivities}>
+                        <Text style={[styles.noActivitiesText, { color: theme.textSecondary }]}>
+                          {t("activityLog.noActivity", lang)}
+                        </Text>
+                      </View>
+                    ) : (
+                      <View style={styles.activitiesList}>
+                        {userActivities.map((activity, index) => {
+                          const actionConfig =
+                            ACTION_CONFIG[activity.action] || ACTION_CONFIG.unanswered;
+
+                          return (
                             <View
+                              key={activity.id}
                               style={[
-                                styles.miniIcon,
-                                { backgroundColor: actionConfig.color + "20" },
+                                styles.activityRow,
+                                { borderBottomColor: theme.cardBorder },
+                                index === userActivities.length - 1 && { borderBottomWidth: 0 },
                               ]}
                             >
-                              <Ionicons
-                                name={actionConfig.icon as any}
-                                size={14}
-                                color={actionConfig.color}
-                              />
-                            </View>
-                            <View style={styles.activityContent}>
-                              <Text
-                                style={[styles.activityMission, { color: theme.text }]}
-                                numberOfLines={1}
+                              <View
+                                style={[
+                                  styles.activityIcon,
+                                  { backgroundColor: actionConfig.color + "20" },
+                                ]}
                               >
-                                {activity.missionTitle || "Mission"}
-                              </Text>
-                              <Text style={[styles.activityDate, { color: theme.textTertiary }]}>
-                                {formatDate(activity.createdAt)}
-                              </Text>
+                                <Ionicons
+                                  name={actionConfig.icon as any}
+                                  size={14}
+                                  color={actionConfig.color}
+                                />
+                              </View>
+                              <View style={styles.activityInfo}>
+                                <Text
+                                  style={[styles.activityTitle, { color: theme.text }]}
+                                  numberOfLines={1}
+                                >
+                                  {activity.missionTitle || "Mission"}
+                                </Text>
+                                <Text style={[styles.activityMeta, { color: theme.textTertiary }]}>
+                                  {formatDate(activity.createdAt)}
+                                </Text>
+                              </View>
                             </View>
-                          </View>
-                        );
-                      })}
-                    </View>
-                  )}
-                </View>
-              )}
-            </Pressable>
-          );
-        })}
-      </View>
-    </ScrollView>
+                          );
+                        })}
+                      </View>
+                    )}
+                  </View>
+                )}
+              </View>
+            );
+          })
+        )}
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  header: {
+  container: { flex: 1 },
+  headerRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 20,
-    paddingBottom: 16,
+    paddingBottom: 12,
     borderBottomWidth: 1,
+    gap: 4,
   },
-  backButton: {
-    padding: 8,
-    marginLeft: -8,
-  },
-  headerTitle: {
-    fontSize: 28,
-    fontFamily: "Inter_700Bold",
-    marginLeft: 8,
-  },
-  centerContent: {
-    flex: 1,
+  backButton: { padding: 4, marginLeft: -4 },
+  headerTitle: { fontSize: 28, fontFamily: "Inter_700Bold", flex: 1 },
+  emptyCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 40,
     alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 32,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontFamily: "Inter_600SemiBold",
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
-    textAlign: "center",
-  },
-  usersContainer: {
     gap: 12,
   },
-  userCard: {
+  emptyTitle: { fontSize: 18, fontFamily: "Inter_600SemiBold" },
+  emptySubtitle: { fontSize: 14, fontFamily: "Inter_400Regular", textAlign: "center" },
+  card: {
     borderRadius: 16,
     borderWidth: 1,
     overflow: "hidden",
   },
-  userCardHeader: {
+  cardExpanded: {
+    borderWidth: 2,
+  },
+  cardHeader: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 16,
+    justifyContent: "space-between",
+    padding: 14,
+  },
+  cardHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: 12,
+    flex: 1,
   },
   avatar: {
-    width: 44,
-    height: 44,
+    width: 42,
+    height: 42,
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
   },
-  avatarText: {
-    fontSize: 15,
-    fontFamily: "Inter_700Bold",
-  },
-  userInfo: {
-    flex: 1,
-    gap: 4,
-  },
-  userName: {
-    fontSize: 16,
-    fontFamily: "Inter_600SemiBold",
-  },
-  roleBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
-    alignSelf: "flex-start",
-  },
-  roleText: {
-    fontSize: 12,
-    fontFamily: "Inter_500Medium",
-  },
-  statsContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
+  avatarText: { fontSize: 14, fontFamily: "Inter_700Bold" },
+  userInfo: { flex: 1, gap: 4 },
+  userName: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
+  roleBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, alignSelf: "flex-start" },
+  roleText: { fontSize: 11, fontFamily: "Inter_500Medium" },
+  cardHeaderRight: { flexDirection: "row", alignItems: "center", gap: 10 },
   statBadge: {
     flexDirection: "row",
     alignItems: "center",
@@ -430,49 +399,28 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     gap: 4,
   },
-  statText: {
-    fontSize: 13,
-    fontFamily: "Inter_700Bold",
-  },
+  statText: { fontSize: 12, fontFamily: "Inter_700Bold" },
   activitiesContainer: {
     borderTopWidth: 1,
-    backgroundColor: "rgba(0,0,0,0.02)",
   },
-  noActivities: {
-    padding: 20,
-    alignItems: "center",
-  },
-  noActivitiesText: {
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
-  },
-  activitiesList: {
-    padding: 12,
-  },
-  activityItem: {
+  noActivities: { padding: 20, alignItems: "center" },
+  noActivitiesText: { fontSize: 14, fontFamily: "Inter_400Regular" },
+  activitiesList: { paddingHorizontal: 14, paddingBottom: 10, gap: 2 },
+  activityRow: {
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 10,
     borderBottomWidth: 1,
     gap: 10,
   },
-  miniIcon: {
+  activityIcon: {
     width: 28,
     height: 28,
-    borderRadius: 8,
+    borderRadius: 6,
     alignItems: "center",
     justifyContent: "center",
   },
-  activityContent: {
-    flex: 1,
-    gap: 2,
-  },
-  activityMission: {
-    fontSize: 14,
-    fontFamily: "Inter_500Medium",
-  },
-  activityDate: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
-  },
+  activityInfo: { flex: 1, gap: 2 },
+  activityTitle: { fontSize: 14, fontFamily: "Inter_500Medium" },
+  activityMeta: { fontSize: 12, fontFamily: "Inter_400Regular" },
 });
