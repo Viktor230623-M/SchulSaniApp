@@ -227,7 +227,8 @@ router.post("/login", async (req, res) => {
 
     res.json({ token, user, isTealUnlocked });
   } catch (err: any) {
-    const message = err?.message ?? "Anmeldung fehlgeschlagen";
+    const message = err?.cause?.message || err?.message || "Anmeldung fehlgeschlagen";
+    console.error("Login error details:", err?.cause || err);
     res.status(401).json({ error: message });
   }
 });
