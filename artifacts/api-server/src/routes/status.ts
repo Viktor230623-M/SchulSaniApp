@@ -18,12 +18,12 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
     res.status(400).json({ error: "status must be on_duty or off_duty" });
     return;
   }
-  const entry = { userId, status, updatedAt: new Date() };
+  const entry = { userId: userId, status, updatedAt: new Date() };
   await db.insert(dutyTable).values(entry).onConflictDoUpdate({
     target: dutyTable.userId,
     set: { status, updatedAt: new Date() },
   });
-  res.json(entry);
+  res.json({ userId: userId, status, updatedAt: new Date() });
 });
 
 router.get("/on-duty", requireAuth, async (_req, res) => {

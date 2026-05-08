@@ -58,22 +58,25 @@ export const notificationsTable = pgTable("notifications", {
 
 // Duty status table
 export const dutyTable = pgTable("duty", {
-  id: text("id").primaryKey(),
-  userId: text("user_id").notNull(),
-  status: text("status").notNull(), // on_duty, off_duty
-  startedAt: timestamp("started_at").defaultNow(),
-  endedAt: timestamp("ended_at"),
+  userId: text("user_id").notNull().primaryKey(),
+  status: text("status").notNull().default("off_duty"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
 // Leave of absence table
 export const loaTable = pgTable("loa", {
   id: text("id").primaryKey(),
-  userId: text("user_id"),
-  type: text("type"),
-  startDate: timestamp("start_date"),
-  endDate: timestamp("end_date"),
-  reason: text("reason"),
+  userId: text("user_id").notNull(),
+  userName: text("user_name").notNull(),
+  fromDate: text("from_date").notNull(),
+  toDate: text("to_date").notNull(),
+  reason: text("reason").notNull(),
+  status: text("status").notNull().default("pending"),
   createdAt: timestamp("created_at").defaultNow(),
+  adminNote: text("admin_note"),
+  appealNote: text("appeal_note"),
+  reviewedBy: text("reviewed_by"),
+  reviewedAt: timestamp("reviewed_at"),
 });
 
 // Mission activity log table (from BLOCK 2)
