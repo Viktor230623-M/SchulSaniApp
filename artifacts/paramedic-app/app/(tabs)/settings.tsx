@@ -159,7 +159,7 @@ export default function SettingsScreen() {
           ) : (
             <View style={[styles.avatarPlaceholder, { backgroundColor: theme.tintLight }]}>
               <Text style={[styles.avatarInitials, { color: theme.tint }]}>
-                {user ? `${user.firstName[0]}${user.lastName[0]}` : "??"}
+                {user ? `${user.firstName[0]}${user.lastName[0]}`.toUpperCase() : "??"}
               </Text>
             </View>
           )}
@@ -278,7 +278,7 @@ export default function SettingsScreen() {
                   <View key={u.id} style={[styles.userRow, { borderTopColor: theme.cardBorder }]}>
                     <View style={[styles.userAvatar, { backgroundColor: cfg.bg }]}>
                       <Text style={[styles.userAvatarText, { color: cfg.text }]}>
-                        {u.firstName?.[0] ?? "?"}{u.lastName?.[0] ?? ""}
+                        {(u.firstName?.[0] ?? "?").toUpperCase()}{(u.lastName?.[0] ?? "").toUpperCase()}
                       </Text>
                     </View>
                     <View style={styles.userInfo}>
