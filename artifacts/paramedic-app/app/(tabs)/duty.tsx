@@ -52,13 +52,19 @@ export default function DutyScreen() {
     scale.value = withSpring(0.93, {}, () => { scale.value = withSpring(1); });
     setDutyLoading(true);
     const newStatus = isOnDuty ? "off_duty" : "on_duty";
-    await ApiService.updateDutyStatus(newStatus);
-    setDutyStatus(newStatus);
-    setDutyLoading(false);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    // Update on-duty list
-    const updated = await ApiService.getOnDutyUsers();
-    setOnDutyUsers(updated);
+    try {
+      await ApiService.updateDutyStatus(newStatus);
+      setDutyStatus(newStatus);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // Update on-duty list
+      const updated = await ApiService.getOnDutyUsers();
+      setOnDutyUsers(updated);
+    } catch (err) {
+      console.error("Failed to update duty status:", err);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setDutyLoading(false);
+    }
   }
 
   function roleLabelShort(role: User["role"]) {

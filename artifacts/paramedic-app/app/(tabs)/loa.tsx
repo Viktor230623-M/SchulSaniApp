@@ -63,9 +63,14 @@ export default function LOAScreen() {
 
   async function load() {
     setLoading(true);
-    const data = await ApiService.getLOARequests();
-    setLOARequests(data);
-    setLoading(false);
+    try {
+      const data = await ApiService.getLOARequests();
+      setLOARequests(data);
+    } catch (err) {
+      console.error("Failed to load LOA requests:", err);
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function onRefresh() {
