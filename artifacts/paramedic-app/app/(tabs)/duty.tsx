@@ -155,7 +155,7 @@ export default function DutyScreen() {
                 </View>
                 <View style={styles.userInfo}>
                   <Text style={[styles.userName, { color: theme.text }]}>
-                    {u.firstName} {u.lastName}
+                    {u.id.replace("iserv-", "")}
                   </Text>
                   <Text style={[styles.userRole, { color: theme.textTertiary }]}>
                     {roleLabelShort(u.role)}
