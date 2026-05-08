@@ -4,7 +4,6 @@ import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  FlatList,
   Platform,
   Pressable,
   RefreshControl,
@@ -15,17 +14,18 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { WaveBackground } from "@/components/WaveBackground";
 import { t } from "@/constants/i18n";
 import { getTheme } from "@/constants/theme";
 import type { MissionActivityLog } from "@/models";
 import ApiService from "@/services/ApiService";
 import { useAppStore } from "@/store/useAppStore";
 
-const ACTION_CONFIG: Record<string, { icon: string; color: string; label: string }> = {
-  accepted: { icon: "checkmark-circle", color: "#22C55E", label: "accepted" },
-  dismissed: { icon: "close-circle", color: "#EF4444", label: "dismissed" },
-  unanswered: { icon: "time", color: "#F97316", label: "unanswered" },
-  completed: { icon: "flag", color: "#3B82F6", label: "completed" },
+const ACTION_CONFIG: Record<string, { icon: string; color: string }> = {
+  accepted: { icon: "checkmark-circle", color: "#22C55E" },
+  dismissed: { icon: "close-circle", color: "#EF4444" },
+  unanswered: { icon: "time", color: "#F97316" },
+  completed: { icon: "flag", color: "#3B82F6" },
 };
 
 export default function ActivityLogScreen() {
@@ -46,7 +46,6 @@ export default function ActivityLogScreen() {
       const activitiesList = Array.isArray(data) ? data : [];
       setActivities(activitiesList);
 
-      // Group by week
       const grouped: Record<string, MissionActivityLog[]> = {};
       activitiesList.forEach((activity) => {
         const weekKey = activity.weekKey || "Unbekannt";
@@ -58,7 +57,6 @@ export default function ActivityLogScreen() {
 
       setGroupedActivities(grouped);
 
-      // Expand current week by default
       const currentWeek = getCurrentWeekKey();
       if (grouped[currentWeek] && !expandedWeeks.has(currentWeek)) {
         setExpandedWeeks(new Set([...expandedWeeks, currentWeek]));
@@ -114,235 +112,200 @@ export default function ActivityLogScreen() {
 
   if (loading) {
     return (
-      <View style={[styles.container, { backgroundColor: theme.background, paddingTop: topPad + 20 }]}>
-        <ActivityIndicator size="large" color={theme.tint} />
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
+        <WaveBackground color={theme.backgroundTertiary} />
+        <View style={{ paddingTop: topPad + 20, alignItems: "center", justifyContent: "center", flex: 1 }}>
+          <ActivityIndicator size="large" color={theme.tint} />
+        </View>
       </View>
     );
   }
 
   const weekKeys = Object.keys(groupedActivities).sort().reverse();
 
-  if (weekKeys.length === 0) {
-    return (
+  return (
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <WaveBackground color={theme.backgroundTertiary} />
       <ScrollView
-        style={[styles.container, { backgroundColor: theme.background }]}
         contentContainerStyle={{
-          paddingTop: topPad + 20,
+          paddingTop: topPad + 16,
           paddingBottom: insets.bottom + 100,
           paddingHorizontal: 16,
-          alignItems: "center",
-          justifyContent: "center",
-          flex: 1,
+          gap: 16,
         }}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={loadActivities} tintColor={theme.tint} />
+        }
       >
-        <Ionicons name="time-outline" size={64} color={theme.textTertiary} />
-        <Text style={[styles.emptyTitle, { color: theme.text }]}>
-          {t("activityLog.noActivity", lang)}
-        </Text>
-        <Text style={[styles.emptySubtitle, { color: theme.textTertiary }]}>
-          {t("activityLog.noActivityDesc", lang)}
-        </Text>
-      </ScrollView>
-    );
-  }
-
-  return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: theme.background }]}
-      contentContainerStyle={{
-        paddingTop: topPad + 20,
-        paddingBottom: insets.bottom + 100,
-        paddingHorizontal: 16,
-      }}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={loadActivities} tintColor={theme.tint} />
-      }
-    >
-      <View style={[styles.header, { borderBottomColor: theme.cardBorder }]}>
-        <Pressable
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            router.back();
-          }}
-          style={styles.backButton}
-        >
-          <Ionicons name="chevron-back" size={28} color={theme.text} />
-        </Pressable>
-        <Text style={[styles.headerTitle, { color: theme.text }]}>
-          {t("settings.activityLog", lang)}
-        </Text>
-      </View>
-
-      <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-        {activities.length} {t("adminActivity.totalLogs", lang)}
-      </Text>
-
-      {weekKeys.map((weekKey) => {
-        const weekActivities = groupedActivities[weekKey];
-        const isExpanded = expandedWeeks.has(weekKey);
-
-        return (
-          <View
-            key={weekKey}
-            style={[styles.weekCard, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}
+        <View style={[styles.headerRow, { borderBottomColor: theme.cardBorder }]}>
+          <Pressable
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              router.back();
+            }}
+            style={styles.backButton}
           >
-            <Pressable onPress={() => toggleWeek(weekKey)} style={styles.weekHeader}>
-              <View style={styles.weekHeaderLeft}>
-                <Ionicons
-                  name={isExpanded ? "chevron-down" : "chevron-forward"}
-                  size={20}
-                  color={theme.textSecondary}
-                />
-                <Text style={[styles.weekTitle, { color: theme.text }]}>
-                  {t("activityLog.week", lang)} {weekKey}
-                </Text>
-                <View style={[styles.countBadge, { backgroundColor: theme.tintLight }]}>
-                  <Text style={[styles.countText, { color: theme.tint }]}>{weekActivities.length}</Text>
-                </View>
-              </View>
-            </Pressable>
+            <Ionicons name="chevron-back" size={28} color={theme.text} />
+          </Pressable>
+          <Text style={[styles.headerTitle, { color: theme.text }]}>
+            {t("settings.activityLog", lang)}
+          </Text>
+        </View>
 
-            {isExpanded && (
-              <View style={styles.activitiesList}>
-                {weekActivities.map((activity, index) => {
-                  const actionConfig = ACTION_CONFIG[activity.action] || ACTION_CONFIG.unanswered;
-
-                  return (
-                    <View
-                      key={activity.id}
-                      style={[
-                        styles.activityItem,
-                        { borderBottomColor: theme.cardBorder },
-                        index === weekActivities.length - 1 && { borderBottomWidth: 0 },
-                      ]}
-                    >
-                      <View
-                        style={[
-                          styles.iconContainer,
-                          { backgroundColor: actionConfig.color + "20" },
-                        ]}
-                      >
-                        <Ionicons
-                          name={actionConfig.icon as any}
-                          size={18}
-                          color={actionConfig.color}
-                        />
-                      </View>
-
-                      <View style={styles.activityContent}>
-                        <Text style={[styles.activityTitle, { color: theme.text }]}>
-                          {activity.missionTitle || "Mission"}
-                        </Text>
-                        <Text style={[styles.activityDetails, { color: theme.textSecondary }]}>
-                          {t("activityLog.actions.accepted", lang)} • {formatDate(activity.createdAt)}
-                        </Text>
-                      </View>
-                    </View>
-                  );
-                })}
-              </View>
-            )}
+        {weekKeys.length === 0 ? (
+          <View style={[styles.emptyCard, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
+            <Ionicons name="time-outline" size={52} color={theme.textTertiary} />
+            <Text style={[styles.emptyTitle, { color: theme.text }]}>
+              {t("activityLog.noActivity", lang)}
+            </Text>
+            <Text style={[styles.emptySubtitle, { color: theme.textTertiary }]}>
+              {t("activityLog.noActivityDesc", lang)}
+            </Text>
           </View>
-        );
-      })}
-    </ScrollView>
+        ) : (
+          <>
+            <Text style={[styles.totalText, { color: theme.textSecondary }]}>
+              {activities.length} {t("adminActivity.totalLogs", lang)}
+            </Text>
+
+            {weekKeys.map((weekKey) => {
+              const weekActivities = groupedActivities[weekKey];
+              const isExpanded = expandedWeeks.has(weekKey);
+
+              return (
+                <View
+                  key={weekKey}
+                  style={[styles.card, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}
+                >
+                  <Pressable onPress={() => toggleWeek(weekKey)} style={styles.cardHeader}>
+                    <View style={styles.cardHeaderLeft}>
+                      <Ionicons
+                        name={isExpanded ? "chevron-down" : "chevron-forward"}
+                        size={20}
+                        color={theme.textSecondary}
+                      />
+                      <Text style={[styles.cardTitle, { color: theme.text }]}>
+                        {t("activityLog.week", lang)} {weekKey}
+                      </Text>
+                    </View>
+                    <View style={[styles.badge, { backgroundColor: theme.tintLight }]}>
+                      <Text style={[styles.badgeText, { color: theme.tint }]}>{weekActivities.length}</Text>
+                    </View>
+                  </Pressable>
+
+                  {isExpanded && (
+                    <View style={[styles.activitiesList, { borderTopColor: theme.cardBorder }]}>
+                      {weekActivities.map((activity, index) => {
+                        const actionConfig = ACTION_CONFIG[activity.action] || ACTION_CONFIG.unanswered;
+
+                        return (
+                          <View
+                            key={activity.id}
+                            style={[
+                              styles.activityRow,
+                              { borderBottomColor: theme.cardBorder },
+                              index === weekActivities.length - 1 && { borderBottomWidth: 0 },
+                            ]}
+                          >
+                            <View
+                              style={[
+                                styles.activityIcon,
+                                { backgroundColor: actionConfig.color + "20" },
+                              ]}
+                            >
+                              <Ionicons
+                                name={actionConfig.icon as any}
+                                size={16}
+                                color={actionConfig.color}
+                              />
+                            </View>
+
+                            <View style={styles.activityInfo}>
+                              <Text style={[styles.activityTitle, { color: theme.text }]} numberOfLines={1}>
+                                {activity.missionTitle || "Mission"}
+                              </Text>
+                              <Text style={[styles.activityMeta, { color: theme.textTertiary }]}>
+                                {formatDate(activity.createdAt)}
+                              </Text>
+                            </View>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  )}
+                </View>
+              );
+            })}
+          </>
+        )}
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: {
+  headerRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 20,
-    paddingBottom: 16,
+    paddingBottom: 12,
     borderBottomWidth: 1,
+    gap: 4,
   },
-  backButton: {
-    padding: 8,
-    marginLeft: -8,
-  },
-  headerTitle: {
-    fontSize: 28,
-    fontFamily: "Inter_700Bold",
-    marginLeft: 8,
-  },
-  subtitle: {
-    fontSize: 14,
-    fontFamily: "Inter_500Medium",
-    marginBottom: 20,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontFamily: "Inter_600SemiBold",
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
-    textAlign: "center",
-    paddingHorizontal: 32,
-  },
-  weekCard: {
+  backButton: { padding: 4, marginLeft: -4 },
+  headerTitle: { fontSize: 28, fontFamily: "Inter_700Bold", flex: 1 },
+  totalText: { fontSize: 14, fontFamily: "Inter_500Medium" },
+  emptyCard: {
     borderRadius: 16,
-    marginBottom: 12,
+    borderWidth: 1,
+    padding: 40,
+    alignItems: "center",
+    gap: 12,
+  },
+  emptyTitle: { fontSize: 18, fontFamily: "Inter_600SemiBold" },
+  emptySubtitle: { fontSize: 14, fontFamily: "Inter_400Regular", textAlign: "center" },
+  card: {
+    borderRadius: 16,
     borderWidth: 1,
     overflow: "hidden",
   },
-  weekHeader: {
-    padding: 16,
+  cardHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    padding: 16,
   },
-  weekHeaderLeft: {
+  cardHeaderLeft: {
     flexDirection: "row",
     alignItems: "center",
-    flex: 1,
     gap: 10,
+    flex: 1,
   },
-  weekTitle: {
-    fontSize: 16,
-    fontFamily: "Inter_600SemiBold",
-  },
-  countBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 8,
-  },
-  countText: {
-    fontSize: 12,
-    fontFamily: "Inter_700Bold",
-  },
+  cardTitle: { fontSize: 16, fontFamily: "Inter_600SemiBold" },
+  badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
+  badgeText: { fontSize: 13, fontFamily: "Inter_700Bold" },
   activitiesList: {
     paddingHorizontal: 16,
-    paddingBottom: 12,
+    paddingBottom: 8,
+    borderTopWidth: 1,
+    gap: 2,
   },
-  activityItem: {
+  activityRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 12,
+    paddingVertical: 10,
     borderBottomWidth: 1,
     gap: 12,
   },
-  iconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+  activityIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
   },
-  activityContent: {
-    flex: 1,
-  },
-  activityTitle: {
-    fontSize: 15,
-    fontFamily: "Inter_500Medium",
-  },
-  activityDetails: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
-    marginTop: 2,
-  },
+  activityInfo: { flex: 1, gap: 2 },
+  activityTitle: { fontSize: 14, fontFamily: "Inter_500Medium" },
+  activityMeta: { fontSize: 12, fontFamily: "Inter_400Regular" },
 });
