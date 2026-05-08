@@ -184,8 +184,25 @@ router.post("/login", async (req, res) => {
     }
   } catch {}
 
+  let firstName = "";
+  let lastName = "";
+  let email = `${cleanUsername}@gymbla.de`;
+  let phone = "";
+
   try {
-    const { firstName, lastName, email, phone } = await iServAuth(cleanUsername, password);
+    const profile = await iServAuth(cleanUsername, password);
+    firstName = profile.firstName;
+    lastName = profile.lastName;
+    email = profile.email;
+    phone = profile.phone;
+  } catch (err) {
+    // Fallback: use username parts
+    const parts = cleanUsername.split(".");
+    firstName = parts[0] || cleanUsername;
+    lastName = parts.slice(1).join(" ") || "";
+  }
+
+  try {
     const role = getRoleForUser(cleanUsername);
     const userId = `iserv-${cleanUsername}`;
 
