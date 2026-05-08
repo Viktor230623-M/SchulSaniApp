@@ -184,22 +184,20 @@ router.post("/login", async (req, res) => {
     }
   } catch {}
 
-  let firstName = "";
-  let lastName = "";
+  let firstName = cleanUsername.split(".")[0] || cleanUsername;
+  let lastName = cleanUsername.split(".").slice(1).join(" ") || "";
   let email = `${cleanUsername}@gymbla.de`;
   let phone = "";
 
   try {
     const profile = await iServAuth(cleanUsername, password);
-    firstName = profile.firstName;
-    lastName = profile.lastName;
-    email = profile.email;
-    phone = profile.phone;
+    if (profile.firstName) firstName = profile.firstName;
+    if (profile.lastName) lastName = profile.lastName;
+    if (profile.email) email = profile.email;
+    if (profile.phone) phone = profile.phone;
   } catch (err) {
-    // Fallback: use username parts
-    const parts = cleanUsername.split(".");
-    firstName = parts[0] || cleanUsername;
-    lastName = parts.slice(1).join(" ") || "";
+    console.error("IServ profile fetch failed:", err);
+    // Already has fallback values from username
   }
 
   try {

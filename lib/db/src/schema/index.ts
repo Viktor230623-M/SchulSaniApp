@@ -4,13 +4,13 @@ import { createInsertSchema } from "drizzle-zod";
 // Users table
 export const usersTable = pgTable("users", {
   id: text("id").primaryKey(),
-  firstName: text("first_name"),
-  lastName: text("last_name"),
-  email: text("email"),
-  phone: text("phone"),
-  role: text("role"),
-  schoolId: text("school_id"),
-  passwordHash: text("password_hash"),
+  firstName: text("first_name").notNull(),
+  lastName: text("last_name").notNull(),
+  email: text("email").notNull(),
+  phone: text("phone").notNull().default(""),
+  role: text("role").notNull().default("student_paramedic"),
+  schoolId: text("school_id").notNull(),
+  passwordHash: text("password_hash").notNull().default(""),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
