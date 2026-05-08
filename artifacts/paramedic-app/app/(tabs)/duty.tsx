@@ -150,12 +150,12 @@ export default function DutyScreen() {
               <View key={u.id} style={styles.userRow}>
                 <View style={[styles.avatar, { backgroundColor: theme.tintLight }]}>
                   <Text style={[styles.avatarText, { color: theme.tint }]}>
-                    {u.firstName?.[0] ?? "?"}{u.lastName?.[0] ?? ""}
+                    {(u.firstName?.[0] ?? "?").toUpperCase()}{(u.lastName?.[0] ?? "").toUpperCase()}
                   </Text>
                 </View>
                 <View style={styles.userInfo}>
                   <Text style={[styles.userName, { color: theme.text }]}>
-                    {u.id.replace("iserv-", "")}
+                    {u.firstName && u.lastName ? `${u.firstName} ${u.lastName}` : u.id.replace("iserv-", "")}
                   </Text>
                   <Text style={[styles.userRole, { color: theme.textTertiary }]}>
                     {roleLabelShort(u.role)}
