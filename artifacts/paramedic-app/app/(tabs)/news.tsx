@@ -286,7 +286,6 @@ export default function NewsScreen() {
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <WaveBackground color={theme.tintLight} />
-
       <FlatList
         data={filtered}
         keyExtractor={(n) => n.id}

@@ -4,7 +4,7 @@ const translations = {
   de: {
     tabs: {
       news: "Neuigkeiten",
-      loa: "LoA",
+      loa: "Abwesenheiten",
       duty: "Dienst",
       missions: "Einsätze",
       notifications: "Meldungen",
@@ -114,8 +114,8 @@ const translations = {
       deleteDesc: "Dieser Beitrag wird unwiderruflich gelöscht.",
     },
     loa: {
-      title: "Leave of Absence",
-      subtitle: "LoA-Verwaltung",
+      title: "Abwesenheiten",
+      subtitle: "Abwesenheitsverwaltung",
       myRequests: "Meine Anträge",
       allRequests: "Alle Anträge",
       newRequest: "Neuer Antrag",
@@ -188,7 +188,7 @@ const translations = {
   en: {
     tabs: {
       news: "News",
-      loa: "LoA",
+      loa: "Absences",
       duty: "Duty",
       missions: "Missions",
       notifications: "Alerts",
@@ -298,8 +298,8 @@ const translations = {
       deleteDesc: "This article will be permanently deleted.",
     },
     loa: {
-      title: "Leave of Absence",
-      subtitle: "LoA Management",
+      title: "Absences",
+      subtitle: "Absence Management",
       myRequests: "My Requests",
       allRequests: "All Requests",
       newRequest: "New Request",

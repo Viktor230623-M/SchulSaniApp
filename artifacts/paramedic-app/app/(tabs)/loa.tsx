@@ -151,7 +151,7 @@ export default function LOAScreen() {
         }}
         ListHeaderComponent={
           <View style={styles.headerRow}>
-            <Text style={[styles.heading, { color: theme.text }]}>{t("tabs.loa", lang)}</Text>
+            <Text style={[styles.heading, { color: theme.text }]}>{t("loa.title", lang)}</Text>
             {canCreate && (
               <Pressable
                 onPress={() => setShowCreate(true)}

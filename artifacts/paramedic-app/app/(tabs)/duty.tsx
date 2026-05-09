@@ -87,9 +87,8 @@ export default function DutyScreen() {
         contentContainerStyle={{
           paddingTop: topPad + 20,
           paddingBottom: insets.bottom + 120,
-          paddingHorizontal: 24,
-          alignItems: "center",
-          gap: 24,
+          paddingHorizontal: 16,
+          gap: 16,
         }}
         showsVerticalScrollIndicator={false}
       >
