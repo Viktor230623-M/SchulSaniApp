@@ -78,8 +78,9 @@ router.post("/:id/read", requireAuth, async (req, res) => {
   res.json({ ok: true });
 });
 
-router.post("/read-all", requireAuth, async (_req, res) => {
-  await db.update(newsTable).set({ isRead: true });
+router.post("/read-all", requireAuth, async (req: AuthRequest, res) => {
+  const userId = req.user!.userId;
+  await db.update(newsTable).set({ isRead: true }).where(eq(newsTable.authorId, userId));
   res.json({ ok: true });
 });
 

@@ -21,7 +21,19 @@ router.get("/on-duty", requireAuth, async (_req, res) => {
 });
 
 router.get("/:id", requireAuth, async (req: AuthRequest, res) => {
-  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.params["id"]!));
+  const requestingUser = req.user!;
+  const requestedId = req.params["id"]!;
+  
+  // Allow users to access their own data or allow admins/teachers to access any
+  const canAccessAll = ["admin", "cto", "teacher", "sanitaeter_leitung_admin", "sanitaeter_leitung"].includes(requestingUser.role);
+  const isOwnData = requestingUser.userId === requestedId;
+  
+  if (!canAccessAll && !isOwnData) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+  
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, requestedId));
   if (!user) {
     res.status(404).json({ error: "Not found" });
     return;

@@ -3,49 +3,46 @@ import * as http from "http";
 import fs from "fs";
 import { Router } from "express";
 import jwt from "jsonwebtoken";
+import rateLimit from "express-rate-limit";
 import { eq } from "drizzle-orm";
 import { db, usersTable } from "@workspace/db";
 import { requireAuth, type AuthRequest } from "../middlewares/auth";
 
 const router = Router();
 
-const JWT_SECRET = process.env["JWT_SECRET"] ?? "schulsan-dev-secret-change-in-prod";
+const authLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,
+  message: { error: "Too many login attempts, please try again later." },
+});
+
+const JWT_SECRET = process.env["JWT_SECRET"];
+if (!JWT_SECRET) {
+  throw new Error("JWT_SECRET environment variable is required");
+}
 const ISERV_BASE = "https://gymbla.de";
 const UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1 SchulSanitaeter/1.0";
 
-const ROLE_MAP: Record<string, string> = {
-  // CTO
-  "viktor.gnjatic": "cto",
-  // Admin
-  "david.gnjatic": "admin",
-  // Teacher
-  "katharina.merouani": "teacher",
-  // Sanitäter Leitung Admin
-  "oliver.petz": "sanitaeter_leitung_admin",
-  // Sanitäter Leitung
-  "hannah.hentschel": "sanitaeter_leitung",
-  "lena.nendel": "sanitaeter_leitung",
-  // Student Paramedic
-  "elisabeth.hengstmann": "student_paramedic",
-  "fanni.wahl": "student_paramedic",
-  "frida.muehlenhoff": "student_paramedic",
-  "greta.hinrichsen": "student_paramedic",
-  "greta.paffrath": "student_paramedic",
-  "henriette.sancken": "student_paramedic",
-  "jacob.huettmann": "student_paramedic",
-  "john.podgorsky": "student_paramedic",
-  "lana.landskron": "student_paramedic",
-  "laura.hornborstel": "student_paramedic",
-  "leana.witte": "student_paramedic",
-  "livia.farenholtz": "student_paramedic",
-  "mariella.eilers": "student_paramedic",
-  "marlene.volquardsen": "student_paramedic",
-  "pauline.kubis": "student_paramedic",
-  "pia.jacobi": "student_paramedic",
-  "romy.böcker": "student_paramedic",
-  "sophia.kayenburg": "student_paramedic",
-  "valentina.dekker": "student_paramedic",
-};
+function loadRoleMap(): Record<string, string> {
+  const roleMapPath = process.env["ROLE_MAP_PATH"];
+  if (roleMapPath) {
+    try {
+      return JSON.parse(fs.readFileSync(roleMapPath, "utf-8"));
+    } catch (err) {
+      console.error("Failed to load role map:", err);
+    }
+  }
+  return {
+    "viktor.gnjatic": "cto",
+    "david.gnjatic": "admin",
+    "katharina.merouani": "teacher",
+    "oliver.petz": "sanitaeter_leitung_admin",
+    "hannah.hentschel": "sanitaeter_leitung",
+    "lena.nendel": "sanitaeter_leitung",
+  };
+}
+
+const ROLE_MAP = loadRoleMap();
 
 function getRoleForUser(username: string): string {
   return ROLE_MAP[username.toLowerCase().trim()] ?? "student_paramedic";
@@ -166,7 +163,7 @@ async function iServAuth(username: string, password: string): Promise<{ firstNam
   return { firstName, lastName, email, phone };
 }
 
-router.post("/login", async (req, res) => {
+router.post("/login", authLimiter, async (req, res) => {
   const { username, password, rememberMe } = req.body as { username: string; password: string; rememberMe?: boolean };
   if (!username?.trim() || !password?.trim()) {
     res.status(400).json({ error: "Benutzername und Passwort erforderlich" });
@@ -176,13 +173,20 @@ router.post("/login", async (req, res) => {
   const cleanUsername = username.toLowerCase().trim();
 
   // Whitelist check
+  const whitelistPath = process.env["WHITELIST_PATH"] || "/var/www/SchulSaniApp/whitelist.json";
+  let whitelist: { allowed: string[] } | null = null;
   try {
-    const whitelist = JSON.parse(fs.readFileSync("/var/www/SchulSaniApp/whitelist.json", "utf-8"));
-    if (!whitelist.allowed.includes(cleanUsername)) {
-      res.status(403).json({ error: "Zugriff verweigert. Du bist nicht berechtigt diese App zu nutzen." });
-      return;
-    }
-  } catch {}
+    whitelist = JSON.parse(fs.readFileSync(whitelistPath, "utf-8"));
+  } catch (err) {
+    console.error("Failed to load whitelist:", err);
+    res.status(500).json({ error: "Server configuration error" });
+    return;
+  }
+  
+  if (!whitelist || !whitelist.allowed.includes(cleanUsername)) {
+    res.status(403).json({ error: "Zugriff verweigert. Du bist nicht berechtigt diese App zu nutzen." });
+    return;
+  }
 
   let firstName = cleanUsername.split(".")[0] || cleanUsername;
   let lastName = cleanUsername.split(".").slice(1).join(" ") || "";
@@ -222,7 +226,7 @@ router.post("/login", async (req, res) => {
       set: { firstName, lastName, email, updatedAt: new Date() },
     });
 
-    const token = jwt.sign({ userId, role }, JWT_SECRET, { expiresIn: "7d" });
+    const token = jwt.sign({ userId, role }, JWT_SECRET, { expiresIn: "24h" });
     const isTealUnlocked = role === "cto";
 
         const isWeb = req.headers['user-agent']?.includes('Mozilla') || req.headers['sec-fetch-dest'] === 'document';
@@ -231,7 +235,7 @@ router.post("/login", async (req, res) => {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production', // Use secure in production
         sameSite: 'lax',
-        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+        maxAge: 24 * 60 * 60 * 1000, // 24 hours
       });
     }
 
