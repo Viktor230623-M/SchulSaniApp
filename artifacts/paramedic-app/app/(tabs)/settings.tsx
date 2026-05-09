@@ -62,6 +62,14 @@ export default function SettingsScreen() {
   const [showUsers, setShowUsers] = useState(false);
   const canSeeAllUsers = ["admin", "cto", "sanitaeter_leitung_admin", "teacher"].includes(user?.role ?? "");
 
+  const [showActivityLog, setShowActivityLog] = useState(false);
+  const [activityLogData, setActivityLogData] = useState<any[]>([]);
+  const [loadingActivityLog, setLoadingActivityLog] = useState(false);
+
+  const [showSaniActivity, setShowSaniActivity] = useState(false);
+  const [saniActivityData, setSaniActivityData] = useState<any[]>([]);
+  const [loadingSaniActivity, setLoadingSaniActivity] = useState(false);
+
   useEffect(() => {
     if (canSeeAllUsers && user) {
       setLoadingUsers(true);
@@ -71,6 +79,46 @@ export default function SettingsScreen() {
       });
     }
   }, [canSeeAllUsers, user]);
+
+  useEffect(() => {
+    if (showActivityLog && user) {
+      setLoadingActivityLog(true);
+      Promise.all([
+        ApiService.getMissions(),
+        ApiService.getLOARequests(),
+      ]).then(([missions, loaRequests]) => {
+        const activities = [
+          ...(Array.isArray(missions) ? missions.map((m: any) => ({ type: "mission", ...m })) : []),
+          ...(Array.isArray(loaRequests) ? loaRequests.map((l: any) => ({ type: "loa", ...l })) : []),
+        ].sort((a: any, b: any) => {
+          const dateA = new Date(a.requestedAt || a.createdAt || 0).getTime();
+          const dateB = new Date(b.requestedAt || b.createdAt || 0).getTime();
+          return dateB - dateA;
+        }).slice(0, 20);
+        setActivityLogData(activities);
+        setLoadingActivityLog(false);
+      }).catch(() => setLoadingActivityLog(false));
+    }
+  }, [showActivityLog, user]);
+
+  useEffect(() => {
+    if (showSaniActivity && user) {
+      setLoadingSaniActivity(true);
+      Promise.all([
+        ApiService.getMissions(),
+        ApiService.getAllUsers(),
+      ]).then(([missions, users]) => {
+        const completedMissions = Array.isArray(missions) ? missions.filter((m: any) => m.status === "completed" || m.status === "accepted") : [];
+        const userMap = new Map((Array.isArray(users) ? users : []).map((u: any) => [u.id, u]));
+        const activities = completedMissions.map((m: any) => {
+          const assigned = m.assignedParamedicId ? userMap.get(m.assignedParamedicId) : null;
+          return { ...m, assignedUser: assigned };
+        }).slice(0, 20);
+        setSaniActivityData(activities);
+        setLoadingSaniActivity(false);
+      }).catch(() => setLoadingSaniActivity(false));
+    }
+  }, [showSaniActivity, user]);
 
   async function handlePickImage() {
     if (!user) return;
@@ -182,23 +230,45 @@ export default function SettingsScreen() {
         </View>
       </View>
 
-      <Pressable
-        onPress={() => {
+      <View style={[styles.section, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
+        <Pressable onPress={() => {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          router.push("/activity-log");
-        }}
-        style={({ pressed }) => [
-          styles.section,
-          { backgroundColor: theme.card, borderColor: theme.cardBorder, opacity: pressed ? 0.96 : 1 },
-        ]}
-      >
-        <View style={styles.sectionHeaderRow}>
+          setShowActivityLog(!showActivityLog);
+        }} style={styles.sectionHeaderRow}>
           <Text style={[styles.sectionTitle, { color: theme.textTertiary }]}>
             {t("settings.activityLog", lang)}
           </Text>
-          <Ionicons name="chevron-forward-outline" size={16} color={theme.textTertiary} />
-        </View>
-      </Pressable>
+          <Ionicons name={showActivityLog ? "chevron-up" : "chevron-down"} size={16} color={theme.textTertiary} />
+        </Pressable>
+        {showActivityLog && (
+          loadingActivityLog ? (
+            <ActivityIndicator color={theme.tint} />
+          ) : activityLogData.length === 0 ? (
+            <Text style={[styles.emptyText, { color: theme.textTertiary }]}>Keine Aktivitäten</Text>
+          ) : (
+            activityLogData.map((item, index) => (
+              <View key={item.id || index} style={[styles.activityRow, { borderTopColor: theme.cardBorder }]}>
+                <View style={[styles.activityIcon, { backgroundColor: item.type === "mission" ? "#FEE2E2" : "#DBEAFE" }]}>
+                  <Ionicons name={item.type === "mission" ? "medical" : "calendar-outline"} size={14} color={item.type === "mission" ? "#DC2626" : "#2563EB"} />
+                </View>
+                <View style={styles.activityInfo}>
+                  <Text style={[styles.activityTitle, { color: theme.text }]} numberOfLines={1}>
+                    {item.title || item.reason}
+                  </Text>
+                  <Text style={[styles.activityDate, { color: theme.textTertiary }]}>
+                    {item.type === "mission" ? new Date(item.requestedAt).toLocaleDateString("de-DE") : `${new Date(item.fromDate).toLocaleDateString("de-DE")} - ${new Date(item.toDate).toLocaleDateString("de-DE")}`}
+                  </Text>
+                </View>
+                <View style={[styles.statusBadge, { backgroundColor: (item.type === "mission" ? (item.status === "completed" ? "#DCFCE7" : "#FEF3C7") : (item.status === "approved" ? "#DCFCE7" : "#FEF3C7")) }]}>
+                  <Text style={[styles.statusText, { color: (item.type === "mission" ? (item.status === "completed" ? "#16A34A" : "#D97706") : (item.status === "approved" ? "#16A34A" : "#D97706")) }]}>
+                    {item.type === "mission" ? (item.status === "completed" ? "Erledigt" : item.status === "accepted" ? "Angenommen" : "Ausstehend") : (item.status === "approved" ? "Genehmigt" : item.status === "rejected" ? "Abgelehnt" : "Ausstehend")}
+                  </Text>
+                </View>
+              </View>
+            ))
+          )
+        )}
+      </View>
 
       <View style={[styles.section, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
         <Text style={[styles.sectionTitle, { color: theme.textTertiary }]}>
@@ -299,23 +369,45 @@ export default function SettingsScreen() {
       )}
 
       {canSeeAllUsers && (
-        <Pressable
-          onPress={() => {
+        <View style={[styles.section, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
+          <Pressable onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            router.push("/admin/sani-activity");
-          }}
-          style={({ pressed }) => [
-            styles.section,
-            { backgroundColor: theme.card, borderColor: theme.cardBorder, opacity: pressed ? 0.96 : 1 },
-          ]}
-        >
-          <View style={styles.sectionHeaderRow}>
+            setShowSaniActivity(!showSaniActivity);
+          }} style={styles.sectionHeaderRow}>
             <Text style={[styles.sectionTitle, { color: theme.textTertiary }]}>
               {t("settings.saniActivity", lang)}
             </Text>
-            <Ionicons name="chevron-forward-outline" size={16} color={theme.textTertiary} />
-          </View>
-        </Pressable>
+            <Ionicons name={showSaniActivity ? "chevron-up" : "chevron-down"} size={16} color={theme.textTertiary} />
+          </Pressable>
+          {showSaniActivity && (
+            loadingSaniActivity ? (
+              <ActivityIndicator color={theme.tint} />
+            ) : saniActivityData.length === 0 ? (
+              <Text style={[styles.emptyText, { color: theme.textTertiary }]}>Keine Sani-Aktivitäten</Text>
+            ) : (
+              saniActivityData.map((item, index) => (
+                <View key={item.id || index} style={[styles.saniActivityRow, { borderTopColor: theme.cardBorder }]}>
+                  <View style={[styles.saniAvatar, { backgroundColor: item.assignedUser ? "#DCFCE7" : "#F3F4F6" }]}>
+                    <Text style={[styles.saniAvatarText, { color: item.assignedUser ? "#16A34A" : "#6B7280" }]}>
+                      {item.assignedUser ? `${item.assignedUser.firstName?.[0] ?? ""}${item.assignedUser.lastName?.[0] ?? ""}`.toUpperCase() : "?"}
+                    </Text>
+                  </View>
+                  <View style={styles.saniInfo}>
+                    <Text style={[styles.saniName, { color: theme.text }]}>
+                      {item.assignedUser ? `${item.assignedUser.firstName} ${item.assignedUser.lastName}` : "Nicht zugewiesen"}
+                    </Text>
+                    <Text style={[styles.saniMission, { color: theme.textTertiary }]} numberOfLines={1}>
+                      {item.title}
+                    </Text>
+                  </View>
+                  <Text style={[styles.saniTime, { color: theme.textTertiary }]}>
+                    {item.scheduledFor ? new Date(item.scheduledFor).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) : "--:--"}
+                  </Text>
+                </View>
+              ))
+            )
+          )}
+        </View>
       )}
 
       <Pressable
@@ -377,4 +469,19 @@ const styles = StyleSheet.create({
   logoutBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 16, borderRadius: 14 },
   logoutText: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: "#EF4444" },
   version: { textAlign: "center", fontSize: 12, fontFamily: "Inter_400Regular" },
+  emptyText: { fontSize: 13, fontFamily: "Inter_400Regular", textAlign: "center", paddingVertical: 8 },
+  activityRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingTop: 12, borderTopWidth: 1 },
+  activityIcon: { width: 28, height: 28, borderRadius: 8, alignItems: "center", justifyContent: "center" },
+  activityInfo: { flex: 1 },
+  activityTitle: { fontSize: 14, fontFamily: "Inter_500Medium" },
+  activityDate: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
+  statusBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  statusText: { fontSize: 10, fontFamily: "Inter_600SemiBold" },
+  saniActivityRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingTop: 12, borderTopWidth: 1 },
+  saniAvatar: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  saniAvatarText: { fontSize: 13, fontFamily: "Inter_700Bold" },
+  saniInfo: { flex: 1 },
+  saniName: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  saniMission: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
+  saniTime: { fontSize: 12, fontFamily: "Inter_500Medium" },
 });
