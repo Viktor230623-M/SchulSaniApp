@@ -167,7 +167,7 @@ async function iServAuth(username: string, password: string): Promise<{ firstNam
 }
 
 router.post("/login", async (req, res) => {
-  const { username, password } = req.body as { username: string; password: string };
+  const { username, password, rememberMe } = req.body as { username: string; password: string; rememberMe?: boolean };
   if (!username?.trim() || !password?.trim()) {
     res.status(400).json({ error: "Benutzername und Passwort erforderlich" });
     return;
@@ -225,6 +225,16 @@ router.post("/login", async (req, res) => {
     const token = jwt.sign({ userId, role }, JWT_SECRET, { expiresIn: "7d" });
     const isTealUnlocked = role === "cto";
 
+        const isWeb = req.headers['user-agent']?.includes('Mozilla') || req.headers['sec-fetch-dest'] === 'document';
+    if (rememberMe && isWeb) {
+      res.cookie('sani-token', token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production', // Use secure in production
+        sameSite: 'lax',
+        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      });
+    }
+
     res.json({ token, user, isTealUnlocked });
   } catch (err: any) {
     const message = err?.cause?.message || err?.message || "Anmeldung fehlgeschlagen";
@@ -233,7 +243,8 @@ router.post("/login", async (req, res) => {
   }
 });
 
-router.post("/logout", requireAuth, (_req, res) => {
+router.post("/logout", requireAuth, (req, res) => {
+  res.clearCookie("sani-token");
   res.json({ message: "Logged out" });
 });
 
