@@ -22,12 +22,21 @@ export function verifyToken(token: string): JwtPayload {
 
 export function requireAuth(req: AuthRequest, res: Response, next: NextFunction): void {
   const header = req.headers.authorization;
-  if (!header?.startsWith("Bearer ")) {
+  const cookieToken = req.cookies?.["sani-token"];
+  
+  let token: string | undefined;
+  
+  if (header?.startsWith("Bearer ")) {
+    token = header.slice(7);
+  } else if (cookieToken) {
+    token = cookieToken;
+  }
+  
+  if (!token) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
   try {
-    const token = header.slice(7);
     req.user = verifyToken(token);
     next();
   } catch {

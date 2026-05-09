@@ -48,6 +48,7 @@ const translations = {
       passwordRequired: "Passwort erforderlich",
       iservLogin: "Mit IServ anmelden",
       iservNote: "Verwende deine IServ-Zugangsdaten von gymbla.de",
+      rememberMe: "Angemeldet bleiben",
     },
     roles: {
       cto: "CTO",
@@ -231,6 +232,7 @@ const translations = {
       passwordRequired: "Password required",
       iservLogin: "Sign in with IServ",
       iservNote: "Use your IServ credentials from gymbla.de",
+      rememberMe: "Remember me",
     },
     roles: {
       cto: "CTO",

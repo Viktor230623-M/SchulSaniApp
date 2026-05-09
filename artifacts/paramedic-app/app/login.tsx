@@ -35,6 +35,7 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showPass, setShowPass] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
 
   async function handleLogin() {
     if (!username.trim()) {
@@ -49,11 +50,13 @@ export default function LoginScreen() {
     setError("");
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      const { user, isTealUnlocked, token } = await ApiService.login({ username, password });
+      const { user, isTealUnlocked, token } = await ApiService.login({ username, password }, rememberMe);
       if (isTealUnlocked) setTheme("teal");
       if (token) {
         setAuthToken(token);
-        setToken(token);
+        if (rememberMe || Platform.OS !== "web") {
+          setToken(token);
+        }
       }
       login(user);
       router.replace("/(tabs)/news");
@@ -162,6 +165,22 @@ export default function LoginScreen() {
               </View>
             </View>
 
+            <Pressable 
+              onPress={() => setRememberMe(!rememberMe)} 
+              style={styles.rememberMeContainer}
+            >
+              <View style={[
+                styles.checkbox, 
+                { borderColor: rememberMe ? theme.tint : theme.textTertiary },
+                rememberMe && { backgroundColor: theme.tint }
+              ]}>
+                {rememberMe && <Ionicons name="checkmark" size={12} color="#fff" />}
+              </View>
+              <Text style={[styles.rememberMeText, { color: theme.textSecondary }]}>
+                {t("auth.rememberMe", lang)}
+              </Text>
+            </Pressable>
+
             {!!error && (
               <View style={styles.errorBox}>
                 <Ionicons name="alert-circle" size={16} color="#EF4444" />
@@ -245,4 +264,7 @@ const styles = StyleSheet.create({
   loadingRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   loginButtonText: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: "#fff" },
   footerNote: { fontSize: 11, fontFamily: "Inter_400Regular", textAlign: "center" },
+  rememberMeContainer: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 4 },
+  checkbox: { width: 20, height: 20, borderRadius: 6, borderWidth: 2, alignItems: "center", justifyContent: "center" },
+  rememberMeText: { fontSize: 14, fontFamily: "Inter_400Regular" },
 });
