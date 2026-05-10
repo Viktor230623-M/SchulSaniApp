@@ -290,6 +290,19 @@ const ApiService = {
     }
     return resp.json();
   },
+
+  async updateProfile(userId: string, data: { avatarUrl?: string }): Promise<User> {
+    const resp = await fetch(`${API_BASE}/users/${userId}`, {
+      method: "PATCH",
+      headers: headers(),
+      body: JSON.stringify(data),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error ?? "Profil konnte nicht aktualisiert werden");
+    }
+    return resp.json();
+  },
 };
 
 export default ApiService;
