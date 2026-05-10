@@ -96,34 +96,36 @@ export default function DutyScreen() {
           {t("duty.title", lang)}
         </Text>
 
-        <MedicalCross size={80} color={isOnDuty ? theme.tint : theme.textTertiary} animate={isOnDuty} />
+        <View style={{ alignItems: "center" }}>
+          <MedicalCross size={80} color={isOnDuty ? theme.tint : theme.textTertiary} animate={isOnDuty} />
 
-        <Animated.View style={animatedStyle}>
-          <Pressable
-            onPress={handleToggle}
-            disabled={dutyLoading}
-            style={[
-              styles.toggleBtn,
-              { backgroundColor: isOnDuty ? theme.tint : theme.textTertiary },
-            ]}
-          >
-            {dutyLoading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <>
-                <MaterialCommunityIcons
-                  name={isOnDuty ? "shield-check" : "shield-off"}
-                  size={28}
-                  color="#fff"
-                />
-                <Text style={styles.toggleBtnLabel}>
-                  {isOnDuty ? t("duty.onDuty", lang) : t("duty.offDuty", lang)}
-                </Text>
-                <Text style={styles.toggleBtnHint}>{t("duty.tapToToggle", lang)}</Text>
-              </>
-            )}
-          </Pressable>
-        </Animated.View>
+          <Animated.View style={animatedStyle}>
+            <Pressable
+              onPress={handleToggle}
+              disabled={dutyLoading}
+              style={[
+                styles.toggleBtn,
+                { backgroundColor: isOnDuty ? theme.tint : theme.textTertiary },
+              ]}
+            >
+              {dutyLoading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <>
+                  <MaterialCommunityIcons
+                    name={isOnDuty ? "shield-check" : "shield-off"}
+                    size={28}
+                    color="#fff"
+                  />
+                  <Text style={styles.toggleBtnLabel}>
+                    {isOnDuty ? t("duty.onDuty", lang) : t("duty.offDuty", lang)}
+                  </Text>
+                  <Text style={styles.toggleBtnHint}>{t("duty.tapToToggle", lang)}</Text>
+                </>
+              )}
+            </Pressable>
+          </Animated.View>
+        </View>
 
         <View style={[styles.statusCard, { backgroundColor: isOnDuty ? theme.tintLight : theme.backgroundTertiary }]}>
           <Ionicons
