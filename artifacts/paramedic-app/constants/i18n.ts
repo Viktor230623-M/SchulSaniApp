@@ -39,7 +39,7 @@ const translations = {
     auth: {
       login: "Anmelden",
       logout: "Abmelden",
-      username: "Benutzernamem",
+      username: "Benutzername",
       password: "Passwort",
       loginButton: "Anmelden",
       loginLoading: "Anmeldung läuft...",
