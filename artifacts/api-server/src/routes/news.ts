@@ -28,6 +28,10 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
     res.status(400).json({ error: "title and content required" });
     return;
   }
+  if (title.length > 200 || (summary?.length ?? 0) > 300 || content.length > 10000) {
+    res.status(400).json({ error: "title max 200, summary max 300, content max 10000" });
+    return;
+  }
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
   const authorName = user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() : userId;
   const newItem = {

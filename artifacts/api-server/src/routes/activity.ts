@@ -73,6 +73,12 @@ router.get("/user/:userId", requireAuth, requireRole("admin", "cto", "sanitaeter
   try {
     const { userId } = req.params;
 
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+    if (!user) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
     const activities = await db
       .select()
       .from(missionActivityLogTable)
