@@ -142,16 +142,16 @@ export default function SettingsScreen() {
       Alert.alert("Berechtigung", "Fotobibliothek-Zugriff wird benötigt.");
       return;
     }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
-    if (!result.canceled && result.assets[0]) {
-      setAvatarUri(user.id, result.assets[0].uri);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    }
+     const result = await ImagePicker.launchImageLibraryAsync({
+       mediaTypes: ImagePicker.MediaTypeOptions.Images,
+       allowsEditing: true,
+       aspect: [1, 1],
+       quality: 0.8,
+     });
+     if (!result.canceled && result.assets && result.assets.length > 0) {
+       setAvatarUri(user.id, result.assets[0].uri);
+       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+     }
   }
 
   function handleLogout() {

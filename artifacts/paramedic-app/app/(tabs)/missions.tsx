@@ -409,12 +409,12 @@ export default function MissionsScreen() {
               updateMission(item.id, { status: "accepted" });
             }}
             onReject={async () => {
-              try {
-                await ApiService.dismissMission(item.id);
-                removeMission(item.id);
-              } catch {
-                load();
-              }
+                try {
+                  await ApiService.dismissMission(item.id);
+                } catch (err) {
+                  console.error("Failed to dismiss mission:", err);
+                  load();
+                }
             }}
             theme={theme}
             lang={lang}
