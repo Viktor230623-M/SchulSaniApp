@@ -96,10 +96,11 @@ export default function DutyScreen() {
           {t("duty.title", lang)}
         </Text>
 
-        <MedicalCross size={80} color={isOnDuty ? theme.tint : theme.textTertiary} animate={isOnDuty} />
+        <View style={{ alignItems: "center" }}>
+          <MedicalCross size={80} color={isOnDuty ? theme.tint : theme.textTertiary} animate={isOnDuty} />
 
-        <Animated.View style={animatedStyle}>
-          <Pressable
+          <Animated.View style={animatedStyle}>
+            <Pressable
             onPress={handleToggle}
             disabled={dutyLoading}
             style={[
@@ -123,7 +124,8 @@ export default function DutyScreen() {
               </>
             )}
           </Pressable>
-        </Animated.View>
+          </Animated.View>
+        </View>
 
         <View style={[styles.statusCard, { backgroundColor: isOnDuty ? theme.tintLight : theme.backgroundTertiary }]}>
           <Ionicons
