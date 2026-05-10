@@ -1,3 +1,12 @@
+function formatName(name: string): string {
+  return name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
+}
+
+function formatFullName(firstName?: string, lastName?: string): string {
+  if (!firstName || !lastName) return "—";
+  return `${formatName(firstName)} ${formatName(lastName)}`;
+}
+
 import { Feather, Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
@@ -213,7 +222,7 @@ export default function SettingsScreen() {
           ) : (
             <View style={[styles.avatarPlaceholder, { backgroundColor: theme.tintLight }]}>
               <Text style={[styles.avatarInitials, { color: theme.tint }]}>
-                {user ? `${user.firstName[0]}${user.lastName[0]}`.toUpperCase() : "??"}
+                {user ? `${formatName(user.firstName)[0]}${formatName(user.lastName)[0]}` : "??"}
               </Text>
             </View>
           )}
@@ -224,7 +233,7 @@ export default function SettingsScreen() {
 
         <View style={styles.profileInfo}>
           <Text style={[styles.profileName, { color: theme.text }]}>
-            {user ? `${user.firstName} ${user.lastName}` : "—"}
+            {user ? formatFullName(user.firstName, user.lastName) : "—"}
           </Text>
           <Text style={[styles.profileEmail, { color: theme.textSecondary }]}>
             {user?.email}
@@ -354,12 +363,12 @@ export default function SettingsScreen() {
                   <View key={u.id} style={[styles.userRow, { borderTopColor: theme.cardBorder }]}>
                     <View style={[styles.userAvatar, { backgroundColor: cfg.bg }]}>
                       <Text style={[styles.userAvatarText, { color: cfg.text }]}>
-                        {(u.firstName?.[0] ?? "?").toUpperCase()}{(u.lastName?.[0] ?? "").toUpperCase()}
+                        {formatName(u.firstName || "")[0]}{formatName(u.lastName || "")[0]}
                       </Text>
                     </View>
                     <View style={styles.userInfo}>
                       <Text style={[styles.userName, { color: theme.text }]}>
-                        {u.firstName} {u.lastName}
+                        {formatFullName(u.firstName, u.lastName)}
                       </Text>
                       <Text style={[styles.userEmail, { color: theme.textTertiary }]}>{u.email}</Text>
                     </View>
@@ -395,12 +404,12 @@ export default function SettingsScreen() {
                 <View key={item.id || index} style={[styles.saniActivityRow, { borderTopColor: theme.cardBorder }]}>
                   <View style={[styles.saniAvatar, { backgroundColor: item.assignedUser ? "#DCFCE7" : "#F3F4F6" }]}>
                     <Text style={[styles.saniAvatarText, { color: item.assignedUser ? "#16A34A" : "#6B7280" }]}>
-                      {item.assignedUser ? `${item.assignedUser.firstName?.[0] ?? ""}${item.assignedUser.lastName?.[0] ?? ""}`.toUpperCase() : "?"}
+                      {item.assignedUser ? `${formatName(item.assignedUser.firstName || "")[0]}${formatName(item.assignedUser.lastName || "")[0]}` : "?"}
                     </Text>
                   </View>
                   <View style={styles.saniInfo}>
                     <Text style={[styles.saniName, { color: theme.text }]}>
-                      {item.assignedUser ? `${item.assignedUser.firstName} ${item.assignedUser.lastName}` : "Nicht zugewiesen"}
+                      {item.assignedUser ? formatFullName(item.assignedUser.firstName, item.assignedUser.lastName) : "Nicht zugewiesen"}
                     </Text>
                     <Text style={[styles.saniMission, { color: theme.textTertiary }]} numberOfLines={1}>
                       {item.title}
