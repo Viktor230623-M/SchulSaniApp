@@ -60,8 +60,9 @@ export default function LoginScreen() {
       }
       login(user);
       router.replace("/(tabs)/news");
-    } catch (err: any) {
-      setError(err?.message ?? t("auth.loginFailed", lang));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : t("auth.loginFailed", lang);
+      setError(message);
     } finally {
       setLoading(false);
     }

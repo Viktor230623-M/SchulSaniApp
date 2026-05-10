@@ -378,9 +378,9 @@ export type TranslationKey = string;
 
 export function t(path: string, lang: AppLanguage): string {
   const keys = path.split(".");
-  let result: any = translations[lang] ?? translations.de;
+  let result: Record<string, unknown> | undefined = translations[lang] ?? translations.de;
   for (const key of keys) {
-    result = result?.[key];
+    result = result?.[key] as Record<string, unknown> | undefined;
   }
-  return result ?? path;
+  return (result as string) ?? path;
 }

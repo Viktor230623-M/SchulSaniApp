@@ -14,7 +14,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { t } from "@/constants/i18n";
-import { getTheme } from "@/constants/theme";
+import { getTheme, type ThemeColors } from "@/constants/theme";
 import type { NotificationItem, NotificationType } from "@/models";
 import ApiService from "@/services/ApiService";
 import { useAppStore } from "@/store/useAppStore";
@@ -42,7 +42,7 @@ function timeAgo(iso: string) {
   return `vor ${Math.floor(h / 24)} Tagen`;
 }
 
-function HighPriorityBanner({ items, theme }: { items: NotificationItem[]; theme: any }) {
+function HighPriorityBanner({ items, theme }: { items: NotificationItem[]; theme: ThemeColors }) {
   if (items.length === 0) return null;
   return (
     <View style={styles.hpSection}>
@@ -63,7 +63,7 @@ function HighPriorityBanner({ items, theme }: { items: NotificationItem[]; theme
   );
 }
 
-function NotifCard({ item, theme }: { item: NotificationItem; theme: any }) {
+function NotifCard({ item, theme }: { item: NotificationItem; theme: ThemeColors }) {
   const conf = notifConfig(item.type);
   return (
     <View style={[styles.card, { backgroundColor: theme.card, borderColor: !item.isRead ? theme.tint + "44" : theme.cardBorder }]}>

@@ -19,8 +19,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { WaveBackground } from "@/components/WaveBackground";
 import { t } from "@/constants/i18n";
-import { getTheme } from "@/constants/theme";
-import type { NewsItem, NewsStatus } from "@/models";
+import { getTheme, type ThemeColors } from "@/constants/theme";
+import type { AppLanguage, NewsItem, NewsStatus } from "@/models";
 import ApiService from "@/services/ApiService";
 import { useAppStore } from "@/store/useAppStore";
 
@@ -48,11 +48,24 @@ function StatusChip({ status }: { status: NewsStatus }) {
   );
 }
 
+interface NewsCardProps {
+  item: NewsItem;
+  canModerate: boolean;
+  isOwner: boolean;
+  onMarkRead: (id: string) => void;
+  onApprove: (id: string) => void;
+  onReject: (id: string, reason: string) => void;
+  onDelete: (id: string) => void;
+  onEdit: (id: string, data: { title: string; summary: string; content: string }) => void;
+  theme: ThemeColors;
+  lang: AppLanguage;
+}
+
 function NewsCard({
   item, canModerate, isOwner,
   onMarkRead, onApprove, onReject, onDelete, onEdit,
   theme, lang,
-}: any) {
+}: NewsCardProps) {
   const [expanded, setExpanded] = useState(false);
   const cat = categoryConfig(item.category, theme.tint);
   const canDelete = isOwner || canModerate || item.isRead;

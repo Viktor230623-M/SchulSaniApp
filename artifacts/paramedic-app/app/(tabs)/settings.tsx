@@ -18,8 +18,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { t } from "@/constants/i18n";
-import { getTheme } from "@/constants/theme";
-import type { AppLanguage, AppTheme, User } from "@/models";
+import { getTheme, type ThemeColors } from "@/constants/theme";
+import type { AppLanguage, AppTheme, User, Mission, LOARequest } from "@/models";
 import ApiService from "@/services/ApiService";
 import { useAppStore } from "@/store/useAppStore";
 
@@ -32,7 +32,7 @@ const ROLE_CONFIG: Record<User["role"], { label: string; bg: string; text: strin
   student_paramedic: { label: "Sanitäter", bg: "#F0FDF4", text: "#16A34A", icon: "" },
 };
 
-function RoleBadgeLarge({ role, theme }: { role: User["role"]; theme: any }) {
+function RoleBadgeLarge({ role, theme }: { role: User["role"]; theme: ThemeColors }) {
   const cfg = ROLE_CONFIG[role];
   return (
     <View style={[styles.roleBadgeLarge, { backgroundColor: cfg.bg, borderColor: cfg.text + "30" }]}>
@@ -63,11 +63,11 @@ export default function SettingsScreen() {
   const canSeeAllUsers = ["admin", "cto", "sanitaeter_leitung_admin", "teacher"].includes(user?.role ?? "");
 
   const [showActivityLog, setShowActivityLog] = useState(false);
-  const [activityLogData, setActivityLogData] = useState<any[]>([]);
+  const [activityLogData, setActivityLogData] = useState<(Mission | LOARequest & { type: string })[]>([]);
   const [loadingActivityLog, setLoadingActivityLog] = useState(false);
 
   const [showSaniActivity, setShowSaniActivity] = useState(false);
-  const [saniActivityData, setSaniActivityData] = useState<any[]>([]);
+  const [saniActivityData, setSaniActivityData] = useState<(Mission & { assignedUser: User | null })[]>([]);
   const [loadingSaniActivity, setLoadingSaniActivity] = useState(false);
 
   useEffect(() => {
@@ -87,10 +87,10 @@ export default function SettingsScreen() {
         ApiService.getMissions(),
         ApiService.getLOARequests(),
       ]).then(([missions, loaRequests]) => {
-        const activities = [
-          ...(Array.isArray(missions) ? missions.map((m: any) => ({ type: "mission", ...m })) : []),
-          ...(Array.isArray(loaRequests) ? loaRequests.map((l: any) => ({ type: "loa", ...l })) : []),
-        ].sort((a: any, b: any) => {
+        const activities: (Mission | LOARequest & { type: string })[] = [
+          ...(Array.isArray(missions) ? missions.map((m) => ({ type: "mission" as const, ...m })) : []),
+          ...(Array.isArray(loaRequests) ? loaRequests.map((l) => ({ type: "loa" as const, ...l })) : []),
+        ].sort((a, b) => {
           const dateA = new Date(a.requestedAt || a.createdAt || 0).getTime();
           const dateB = new Date(b.requestedAt || b.createdAt || 0).getTime();
           return dateB - dateA;
@@ -108,10 +108,10 @@ export default function SettingsScreen() {
         ApiService.getMissions(),
         ApiService.getAllUsers(),
       ]).then(([missions, users]) => {
-        const completedMissions = Array.isArray(missions) ? missions.filter((m: any) => m.status === "completed" || m.status === "accepted") : [];
-        const userMap = new Map((Array.isArray(users) ? users : []).map((u: any) => [u.id, u]));
-        const activities = completedMissions.map((m: any) => {
-          const assigned = m.assignedParamedicId ? userMap.get(m.assignedParamedicId) : null;
+        const completedMissions = Array.isArray(missions) ? missions.filter((m) => m.status === "completed" || m.status === "accepted") : [];
+        const userMap = new Map((Array.isArray(users) ? users : []).map((u) => [u.id, u]));
+        const activities: (Mission & { assignedUser: User | null })[] = completedMissions.map((m) => {
+          const assigned = m.assignedParamedicId ? userMap.get(m.assignedParamedicId) ?? null : null;
           return { ...m, assignedUser: assigned };
         }).slice(0, 20);
         setSaniActivityData(activities);
