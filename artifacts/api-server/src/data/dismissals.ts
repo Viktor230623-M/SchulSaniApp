@@ -7,6 +7,9 @@ const DISMISSALS_PATH =
 
 type DismissalMap = Record<string, string[]>;
 
+let saveLock: Promise<void> = Promise.resolve();
+let currentSave: Promise<void> = Promise.resolve();
+
 function load(): DismissalMap {
   try {
     const raw = fs.readFileSync(DISMISSALS_PATH, "utf-8");
@@ -18,12 +21,18 @@ function load(): DismissalMap {
 }
 
 function save(data: DismissalMap): void {
-  try {
-    fs.mkdirSync(path.dirname(DISMISSALS_PATH), { recursive: true });
-    fs.writeFileSync(DISMISSALS_PATH, JSON.stringify(data, null, 2), "utf-8");
-  } catch (err) {
-    console.error("[dismissals] failed to persist:", err);
-  }
+  currentSave = (async () => {
+    await saveLock;
+    saveLock = (async () => {
+      try {
+        fs.mkdirSync(path.dirname(DISMISSALS_PATH), { recursive: true });
+        fs.writeFileSync(DISMISSALS_PATH, JSON.stringify(data, null, 2), "utf-8");
+      } catch (err) {
+        console.error("[dismissals] failed to persist:", err);
+      }
+    })();
+    await saveLock;
+  })();
 }
 
 export function getDismissedFor(userId: string): Set<string> {
