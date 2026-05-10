@@ -87,17 +87,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const handleAcceptMission = useCallback(async (id: string) => {
-    const updated = await ApiService.acceptMission(id);
-    setMissions((prev) =>
-      prev.map((m) => (m.id === id ? updated : m))
-    );
+    try {
+      const updated = await ApiService.acceptMission(id);
+      setMissions((prev) =>
+        prev.map((m) => (m.id === id ? updated : m))
+      );
+    } catch (err) {
+      console.error("Failed to accept mission:", err);
+    }
   }, []);
 
   const handleRejectMission = useCallback(async (id: string) => {
-    const updated = await ApiService.rejectMission(id);
-    setMissions((prev) =>
-      prev.map((m) => (m.id === id ? updated : m))
-    );
+    try {
+      const updated = await ApiService.rejectMission(id);
+      setMissions((prev) =>
+        prev.map((m) => (m.id === id ? updated : m))
+      );
+    } catch (err) {
+      console.error("Failed to reject mission:", err);
+    }
   }, []);
 
   const refreshNews = useCallback(async () => {
@@ -105,6 +113,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     try {
       const data = await ApiService.getNews();
       setNews(data);
+    } catch (err) {
+      console.error("Failed to refresh news:", err);
     } finally {
       setNewsLoading(false);
     }
@@ -115,14 +125,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     try {
       const data = await ApiService.getNotifications();
       setNotifications(data);
+    } catch (err) {
+      console.error("Failed to refresh notifications:", err);
     } finally {
       setNotificationsLoading(false);
     }
   }, []);
 
   const markAllRead = useCallback(async () => {
-    await ApiService.markAllNotificationsRead();
-    setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+    try {
+      await ApiService.markAllNotificationsRead();
+      setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+    } catch (err) {
+      console.error("Failed to mark all notifications as read:", err);
+    }
   }, []);
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;
