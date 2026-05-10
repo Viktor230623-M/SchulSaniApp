@@ -249,7 +249,7 @@ export default function SaniActivityScreen() {
                   <View style={styles.cardHeaderLeft}>
                     <View style={[styles.avatar, { backgroundColor: cfg.bg }]}>
                       <Text style={[styles.avatarText, { color: cfg.text }]}>
-                        {activityUser.userName.split(" ").map((n) => n[0]).join("")}
+                        {activityUser.userName?.split(" ").map((n) => n[0]).join("") || "?"}
                       </Text>
                     </View>
                     <View style={styles.userInfo}>
