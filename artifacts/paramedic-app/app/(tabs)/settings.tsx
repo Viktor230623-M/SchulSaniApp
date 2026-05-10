@@ -456,8 +456,6 @@ const styles = StyleSheet.create({
   themeBtn: { flexDirection: "row", alignItems: "center", gap: 12, padding: 12, borderRadius: 12 },
   themePreview: { width: 28, height: 28, borderRadius: 8, borderWidth: 1 },
   themeLabel: { flex: 1, fontSize: 15, fontFamily: "Inter_500Medium" },
-  exclusiveTag: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: "#E8001C" },
-  exclusiveHint: { fontSize: 11, fontFamily: "Inter_400Regular", textAlign: "center", paddingTop: 4 },
   userRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingTop: 12, borderTopWidth: 1 },
   userAvatar: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   userAvatarText: { fontSize: 13, fontFamily: "Inter_700Bold" },
