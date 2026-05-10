@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db, missionsTable } from "@workspace/db";
 import { requireAuth, requireRole, type AuthRequest } from "../middlewares/auth";
 import { addDismissal, getDismissedFor, removeDismissal } from "../data/dismissals";
+import { notifySanitaeters, notifyUser } from "../services/notifications";
 
 const router = Router();
 
@@ -39,12 +40,22 @@ router.post("/", requireAuth, requireRole("admin", "sanitaeter_leitung", "sanita
     priority: priority ?? "medium",
     status: "pending" as const,
     requestedAt: new Date(),
+    requestedBy: req.user!.userId,
     scheduledFor: scheduledFor ? new Date(scheduledFor) : new Date(Date.now() + 30 * 60000),
     patientInfo: patientInfo ?? null,
     assignedParamedicId: null,
     notes: null,
   };
   await db.insert(missionsTable).values(m);
+  
+  notifySanitaeters({
+    type: "mission_created",
+    title: "Neue Mission",
+    body: `${title} - ${location}`,
+    priority: priority === "high" ? "high" : "normal",
+    relatedId: m.id,
+  }).catch(console.error);
+  
   res.status(201).json(m);
 });
 
@@ -53,6 +64,14 @@ router.post("/:id/accept", requireAuth, async (req: AuthRequest, res) => {
   if (!existing) { res.status(404).json({ error: "Not found" }); return; }
   if (existing.status !== "pending") { res.status(400).json({ error: "Mission is not pending" }); return; }
   const [m] = await db.update(missionsTable).set({ status: "accepted", assignedParamedicId: req.user!.userId }).where(eq(missionsTable.id, req.params["id"]!)).returning();
+  
+  notifyUser(existing.requestedBy ?? "unknown", {
+    type: "mission_assigned",
+    title: "Mission angenommen",
+    body: `Deine Mission "${m.title}" wurde angenommen`,
+    relatedId: m.id,
+  }).catch(console.error);
+  
   res.json(m);
 });
 
@@ -74,9 +93,17 @@ router.post("/:id/reject", requireAuth, requireRole("admin", "sanitaeter_leitung
   res.json(m);
 });
 
-router.post("/:id/complete", requireAuth, requireRole("admin", "sanitaeter_leitung", "sanitaeter_leitung_admin", "cto", "teacher"), async (req, res) => {
+router.post("/:id/complete", requireAuth, requireRole("admin", "sanitaeter_leitung", "sanitaeter_leitung_admin", "cto", "teacher"), async (req: AuthRequest, res) => {
   const [m] = await db.update(missionsTable).set({ status: "completed", notes: req.body.notes ?? null }).where(eq(missionsTable.id, req.params["id"]!)).returning();
   if (!m) { res.status(404).json({ error: "Not found" }); return; }
+  
+  notifyUser(m.assignedParamedicId ?? "unknown", {
+    type: "mission_completed",
+    title: "Mission abgeschlossen",
+    body: `Die Mission "${m.title}" wurde abgeschlossen`,
+    relatedId: m.id,
+  }).catch(console.error);
+  
   res.json(m);
 });
 

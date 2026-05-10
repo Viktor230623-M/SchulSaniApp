@@ -303,6 +303,28 @@ const ApiService = {
     }
     return resp.json();
   },
+
+  async registerDeviceToken(token: string, platform: "ios" | "android" | "web", deviceId?: string): Promise<void> {
+    const resp = await fetch(`${API_BASE}/notifications/register-device`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({ token, platform, deviceId }),
+    });
+    if (!resp.ok) {
+      console.error("Failed to register device token");
+    }
+  },
+
+  async unregisterDeviceToken(token: string): Promise<void> {
+    const resp = await fetch(`${API_BASE}/notifications/unregister-device`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({ token }),
+    });
+    if (!resp.ok) {
+      console.error("Failed to unregister device token");
+    }
+  },
 };
 
 export default ApiService;
