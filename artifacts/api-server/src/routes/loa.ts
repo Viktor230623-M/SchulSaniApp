@@ -11,7 +11,7 @@ function uid() {
 
 router.get("/", requireAuth, async (req: AuthRequest, res) => {
   const { userId, role } = req.user!;
-  const canSeeAll = ["admin", "teacher", "sanitaeter_leitung", "cto"].includes(role);
+  const canSeeAll = ["admin", "teacher", "sanitaeter_leitung", "sanitaeter_leitung_admin", "cto"].includes(role);
   const items = canSeeAll
     ? await db.select().from(loaTable)
     : await db.select().from(loaTable).where(eq(loaTable.userId, userId));
@@ -23,6 +23,10 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
   const { fromDate, toDate, reason, userName } = req.body;
   if (!fromDate || !toDate || !reason) {
     res.status(400).json({ error: "fromDate, toDate, reason required" });
+    return;
+  }
+  if (reason.length > 1000) {
+    res.status(400).json({ error: "reason max 1000 characters" });
     return;
   }
   const newReq = {
