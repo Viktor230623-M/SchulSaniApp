@@ -51,30 +51,13 @@ router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
     return;
   }
   
-  const { avatarUrl } = req.body;
-  
-  if (avatarUrl !== undefined && typeof avatarUrl !== "string") {
-    res.status(400).json({ error: "avatarUrl must be a string" });
-    return;
-  }
-  
   const [existingUser] = await db.select().from(usersTable).where(eq(usersTable.id, requestedId));
   if (!existingUser) {
     res.status(404).json({ error: "User not found" });
     return;
   }
   
-  const updates: Record<string, unknown> = {};
-  if (avatarUrl !== undefined) {
-    updates.avatarUrl = avatarUrl;
-  }
-  
-  if (Object.keys(updates).length > 0) {
-    await db.update(usersTable).set(updates).where(eq(usersTable.id, requestedId));
-  }
-  
-  const [updatedUser] = await db.select().from(usersTable).where(eq(usersTable.id, requestedId));
-  res.json(safeUser(updatedUser));
+  res.json(safeUser(existingUser));
 });
 
 export default router;

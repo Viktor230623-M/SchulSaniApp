@@ -60,13 +60,13 @@ router.post("/:id/undismiss", requireAuth, async (req: AuthRequest, res) => {
   res.json({ success: true, missionId });
 });
 
-router.post("/:id/reject", requireAuth, async (req, res) => {
+router.post("/:id/reject", requireAuth, requireRole("admin", "sanitaeter_leitung", "sanitaeter_leitung_admin", "cto", "teacher"), async (req, res) => {
   const [m] = await db.update(missionsTable).set({ status: "rejected" }).where(eq(missionsTable.id, req.params["id"]!)).returning();
   if (!m) { res.status(404).json({ error: "Not found" }); return; }
   res.json(m);
 });
 
-router.post("/:id/complete", requireAuth, async (req, res) => {
+router.post("/:id/complete", requireAuth, requireRole("admin", "sanitaeter_leitung", "sanitaeter_leitung_admin", "cto", "teacher"), async (req, res) => {
   const [m] = await db.update(missionsTable).set({ status: "completed", notes: req.body.notes ?? null }).where(eq(missionsTable.id, req.params["id"]!)).returning();
   if (!m) { res.status(404).json({ error: "Not found" }); return; }
   res.json(m);
