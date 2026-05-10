@@ -50,8 +50,10 @@ export const notificationsTable = pgTable("notifications", {
   id: text("id").primaryKey(),
   userId: text("user_id").notNull(),
   type: text("type").notNull(), // status_changed, mission_assigned, news
+  title: text("title"),
   body: text("body").notNull(),
   relatedId: text("related_id"),
+  priority: text("priority").default("normal"), // normal, high
   isRead: boolean("is_read").default(false),
   createdAt: timestamp("created_at").defaultNow(),
 });

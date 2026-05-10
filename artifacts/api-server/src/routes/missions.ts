@@ -25,6 +25,10 @@ router.post("/", requireAuth, requireRole("admin", "sanitaeter_leitung", "sanita
     res.status(400).json({ error: "title and location required" });
     return;
   }
+  if (title.length > 200 || (description?.length ?? 0) > 2000 || location.length > 200) {
+    res.status(400).json({ error: "title max 200, description max 2000, location max 200" });
+    return;
+  }
   const m = {
     id: uid(),
     title,

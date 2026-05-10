@@ -170,6 +170,11 @@ router.post("/login", authLimiter, async (req, res) => {
     return;
   }
 
+  if (username.length > 100 || password.length > 500) {
+    res.status(400).json({ error: "Ungültige Eingabelänge" });
+    return;
+  }
+
   const cleanUsername = username.toLowerCase().trim();
 
   // Whitelist check
