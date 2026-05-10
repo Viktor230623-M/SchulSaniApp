@@ -94,11 +94,19 @@ export default function NotificationsScreen() {
 
   useEffect(() => { load(); }, []);
 
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   async function load() {
     setNotificationsLoading(true);
-    const data = await ApiService.getNotifications();
-    setNotifications(data);
-    setNotificationsLoading(false);
+    setLoadError(null);
+    try {
+      const data = await ApiService.getNotifications();
+      setNotifications(data);
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Failed to load notifications");
+    } finally {
+      setNotificationsLoading(false);
+    }
   }
 
   async function onRefresh() {
@@ -132,6 +140,12 @@ export default function NotificationsScreen() {
         }}
         ListHeaderComponent={
           <View>
+            {loadError && (
+              <View style={[styles.card, { backgroundColor: theme.danger + "20", borderColor: theme.danger }]}>
+                <Text style={{ color: theme.danger }}>{loadError}</Text>
+                <Pressable onPress={load}><Text style={{ color: theme.danger, textDecorationLine: "underline" }}>Retry</Text></Pressable>
+              </View>
+            )}
             <View style={styles.headerRow}>
               <View>
                 <Text style={[styles.heading, { color: theme.text }]}>{t("notifications.title", lang)}</Text>
