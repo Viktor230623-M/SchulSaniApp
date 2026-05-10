@@ -18,7 +18,6 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { MedicalCross } from "@/components/MedicalCross";
-import { WaveBackground } from "@/components/WaveBackground";
 import { t } from "@/constants/i18n";
 import { getTheme } from "@/constants/theme";
 import type { User } from "@/models";
@@ -43,7 +42,9 @@ export default function DutyScreen() {
   const animatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
 
   useEffect(() => {
-    ApiService.getOnDutyUsers().then(setOnDutyUsers);
+    ApiService.getOnDutyUsers()
+      .then(setOnDutyUsers)
+      .catch((err) => console.error("Failed to load on-duty users:", err));
   }, []);
 
   async function handleToggle() {
@@ -82,7 +83,6 @@ export default function DutyScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <WaveBackground color={isOnDuty ? theme.tintLight : theme.backgroundTertiary} />
       <ScrollView
         contentContainerStyle={{
           paddingTop: topPad + 20,

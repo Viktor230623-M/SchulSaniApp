@@ -14,7 +14,6 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { WaveBackground } from "@/components/WaveBackground";
 import { t } from "@/constants/i18n";
 import { getTheme } from "@/constants/theme";
 import type { MissionActivityLog } from "@/models";
@@ -113,7 +112,6 @@ export default function ActivityLogScreen() {
   if (loading) {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
-        <WaveBackground color={theme.backgroundTertiary} />
         <View style={{ paddingTop: topPad + 20, alignItems: "center", justifyContent: "center", flex: 1 }}>
           <ActivityIndicator size="large" color={theme.tint} />
         </View>
@@ -125,7 +123,6 @@ export default function ActivityLogScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <WaveBackground color={theme.backgroundTertiary} />
       <ScrollView
         contentContainerStyle={{
           paddingTop: topPad + 16,

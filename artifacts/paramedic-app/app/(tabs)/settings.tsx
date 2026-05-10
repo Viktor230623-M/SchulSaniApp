@@ -73,10 +73,12 @@ export default function SettingsScreen() {
   useEffect(() => {
     if (canSeeAllUsers && user) {
       setLoadingUsers(true);
-      ApiService.getAllUsers().then((data) => {
-        setAllUsers(Array.isArray(data) ? data : []);
-        setLoadingUsers(false);
-      });
+      ApiService.getAllUsers()
+        .then((data) => {
+          setAllUsers(Array.isArray(data) ? data : []);
+        })
+        .catch((err) => console.error("Failed to load all users:", err))
+        .finally(() => setLoadingUsers(false));
     }
   }, [canSeeAllUsers, user]);
 
@@ -86,18 +88,20 @@ export default function SettingsScreen() {
       Promise.all([
         ApiService.getMissions(),
         ApiService.getLOARequests(),
-      ]).then(([missions, loaRequests]) => {
-        const activities: (Mission | LOARequest & { type: string })[] = [
-          ...(Array.isArray(missions) ? missions.map((m) => ({ type: "mission" as const, ...m })) : []),
-          ...(Array.isArray(loaRequests) ? loaRequests.map((l) => ({ type: "loa" as const, ...l })) : []),
-        ].sort((a, b) => {
-          const dateA = new Date(a.requestedAt || a.createdAt || 0).getTime();
-          const dateB = new Date(b.requestedAt || b.createdAt || 0).getTime();
-          return dateB - dateA;
-        }).slice(0, 20);
-        setActivityLogData(activities);
-        setLoadingActivityLog(false);
-      }).catch(() => setLoadingActivityLog(false));
+      ])
+        .then(([missions, loaRequests]) => {
+          const activities: (Mission | LOARequest & { type: string })[] = [
+            ...(Array.isArray(missions) ? missions.map((m) => ({ type: "mission" as const, ...m })) : []),
+            ...(Array.isArray(loaRequests) ? loaRequests.map((l) => ({ type: "loa" as const, ...l })) : []),
+          ].sort((a, b) => {
+            const dateA = new Date(a.requestedAt || a.createdAt || 0).getTime();
+            const dateB = new Date(b.requestedAt || b.createdAt || 0).getTime();
+            return dateB - dateA;
+          }).slice(0, 20);
+          setActivityLogData(activities);
+        })
+        .catch((err) => console.error("Failed to load activity log:", err))
+        .finally(() => setLoadingActivityLog(false));
     }
   }, [showActivityLog, user]);
 
@@ -107,16 +111,18 @@ export default function SettingsScreen() {
       Promise.all([
         ApiService.getMissions(),
         ApiService.getAllUsers(),
-      ]).then(([missions, users]) => {
-        const completedMissions = Array.isArray(missions) ? missions.filter((m) => m.status === "completed" || m.status === "accepted") : [];
-        const userMap = new Map((Array.isArray(users) ? users : []).map((u) => [u.id, u]));
-        const activities: (Mission & { assignedUser: User | null })[] = completedMissions.map((m) => {
-          const assigned = m.assignedParamedicId ? userMap.get(m.assignedParamedicId) ?? null : null;
-          return { ...m, assignedUser: assigned };
-        }).slice(0, 20);
-        setSaniActivityData(activities);
-        setLoadingSaniActivity(false);
-      }).catch(() => setLoadingSaniActivity(false));
+      ])
+        .then(([missions, users]) => {
+          const completedMissions = Array.isArray(missions) ? missions.filter((m) => m.status === "completed" || m.status === "accepted") : [];
+          const userMap = new Map((Array.isArray(users) ? users : []).map((u) => [u.id, u]));
+          const activities: (Mission & { assignedUser: User | null })[] = completedMissions.map((m) => {
+            const assigned = m.assignedParamedicId ? userMap.get(m.assignedParamedicId) ?? null : null;
+            return { ...m, assignedUser: assigned };
+          }).slice(0, 20);
+          setSaniActivityData(activities);
+        })
+        .catch((err) => console.error("Failed to load sani activity:", err))
+        .finally(() => setLoadingSaniActivity(false));
     }
   }, [showSaniActivity, user]);
 

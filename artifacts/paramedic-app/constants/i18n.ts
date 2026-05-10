@@ -349,8 +349,8 @@ const translations = {
       logoutConfirm: "Are you sure you want to sign out?",
       version: "Version",
       myRank: "My Rank",
-
-
+      activityLog: "My Activity Log",
+      saniActivity: "Paramedic Activity",
     },
     common: {
   

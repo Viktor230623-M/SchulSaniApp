@@ -17,7 +17,6 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { WaveBackground } from "@/components/WaveBackground";
 import { t } from "@/constants/i18n";
 import { getTheme, type ThemeColors } from "@/constants/theme";
 import type { AppLanguage, NewsItem, NewsStatus } from "@/models";
@@ -68,7 +67,7 @@ function NewsCard({
 }: NewsCardProps) {
   const [expanded, setExpanded] = useState(false);
   const cat = categoryConfig(item.category, theme.tint);
-  const canDelete = isOwner || canModerate || item.isRead;
+  const canDelete = isOwner || canModerate;
 
   function handleDelete() {
     if (Platform.OS === "web") {
@@ -203,9 +202,14 @@ export default function NewsScreen() {
 
   async function load() {
     setNewsLoading(true);
-    const data = await ApiService.getNews();
-    setNews(data);
-    setNewsLoading(false);
+    try {
+      const data = await ApiService.getNews();
+      setNews(data);
+    } catch (err) {
+      console.error("Failed to load news:", err);
+    } finally {
+      setNewsLoading(false);
+    }
   }
 
   async function onRefresh() {
@@ -298,7 +302,6 @@ export default function NewsScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <WaveBackground color={theme.tintLight} />
       <FlatList
         data={filtered}
         keyExtractor={(n) => n.id}
