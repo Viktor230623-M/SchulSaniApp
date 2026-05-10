@@ -331,9 +331,14 @@ export default function MissionsScreen() {
 
   async function load() {
     setMissionsLoading(true);
-    const data = await ApiService.getMissions();
-    setMissions(data);
-    setMissionsLoading(false);
+    try {
+      const data = await ApiService.getMissions();
+      setMissions(data);
+    } catch (err) {
+      console.error("Failed to load missions:", err);
+    } finally {
+      setMissionsLoading(false);
+    }
   }
 
   async function onRefresh() {
@@ -404,9 +409,9 @@ export default function MissionsScreen() {
               updateMission(item.id, { status: "accepted" });
             }}
             onReject={async () => {
-              removeMission(item.id);
               try {
                 await ApiService.dismissMission(item.id);
+                removeMission(item.id);
               } catch {
                 load();
               }

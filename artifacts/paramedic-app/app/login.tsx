@@ -16,7 +16,6 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { MedicalCross } from "@/components/MedicalCross";
-import { WaveBackground } from "@/components/WaveBackground";
 import { t } from "@/constants/i18n";
 import { getTheme } from "@/constants/theme";
 import ApiService, { setAuthToken } from "@/services/ApiService";
@@ -72,7 +71,6 @@ export default function LoginScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <WaveBackground color={theme.tintLight} />
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={{ flex: 1 }}
