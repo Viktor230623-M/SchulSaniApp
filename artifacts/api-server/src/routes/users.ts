@@ -41,4 +41,40 @@ router.get("/:id", requireAuth, async (req: AuthRequest, res) => {
   res.json(safeUser(user));
 });
 
+router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
+  const requestingUser = req.user!;
+  const requestedId = req.params["id"]!;
+  
+  // Users can only update their own profile
+  if (requestingUser.userId !== requestedId) {
+    res.status(403).json({ error: "Forbidden - can only update your own profile" });
+    return;
+  }
+  
+  const { avatarUrl } = req.body;
+  
+  if (avatarUrl !== undefined && typeof avatarUrl !== "string") {
+    res.status(400).json({ error: "avatarUrl must be a string" });
+    return;
+  }
+  
+  const [existingUser] = await db.select().from(usersTable).where(eq(usersTable.id, requestedId));
+  if (!existingUser) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+  
+  const updates: Record<string, unknown> = {};
+  if (avatarUrl !== undefined) {
+    updates.avatarUrl = avatarUrl;
+  }
+  
+  if (Object.keys(updates).length > 0) {
+    await db.update(usersTable).set(updates).where(eq(usersTable.id, requestedId));
+  }
+  
+  const [updatedUser] = await db.select().from(usersTable).where(eq(usersTable.id, requestedId));
+  res.json(safeUser(updatedUser));
+});
+
 export default router;
