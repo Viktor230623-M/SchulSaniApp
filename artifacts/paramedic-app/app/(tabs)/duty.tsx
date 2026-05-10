@@ -96,7 +96,7 @@ export default function DutyScreen() {
           {t("duty.title", lang)}
         </Text>
 
-        <View style={{ alignItems: "center" }}>
+        <View style={{ alignItems: "center", gap: 24 }}>
           <MedicalCross size={80} color={isOnDuty ? theme.tint : theme.textTertiary} animate={isOnDuty} />
 
           <Animated.View style={animatedStyle}>
