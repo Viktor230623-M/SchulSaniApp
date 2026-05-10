@@ -11,11 +11,13 @@ function uid() {
 }
 
 router.get("/", requireAuth, async (req: AuthRequest, res) => {
+  const role = req.user!.role;
+  const canSeePatientInfo = ["admin", "cto", "sanitaeter_leitung", "sanitaeter_leitung_admin", "teacher"].includes(role);
   const all = await db.select().from(missionsTable);
   const dismissed = getDismissedFor(req.user!.userId);
-  const visible = all.filter(
-    (m: any) => m.status !== "rejected" && !dismissed.has(m.id)
-  );
+  const visible = all
+    .filter((m: any) => m.status !== "rejected" && !dismissed.has(m.id))
+    .map((m: any) => canSeePatientInfo ? m : { ...m, patientInfo: undefined });
   res.json(visible);
 });
 
@@ -47,8 +49,10 @@ router.post("/", requireAuth, requireRole("admin", "sanitaeter_leitung", "sanita
 });
 
 router.post("/:id/accept", requireAuth, async (req: AuthRequest, res) => {
+  const [existing] = await db.select().from(missionsTable).where(eq(missionsTable.id, req.params["id"]!));
+  if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+  if (existing.status !== "pending") { res.status(400).json({ error: "Mission is not pending" }); return; }
   const [m] = await db.update(missionsTable).set({ status: "accepted", assignedParamedicId: req.user!.userId }).where(eq(missionsTable.id, req.params["id"]!)).returning();
-  if (!m) { res.status(404).json({ error: "Not found" }); return; }
   res.json(m);
 });
 
