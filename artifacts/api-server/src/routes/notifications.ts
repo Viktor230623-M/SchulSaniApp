@@ -7,8 +7,8 @@ const router = Router();
 
 router.get("/", requireAuth, async (req: AuthRequest, res) => {
   const { userId, role } = req.user!;
-  const isAdmin = ["admin", "cto"].includes(role);
-  const items = isAdmin
+  const canSeeAll = ["admin", "cto", "sanitaeter_leitung", "sanitaeter_leitung_admin"].includes(role);
+  const items = canSeeAll
     ? await db.select().from(notificationsTable)
     : await db.select().from(notificationsTable).where(eq(notificationsTable.userId, userId));
   res.json(items);

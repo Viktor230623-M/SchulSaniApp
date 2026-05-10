@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { eq } from "drizzle-orm";
-import { db, newsTable } from "@workspace/db";
+import { db, newsTable, usersTable } from "@workspace/db";
 import { requireAuth, requireRole, type AuthRequest } from "../middlewares/auth";
 
 const router = Router();
@@ -28,6 +28,8 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
     res.status(400).json({ error: "title and content required" });
     return;
   }
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+  const authorName = user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() : userId;
   const newItem = {
     id: uid(),
     title,
@@ -36,7 +38,7 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
     category: category ?? "announcement",
     status: ["admin", "cto"].includes(role) ? "approved" as const : "pending" as const,
     publishedAt: new Date(),
-    author: userId,
+    author: authorName,
     authorId: userId,
     isRead: false,
     rejectionReason: null,
