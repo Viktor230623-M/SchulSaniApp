@@ -58,7 +58,12 @@ router.post("/:id/approve", requireAuth, requireRole("admin", "teacher", "cto"),
 });
 
 router.post("/:id/reject", requireAuth, requireRole("admin", "teacher", "cto"), async (req, res) => {
-  const [item] = await db.update(newsTable).set({ status: "rejected", rejectionReason: req.body.reason ?? "Bitte überarbeite den Beitrag." }).where(eq(newsTable.id, req.params["id"]!)).returning();
+  const reason = req.body.reason ?? "Bitte überarbeite den Beitrag.";
+  if (reason.length > 500) {
+    res.status(400).json({ error: "reason max 500 characters" });
+    return;
+  }
+  const [item] = await db.update(newsTable).set({ status: "rejected", rejectionReason: reason }).where(eq(newsTable.id, req.params["id"]!)).returning();
   if (!item) { res.status(404).json({ error: "Not found" }); return; }
   res.json(item);
 });

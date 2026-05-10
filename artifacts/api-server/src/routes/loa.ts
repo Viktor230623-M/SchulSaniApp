@@ -48,9 +48,14 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
 });
 
 router.post("/:id/approve", requireAuth, requireRole("admin", "teacher", "sanitaeter_leitung", "sanitaeter_leitung_admin", "cto"), async (req: AuthRequest, res) => {
+  const note = req.body.note;
+  if (note && note.length > 500) {
+    res.status(400).json({ error: "note max 500 characters" });
+    return;
+  }
   const [r] = await db.update(loaTable).set({
     status: "approved",
-    adminNote: req.body.note ?? null,
+    adminNote: note ?? null,
     reviewedBy: req.user!.userId,
     reviewedAt: new Date(),
   }).where(eq(loaTable.id, req.params["id"]!)).returning();
@@ -59,9 +64,14 @@ router.post("/:id/approve", requireAuth, requireRole("admin", "teacher", "sanita
 });
 
 router.post("/:id/reject", requireAuth, requireRole("admin", "teacher", "sanitaeter_leitung", "sanitaeter_leitung_admin", "cto"), async (req: AuthRequest, res) => {
+  const reason = req.body.reason ?? "Nicht möglich.";
+  if (reason.length > 500) {
+    res.status(400).json({ error: "reason max 500 characters" });
+    return;
+  }
   const [r] = await db.update(loaTable).set({
     status: "rejected",
-    adminNote: req.body.reason ?? "Nicht möglich.",
+    adminNote: reason,
     reviewedBy: req.user!.userId,
     reviewedAt: new Date(),
   }).where(eq(loaTable.id, req.params["id"]!)).returning();
