@@ -2,6 +2,7 @@ import { Router } from "express";
 import { eq } from "drizzle-orm";
 import { db, newsTable, usersTable } from "@workspace/db";
 import { requireAuth, requireRole, type AuthRequest } from "../middlewares/auth";
+import { notifySanitaeters } from "../services/notifications";
 
 const router = Router();
 
@@ -54,6 +55,14 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
 router.post("/:id/approve", requireAuth, requireRole("admin", "teacher", "cto"), async (req, res) => {
   const [item] = await db.update(newsTable).set({ status: "approved" }).where(eq(newsTable.id, req.params["id"]!)).returning();
   if (!item) { res.status(404).json({ error: "Not found" }); return; }
+  
+  notifySanitaeters({
+    type: "news",
+    title: item.title,
+    body: item.summary ?? "Neue Nachricht veröffentlicht",
+    relatedId: item.id,
+  }).catch(console.error);
+  
   res.json(item);
 });
 

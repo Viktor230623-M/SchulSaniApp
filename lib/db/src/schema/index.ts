@@ -39,6 +39,7 @@ export const missionsTable = pgTable("missions", {
   priority: text("priority").default("medium"), // low, medium, high
   status: text("status").notNull().default("pending"), // pending, accepted, completed, rejected
   requestedAt: timestamp("requested_at").defaultNow(),
+  requestedBy: text("requested_by"),
   scheduledFor: timestamp("scheduled_for"),
   patientInfo: text("patient_info"),
   assignedParamedicId: text("assigned_paramedic_id"),
@@ -95,6 +96,17 @@ export const missionActivityLogTable = pgTable("mission_activity_log", {
   metadata: json("metadata"),
 });
 
+// Device tokens for push notifications
+export const deviceTokensTable = pgTable("device_tokens", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  token: text("token").notNull(),
+  platform: text("platform").notNull(), // 'ios' | 'android' | 'web'
+  deviceId: text("device_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Export types
 export type User = typeof usersTable.$inferSelect;
 export type NewUser = typeof usersTable.$inferInsert;
@@ -106,3 +118,5 @@ export type Notification = typeof notificationsTable.$inferSelect;
 export type NewNotification = typeof notificationsTable.$inferInsert;
 export type MissionActivityLog = typeof missionActivityLogTable.$inferSelect;
 export type NewMissionActivityLog = typeof missionActivityLogTable.$inferInsert;
+export type DeviceToken = typeof deviceTokensTable.$inferSelect;
+export type NewDeviceToken = typeof deviceTokensTable.$inferInsert;

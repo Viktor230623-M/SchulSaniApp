@@ -15,6 +15,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { setAuthToken } from "@/services/ApiService";
+import { registerForPushNotificationsAsync } from "@/services/PushNotificationService";
 import { useAppStore } from "@/store/useAppStore";
 
 SplashScreen.preventAutoHideAsync();
@@ -28,6 +29,12 @@ function RootLayoutNav() {
   useEffect(() => {
     if (token) setAuthToken(token);
   }, [token]);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      registerForPushNotificationsAsync();
+    }
+  }, [isAuthenticated]);
 
   if (!isAuthenticated) {
     return (

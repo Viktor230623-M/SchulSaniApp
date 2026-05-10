@@ -2,6 +2,7 @@ import { Router } from "express";
 import { eq } from "drizzle-orm";
 import { db, loaTable } from "@workspace/db";
 import { requireAuth, requireRole, type AuthRequest } from "../middlewares/auth";
+import { notifyUser } from "../services/notifications";
 
 const router = Router();
 
@@ -60,6 +61,14 @@ router.post("/:id/approve", requireAuth, requireRole("admin", "teacher", "sanita
     reviewedAt: new Date(),
   }).where(eq(loaTable.id, req.params["id"]!)).returning();
   if (!r) { res.status(404).json({ error: "Not found" }); return; }
+  
+  notifyUser(r.userId, {
+    type: "loa_update",
+    title: "LOA genehmigt",
+    body: `Dein Abwesenheitsantrag wurde genehmigt`,
+    relatedId: r.id,
+  }).catch(console.error);
+  
   res.json(r);
 });
 
@@ -76,6 +85,14 @@ router.post("/:id/reject", requireAuth, requireRole("admin", "teacher", "sanitae
     reviewedAt: new Date(),
   }).where(eq(loaTable.id, req.params["id"]!)).returning();
   if (!r) { res.status(404).json({ error: "Not found" }); return; }
+  
+  notifyUser(r.userId, {
+    type: "loa_update",
+    title: "LOA abgelehnt",
+    body: `Dein Abwesenheitsantrag wurde abgelehnt`,
+    relatedId: r.id,
+  }).catch(console.error);
+  
   res.json(r);
 });
 
