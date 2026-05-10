@@ -19,8 +19,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { t } from "@/constants/i18n";
-import { getTheme } from "@/constants/theme";
-import type { Mission, MissionPriority, MissionStatus } from "@/models";
+import { getTheme, type ThemeColors } from "@/constants/theme";
+import type { AppLanguage, Mission, MissionPriority, MissionStatus } from "@/models";
 import ApiService from "@/services/ApiService";
 import { useAppStore } from "@/store/useAppStore";
 
@@ -54,7 +54,15 @@ function StatusBadge({ status }: { status: MissionStatus }) {
   );
 }
 
-function MissionCard({ mission, onAccept, onReject, theme, lang }: any) {
+interface MissionCardProps {
+  mission: Mission;
+  onAccept: () => Promise<void>;
+  onReject: () => Promise<void>;
+  theme: ThemeColors;
+  lang: AppLanguage;
+}
+
+function MissionCard({ mission, onAccept, onReject, theme, lang }: MissionCardProps) {
   const [loading, setLoading] = useState(false);
 
   async function doAccept() {
@@ -151,7 +159,7 @@ function CreateMissionModal({
   visible: boolean;
   onClose: () => void;
   onCreated: (m: Mission) => void;
-  theme: any;
+  theme: ThemeColors;
 }) {
   const [title, setTitle] = useState("");
   const [location, setLocation] = useState("");
@@ -186,9 +194,10 @@ function CreateMissionModal({
       onCreated(m);
       reset();
       onClose();
-    } catch (e: any) {
+    } catch (e) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert("Fehler", e?.message ?? "Einsatz konnte nicht erstellt werden");
+      const message = e instanceof Error ? e.message : "Einsatz konnte nicht erstellt werden";
+      Alert.alert("Fehler", message);
     } finally {
       setSubmitting(false);
     }

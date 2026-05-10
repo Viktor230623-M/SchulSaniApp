@@ -18,6 +18,8 @@ import { WaveBackground } from "@/components/WaveBackground";
 import { t } from "@/constants/i18n";
 import { getTheme } from "@/constants/theme";
 import type { ActivitySummary, User } from "@/models";
+
+type ActivitySummaryItem = ActivitySummary;
 import ApiService from "@/services/ApiService";
 import { useAppStore } from "@/store/useAppStore";
 
@@ -66,7 +68,7 @@ export default function SaniActivityScreen() {
   const loadUsers = async () => {
     try {
       const data = await ApiService.getActivityUsers();
-      const transformedUsers: ActivityUser[] = (data || []).map((u: any) => ({
+      const transformedUsers: ActivityUser[] = (data || []).map((u: ActivitySummaryItem) => ({
         userId: u.userId,
         userName: u.userName,
         role: u.role || "student_paramedic",
