@@ -15,6 +15,7 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
   const items = await db.select().from(newsTable);
   const filtered = items.filter((n) => {
     if (canModerate) return true;
+    if (n.status === "rejected") return false;
     return n.status === "approved" || n.authorId === userId;
   });
   res.json(filtered);

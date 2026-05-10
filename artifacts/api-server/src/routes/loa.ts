@@ -43,7 +43,7 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
   res.status(201).json(newReq);
 });
 
-router.post("/:id/approve", requireAuth, requireRole("admin", "teacher", "sanitaeter_leitung", "cto"), async (req: AuthRequest, res) => {
+router.post("/:id/approve", requireAuth, requireRole("admin", "teacher", "sanitaeter_leitung", "sanitaeter_leitung_admin", "cto"), async (req: AuthRequest, res) => {
   const [r] = await db.update(loaTable).set({
     status: "approved",
     adminNote: req.body.note ?? null,
@@ -54,7 +54,7 @@ router.post("/:id/approve", requireAuth, requireRole("admin", "teacher", "sanita
   res.json(r);
 });
 
-router.post("/:id/reject", requireAuth, requireRole("admin", "teacher", "sanitaeter_leitung", "cto"), async (req: AuthRequest, res) => {
+router.post("/:id/reject", requireAuth, requireRole("admin", "teacher", "sanitaeter_leitung", "sanitaeter_leitung_admin", "cto"), async (req: AuthRequest, res) => {
   const [r] = await db.update(loaTable).set({
     status: "rejected",
     adminNote: req.body.reason ?? "Nicht möglich.",
