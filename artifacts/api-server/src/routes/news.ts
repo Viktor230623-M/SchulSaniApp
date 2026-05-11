@@ -35,7 +35,7 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
   const newItem = {
     id: randomUUID(),
     title,
-    summary: summary ?? content.substring(0, 80) + "...",
+    summary: summary ?? (content.length > 80 ? content.substring(0, 80) + "..." : content),
     content,
     category: category ?? "announcement",
     status: ["admin", "cto"].includes(role) ? "approved" as const : "pending" as const,
