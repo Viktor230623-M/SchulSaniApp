@@ -238,9 +238,9 @@ router.post("/login", authLimiter, async (req, res) => {
     if (rememberMe && isWeb) {
       res.cookie('sani-token', token, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production', // Use secure in production
+        secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
-        maxAge: 24 * 60 * 60 * 1000, // 24 hours
+        maxAge: 24 * 60 * 60 * 1000,
       });
     }
 
