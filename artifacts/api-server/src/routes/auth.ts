@@ -204,9 +204,13 @@ router.post("/login", authLimiter, async (req, res) => {
     if (profile.lastName) lastName = profile.lastName;
     if (profile.email) email = profile.email;
     if (profile.phone) phone = profile.phone;
-  } catch (err) {
+  } catch (err: any) {
+    const msg: string = err?.message ?? "";
+    if (msg.includes("Ungültige Zugangsdaten") || msg.includes("IServ-Sitzung")) {
+      res.status(401).json({ error: "Ungültige Zugangsdaten" });
+      return;
+    }
     console.error("IServ profile fetch failed:", err);
-    // Already has fallback values from username
   }
 
   try {

@@ -1,7 +1,8 @@
+import { randomUUID } from "crypto";
 import { eq, and, or } from "drizzle-orm";
 import { db, notificationsTable, deviceTokensTable, usersTable, type Notification, type NewNotification, type DeviceToken } from "@workspace/db";
 
-export type NotificationType = 
+export type NotificationType =
   | "mission_assigned"
   | "mission_cancelled"
   | "mission_completed"
@@ -13,7 +14,7 @@ export type NotificationType =
   | "high_priority_alert";
 
 function uid(): string {
-  return Date.now().toString(36) + Math.random().toString(36).substring(2, 9);
+  return randomUUID();
 }
 
 export async function createNotification(data: {
@@ -203,6 +204,12 @@ async function sendExpoPushMessages(messages: any[]): Promise<void> {
 }
 
 export async function saveDeviceToken(userId: string, token: string, platform: "ios" | "android" | "web", deviceId?: string): Promise<void> {
+  if (typeof token !== "string" || token.length === 0 || token.length > 4096) {
+    throw new Error("Invalid token");
+  }
+  if (deviceId !== undefined && (typeof deviceId !== "string" || deviceId.length > 256)) {
+    throw new Error("Invalid deviceId");
+  }
   const existing = await db
     .select()
     .from(deviceTokensTable)

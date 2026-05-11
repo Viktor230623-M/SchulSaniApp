@@ -48,3 +48,4 @@ Thumbs.db
 .cache/
 .local/
 artifacts/api-server/.env
+CLAUDE.md
