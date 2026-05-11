@@ -242,7 +242,7 @@ router.post("/login", authLimiter, async (req, res) => {
     if (rememberMe && isWeb) {
       res.cookie('sani-token', token, {
         httpOnly: true,
-        secure: true,
+        secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
         maxAge: 24 * 60 * 60 * 1000,
       });
@@ -250,8 +250,9 @@ router.post("/login", authLimiter, async (req, res) => {
 
     res.json({ token, user, isTealUnlocked });
   } catch (err: any) {
+    const message = err?.cause?.message || err?.message || "Anmeldung fehlgeschlagen";
     console.error("Login error details:", err?.cause || err);
-    res.status(500).json({ error: "Anmeldung fehlgeschlagen" });
+    res.status(401).json({ error: message });
   }
 });
 
