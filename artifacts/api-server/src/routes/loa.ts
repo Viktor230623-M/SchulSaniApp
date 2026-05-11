@@ -31,12 +31,18 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
     res.status(400).json({ error: "userName max 200 characters" });
     return;
   }
+  const parsedFromDate = new Date(fromDate);
+  const parsedToDate = new Date(toDate);
+  if (isNaN(parsedFromDate.getTime()) || isNaN(parsedToDate.getTime())) {
+    res.status(400).json({ error: "fromDate and toDate must be valid ISO date strings" });
+    return;
+  }
   const newReq = {
     id: randomUUID(),
     userId,
     userName: userName ?? userId,
-    fromDate,
-    toDate,
+    fromDate: parsedFromDate,
+    toDate: parsedToDate,
     reason,
     status: "pending" as const,
     createdAt: new Date(),
