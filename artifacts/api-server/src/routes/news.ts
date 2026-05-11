@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { Router } from "express";
 import { eq } from "drizzle-orm";
 import { db, newsTable, usersTable } from "@workspace/db";
@@ -5,10 +6,6 @@ import { requireAuth, requireRole, type AuthRequest } from "../middlewares/auth"
 import { notifySanitaeters } from "../services/notifications";
 
 const router = Router();
-
-function uid() {
-  return Date.now().toString(36) + Math.random().toString(36).substring(2, 9);
-}
 
 router.get("/", requireAuth, async (req: AuthRequest, res) => {
   const { role, userId } = req.user!;
@@ -36,7 +33,7 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
   const authorName = user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() : userId;
   const newItem = {
-    id: uid(),
+    id: randomUUID(),
     title,
     summary: summary ?? content.substring(0, 80) + "...",
     content,
@@ -84,6 +81,18 @@ router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
   if (item.authorId !== userId) { res.status(403).json({ error: "Forbidden" }); return; }
   if (item.status !== "rejected") { res.status(400).json({ error: "Nur abgelehnte News können bearbeitet werden" }); return; }
   const { title, summary, content } = req.body;
+  if (title && (typeof title !== "string" || title.length > 200)) {
+    res.status(400).json({ error: "title max 200 characters" });
+    return;
+  }
+  if (summary && (typeof summary !== "string" || summary.length > 300)) {
+    res.status(400).json({ error: "summary max 300 characters" });
+    return;
+  }
+  if (content && (typeof content !== "string" || content.length > 10000)) {
+    res.status(400).json({ error: "content max 10000 characters" });
+    return;
+  }
   const [updated] = await db.update(newsTable).set({
     title: title ?? item.title,
     summary: summary ?? item.summary,
