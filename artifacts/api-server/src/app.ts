@@ -6,7 +6,7 @@ import router from "./routes";
 
 const app: Express = express();
 
-const allowedOrigins = process.env["ALLOWED_ORIGINS"]?.split(",") || ["https://sani.avo-network.com"];
+const allowedOrigins = process.env["ALLOWED_ORIGINS"]?.split(",").map((o) => o.trim()) || ["https://sani.avo-network.com"];
 app.use(cors({
   origin: allowedOrigins,
   credentials: true,
@@ -28,6 +28,7 @@ const authLimiter = rateLimit({
 app.use(generalLimiter);
 app.use(cookieParser());
 app.use(express.json({
+  limit: "50kb",
   verify: (req, _res, buf) => {
     try {
       JSON.parse(buf.toString());
@@ -36,7 +37,7 @@ app.use(express.json({
     }
   }
 }));
-app.use(express.urlencoded({ extended: true }));
+app.use(express.urlencoded({ extended: true, limit: "50kb" }));
 
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   if (err.message === "Invalid JSON") {
