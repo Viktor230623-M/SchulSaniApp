@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { Router } from "express";
 import { eq } from "drizzle-orm";
 import { db, missionsTable } from "@workspace/db";
@@ -6,10 +7,6 @@ import { addDismissal, getDismissedFor, removeDismissal } from "../data/dismissa
 import { notifySanitaeters, notifyUser } from "../services/notifications";
 
 const router = Router();
-
-function uid() {
-  return Date.now().toString(36) + Math.random().toString(36).substring(2, 9);
-}
 
 router.get("/", requireAuth, async (req: AuthRequest, res) => {
   const role = req.user!.role;
@@ -32,8 +29,16 @@ router.post("/", requireAuth, requireRole("admin", "sanitaeter_leitung", "sanita
     res.status(400).json({ error: "title max 200, description max 2000, location max 200" });
     return;
   }
+  let parsedScheduledFor: Date | undefined;
+  if (scheduledFor) {
+    parsedScheduledFor = new Date(scheduledFor);
+    if (isNaN(parsedScheduledFor.getTime())) {
+      res.status(400).json({ error: "scheduledFor must be a valid ISO date string" });
+      return;
+    }
+  }
   const m = {
-    id: uid(),
+    id: randomUUID(),
     title,
     description: description ?? "",
     location,
@@ -41,7 +46,7 @@ router.post("/", requireAuth, requireRole("admin", "sanitaeter_leitung", "sanita
     status: "pending" as const,
     requestedAt: new Date(),
     requestedBy: req.user!.userId,
-    scheduledFor: scheduledFor ? new Date(scheduledFor) : new Date(Date.now() + 30 * 60000),
+    scheduledFor: parsedScheduledFor ?? new Date(Date.now() + 30 * 60000),
     patientInfo: patientInfo ?? null,
     assignedParamedicId: null,
     notes: null,
@@ -94,7 +99,12 @@ router.post("/:id/reject", requireAuth, requireRole("admin", "sanitaeter_leitung
 });
 
 router.post("/:id/complete", requireAuth, requireRole("admin", "sanitaeter_leitung", "sanitaeter_leitung_admin", "cto", "teacher"), async (req: AuthRequest, res) => {
-  const [m] = await db.update(missionsTable).set({ status: "completed", notes: req.body.notes ?? null }).where(eq(missionsTable.id, req.params["id"]!)).returning();
+  const notes = req.body.notes ?? null;
+  if (notes !== null && (typeof notes !== "string" || notes.length > 2000)) {
+    res.status(400).json({ error: "notes max 2000 characters" });
+    return;
+  }
+  const [m] = await db.update(missionsTable).set({ status: "completed", notes }).where(eq(missionsTable.id, req.params["id"]!)).returning();
   if (!m) { res.status(404).json({ error: "Not found" }); return; }
   
   notifyUser(m.assignedParamedicId ?? "unknown", {

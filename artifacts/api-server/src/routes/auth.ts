@@ -204,9 +204,13 @@ router.post("/login", authLimiter, async (req, res) => {
     if (profile.lastName) lastName = profile.lastName;
     if (profile.email) email = profile.email;
     if (profile.phone) phone = profile.phone;
-  } catch (err) {
+  } catch (err: any) {
+    const msg: string = err?.message ?? "";
+    if (msg.includes("Ungültige Zugangsdaten") || msg.includes("IServ-Sitzung")) {
+      res.status(401).json({ error: "Ungültige Zugangsdaten" });
+      return;
+    }
     console.error("IServ profile fetch failed:", err);
-    // Already has fallback values from username
   }
 
   try {
@@ -238,17 +242,16 @@ router.post("/login", authLimiter, async (req, res) => {
     if (rememberMe && isWeb) {
       res.cookie('sani-token', token, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production', // Use secure in production
+        secure: true,
         sameSite: 'lax',
-        maxAge: 24 * 60 * 60 * 1000, // 24 hours
+        maxAge: 24 * 60 * 60 * 1000,
       });
     }
 
     res.json({ token, user, isTealUnlocked });
   } catch (err: any) {
-    const message = err?.cause?.message || err?.message || "Anmeldung fehlgeschlagen";
     console.error("Login error details:", err?.cause || err);
-    res.status(401).json({ error: message });
+    res.status(500).json({ error: "Anmeldung fehlgeschlagen" });
   }
 });
 
