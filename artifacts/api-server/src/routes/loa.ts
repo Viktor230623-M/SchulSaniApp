@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { Router } from "express";
 import { eq } from "drizzle-orm";
 import { db, loaTable } from "@workspace/db";
@@ -5,10 +6,6 @@ import { requireAuth, requireRole, type AuthRequest } from "../middlewares/auth"
 import { notifyUser } from "../services/notifications";
 
 const router = Router();
-
-function uid() {
-  return Date.now().toString(36) + Math.random().toString(36).substring(2, 9);
-}
 
 router.get("/", requireAuth, async (req: AuthRequest, res) => {
   const { userId, role } = req.user!;
@@ -30,8 +27,12 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
     res.status(400).json({ error: "reason max 1000 characters" });
     return;
   }
+  if (userName && (typeof userName !== "string" || userName.length > 200)) {
+    res.status(400).json({ error: "userName max 200 characters" });
+    return;
+  }
   const newReq = {
-    id: uid(),
+    id: randomUUID(),
     userId,
     userName: userName ?? userId,
     fromDate,
@@ -101,9 +102,14 @@ router.post("/:id/appeal", requireAuth, async (req: AuthRequest, res) => {
   const [existing] = await db.select().from(loaTable).where(eq(loaTable.id, req.params["id"]!));
   if (!existing) { res.status(404).json({ error: "Not found" }); return; }
   if (existing.userId !== userId) { res.status(403).json({ error: "Forbidden" }); return; }
+  const appealNote = req.body.appealNote ?? null;
+  if (appealNote !== null && (typeof appealNote !== "string" || appealNote.length > 1000)) {
+    res.status(400).json({ error: "appealNote max 1000 characters" });
+    return;
+  }
   const [r] = await db.update(loaTable).set({
     status: "appealed",
-    appealNote: req.body.appealNote ?? null,
+    appealNote,
   }).where(eq(loaTable.id, req.params["id"]!)).returning();
   res.json(r);
 });
