@@ -94,11 +94,15 @@ export default function SettingsScreen() {
   useEffect(() => {
     if (showActivityLog && user) {
       setLoadingActivityLog(true);
-      Promise.all([
+      Promise.allSettled([
         ApiService.getMissions(),
         ApiService.getLOARequests(),
       ])
-        .then(([missions, loaRequests]) => {
+        .then(([missionsResult, loaResult]) => {
+          const missions = missionsResult.status === "fulfilled" ? missionsResult.value : [];
+          const loaRequests = loaResult.status === "fulfilled" ? loaResult.value : [];
+          if (missionsResult.status === "rejected") console.error("Failed to load missions:", missionsResult.reason);
+          if (loaResult.status === "rejected") console.error("Failed to load LOA requests:", loaResult.reason);
           const activities: (Mission | LOARequest & { type: string })[] = [
             ...(Array.isArray(missions) ? missions.map((m) => ({ type: "mission" as const, ...m })) : []),
             ...(Array.isArray(loaRequests) ? loaRequests.map((l) => ({ type: "loa" as const, ...l })) : []),
@@ -109,7 +113,6 @@ export default function SettingsScreen() {
           }).slice(0, 20);
           setActivityLogData(activities);
         })
-        .catch((err) => console.error("Failed to load activity log:", err))
         .finally(() => setLoadingActivityLog(false));
     }
   }, [showActivityLog, user]);

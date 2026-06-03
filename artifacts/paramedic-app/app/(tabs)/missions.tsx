@@ -409,12 +409,14 @@ export default function MissionsScreen() {
               updateMission(item.id, { status: "accepted" });
             }}
             onReject={async () => {
-                try {
-                  await ApiService.dismissMission(item.id);
-                } catch (err) {
-                  console.error("Failed to dismiss mission:", err);
-                  load();
-                }
+              try {
+                await ApiService.dismissMission(item.id);
+                removeMission(item.id);
+              } catch (err) {
+                console.error("Failed to dismiss mission:", err);
+                const message = err instanceof Error ? err.message : "Einsatz konnte nicht ausgeblendet werden.";
+                Alert.alert("Fehler", message);
+              }
             }}
             theme={theme}
             lang={lang}

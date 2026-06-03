@@ -1,3 +1,4 @@
+import { Alert } from "react-native";
 import type {
   ActivityLog,
   ActivitySummary,
@@ -312,6 +313,7 @@ const ApiService = {
     });
     if (!resp.ok) {
       console.error("Failed to register device token");
+      Alert.alert("Fehler", "Push-Benachrichtigungen konnten nicht aktiviert werden.");
     }
   },
 
@@ -323,6 +325,7 @@ const ApiService = {
     });
     if (!resp.ok) {
       console.error("Failed to unregister device token");
+      Alert.alert("Fehler", "Push-Benachrichtigungen konnten nicht deaktiviert werden.");
     }
   },
 };

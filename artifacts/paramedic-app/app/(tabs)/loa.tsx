@@ -3,6 +3,7 @@ import * as Haptics from "expo-haptics";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Modal,
   Platform,
@@ -90,7 +91,7 @@ export default function LOAScreen() {
         toDate,
         reason,
       });
-      // CTO LOA gets auto-approved
+      // CTO LOA gets auto-approved — await create result first, then approve on returned id
       if (role === "cto") {
         const approved = await ApiService.approveLOA(req.id, "Automatisch genehmigt");
         addLOA(approved);
@@ -102,6 +103,10 @@ export default function LOAScreen() {
       setReason("");
       setShowCreate(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (err) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      const message = err instanceof Error ? err.message : "Abwesenheitsantrag konnte nicht erstellt werden.";
+      Alert.alert("Fehler", message);
     } finally {
       setSubmitting(false);
     }
