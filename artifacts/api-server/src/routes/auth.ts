@@ -141,7 +141,7 @@ async function iServAuth(username: string, password: string): Promise<{ firstNam
     else break;
   }
 
-  let firstName = username;
+  let firstName = "";
   let lastName = "";
   let email = `${username}@${EMAIL_DOMAIN}`;
   const phone = "";
@@ -218,16 +218,15 @@ router.post("/login", authLimiter, async (req, res) => {
   }
 
   try {
-    const role = getRoleForUser(cleanUsername);
-
-    // Look up existing user by IServ username to get a stable UUID; create one on first login.
+    // Look up existing user by IServ username to get a stable UUID and their stored role.
     const existing = await db
-      .select({ id: usersTable.id })
+      .select({ id: usersTable.id, role: usersTable.role })
       .from(usersTable)
       .where(eq(usersTable.iservUsername, cleanUsername))
       .limit(1);
 
     const userId: string = existing[0]?.id ?? crypto.randomUUID();
+    const role: string = existing[0]?.role ?? getRoleForUser(cleanUsername);
 
     const userValues = {
       id: userId,

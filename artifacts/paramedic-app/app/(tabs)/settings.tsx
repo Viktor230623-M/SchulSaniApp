@@ -38,6 +38,7 @@ const ROLE_CONFIG: Record<User["role"], { label: string; bg: string; text: strin
   sanitaeter_leitung_admin: { label: "Sanitäter Leitung", bg: "#EFF6FF", text: "#2563EB", icon: "" },
   sanitaeter_leitung: { label: "Sanitäter Leitung", bg: "#EFF6FF", text: "#2563EB", icon: "" },
   teacher: { label: "Lehrer", bg: "#FFF7ED", text: "#EA580C", icon: "" },
+  sanitaeter: { label: "Sanitäter", bg: "#F0FDF4", text: "#16A34A", icon: "" },
   student_paramedic: { label: "Sanitäter", bg: "#F0FDF4", text: "#16A34A", icon: "" },
 };
 
