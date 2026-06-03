@@ -151,7 +151,7 @@ export const NEWS: NewsItem[] = [
     category: "training",
     status: "approved",
     publishedAt: new Date(Date.now() - 2 * 86400000).toISOString(),
-    author: "Dr. Klaus Bauer",
+    author: "Dr. Musterlehrkraft",
     authorId: "u-004",
     isRead: false,
   },
@@ -163,7 +163,7 @@ export const NEWS: NewsItem[] = [
     category: "update",
     status: "approved",
     publishedAt: new Date(Date.now() - 5 * 86400000).toISOString(),
-    author: "Anna Schmidt",
+    author: "Anna Musterfrau",
     authorId: "u-002",
     isRead: false,
   },
@@ -175,19 +175,19 @@ export const NEWS: NewsItem[] = [
     category: "announcement",
     status: "pending",
     publishedAt: new Date(Date.now() - 7 * 86400000).toISOString(),
-    author: "Max Müller",
+    author: "Max Mustermann",
     authorId: "u-005",
     isRead: false,
   },
   {
     id: "n-004",
-    title: "CTO-Update: App Roadmap Q2",
-    summary: "Viktor teilt die geplanten Features für Q2 mit.",
+    title: "App Roadmap Q2",
+    summary: "Die geplanten Features für Q2.",
     content: "Q2 Roadmap: Push-Benachrichtigungen, Schulverwaltungs-Integration, Offline-Modus.",
     category: "announcement",
     status: "approved",
     publishedAt: new Date(Date.now() - 3 * 86400000).toISOString(),
-    author: "Viktor Gnjatić",
+    author: "Max Mustermann",
     authorId: "u-001",
     isRead: false,
   },
@@ -197,20 +197,20 @@ export const LOA_REQUESTS: LOARequest[] = [
   {
     id: "loa-001",
     userId: "u-005",
-    userName: "Max Müller",
+    userName: "Max Mustermann",
     fromDate: "2025-04-14",
     toDate: "2025-04-18",
     reason: "Familienurlaub über Ostern",
     status: "approved",
     createdAt: new Date(Date.now() - 14 * 86400000).toISOString(),
     adminNote: "Genehmigt. Schöne Ostern!",
-    reviewedBy: "Anna Schmidt",
+    reviewedBy: "Anna Musterfrau",
     reviewedAt: new Date(Date.now() - 12 * 86400000).toISOString(),
   },
   {
     id: "loa-002",
     userId: "u-005",
-    userName: "Max Müller",
+    userName: "Max Mustermann",
     fromDate: "2025-05-05",
     toDate: "2025-05-07",
     reason: "Arzttermin und Erholung",
@@ -220,14 +220,14 @@ export const LOA_REQUESTS: LOARequest[] = [
   {
     id: "loa-003",
     userId: "u-001",
-    userName: "Viktor Gnjatić",
+    userName: "Erika Musterfrau",
     fromDate: "2025-06-01",
     toDate: "2025-06-10",
-    reason: "Tech-Konferenz in Berlin",
+    reason: "Konferenz",
     status: "approved",
     createdAt: new Date(Date.now() - 30 * 86400000).toISOString(),
     adminNote: "Genehmigt – viel Erfolg!",
-    reviewedBy: "Anna Schmidt",
+    reviewedBy: "Anna Musterfrau",
     reviewedAt: new Date(Date.now() - 28 * 86400000).toISOString(),
   },
 ];
@@ -261,23 +261,9 @@ export const NOTIFICATIONS: NotificationItem[] = [
   },
 ];
 
-// ─── Username lookup for login ────────────────────────────────────────────────
-export const USERNAME_MAP: Record<string, string> = {
-  "viktor.gnjatic": "u-001",
-  "viktor": "u-001",
-  "anna.schmidt": "u-002",
-  "admin": "u-002",
-  "peter.weber": "u-003",
-  "leitung": "u-003",
-  "k.bauer": "u-004",
-  "dr.bauer": "u-004",
-  "lehrer": "u-004",
-  "max.mueller": "u-005",
-  "max": "u-005",
-  "lena.fischer": "u-006",
-  "lena": "u-006",
-  "jonas.braun": "u-007",
-  "jonas": "u-007",
-};
+// Username→ID lookup is handled by DB query in auth routes — users are resolved
+// dynamically by iservUsername column. This map is intentionally empty; it exists
+// only so existing imports do not break during the migration to DB-backed auth.
+export const USERNAME_MAP: Record<string, string> = {};
 
 export { uid };

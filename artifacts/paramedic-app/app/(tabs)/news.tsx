@@ -53,7 +53,7 @@ interface NewsCardProps {
   isOwner: boolean;
   onMarkRead: (id: string) => void;
   onApprove: (id: string) => void;
-  onReject: (id: string, reason: string) => void;
+  onReject: (id: string) => void;
   onDelete: (id: string) => void;
   onEdit: (id: string, data: { title: string; summary: string; content: string }) => void;
   theme: ThemeColors;
@@ -195,6 +195,8 @@ export default function NewsScreen() {
   const [editSummary, setEditSummary] = useState("");
   const [editContent, setEditContent] = useState("");
   const [editSubmitting, setEditSubmitting] = useState(false);
+  const [rejectNewsId, setRejectNewsId] = useState<string | null>(null);
+  const [rejectNewsReason, setRejectNewsReason] = useState("");
 
   const canModerate = ["admin", "teacher", "cto"].includes(user?.role ?? "");
 
@@ -235,10 +237,25 @@ export default function NewsScreen() {
     updateNewsItem(id, { status: "approved" });
   }
 
-  async function handleReject(id: string) {
+  function handleReject(id: string) {
+    setRejectNewsId(id);
+    setRejectNewsReason("");
+  }
+
+  async function handleRejectSubmit() {
+    if (!rejectNewsId || !rejectNewsReason.trim()) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    await ApiService.rejectNews(id, "Bitte überarbeite den Beitrag.");
-    updateNewsItem(id, { status: "rejected", rejectionReason: "Bitte überarbeite den Beitrag." });
+    try {
+      await ApiService.rejectNews(rejectNewsId, rejectNewsReason.trim());
+      updateNewsItem(rejectNewsId, { status: "rejected", rejectionReason: rejectNewsReason.trim() });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Nachricht konnte nicht abgelehnt werden.";
+      Alert.alert("Fehler", message);
+    } finally {
+      setRejectNewsId(null);
+      setRejectNewsReason("");
+    }
   }
 
   async function handleDelete(id: string) {
@@ -426,6 +443,36 @@ export default function NewsScreen() {
             <Text style={[styles.hint, { color: theme.textTertiary }]}>{t("news.submitHint", lang)}</Text>
             <Pressable onPress={handleCreate} disabled={submitting} style={[styles.submitBtn, { backgroundColor: theme.tint }]}>
               {submitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitBtnText}>{t("news.submit", lang)}</Text>}
+            </Pressable>
+          </ScrollView>
+        </View>
+      </Modal>
+
+      {/* Reject Modal */}
+      <Modal visible={!!rejectNewsId} animationType="slide" presentationStyle="formSheet">
+        <View style={[styles.modal, { backgroundColor: theme.background }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: theme.cardBorder }]}>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>Grund für Ablehnung</Text>
+            <Pressable onPress={() => setRejectNewsId(null)}>
+              <Ionicons name="close" size={24} color={theme.text} />
+            </Pressable>
+          </View>
+          <ScrollView contentContainerStyle={{ padding: 20, gap: 14 }} keyboardShouldPersistTaps="handled">
+            <TextInput
+              value={rejectNewsReason}
+              onChangeText={setRejectNewsReason}
+              placeholder="Begründung..."
+              placeholderTextColor={theme.textTertiary}
+              multiline
+              numberOfLines={4}
+              style={[styles.textIn, { backgroundColor: theme.inputBackground, borderColor: theme.inputBorder, color: theme.text, height: 120, textAlignVertical: "top" }]}
+            />
+            <Pressable
+              onPress={handleRejectSubmit}
+              disabled={!rejectNewsReason.trim()}
+              style={[styles.submitBtn, { backgroundColor: theme.danger }]}
+            >
+              <Text style={styles.submitBtnText}>Ablehnen</Text>
             </Pressable>
           </ScrollView>
         </View>

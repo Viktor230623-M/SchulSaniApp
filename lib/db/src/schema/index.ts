@@ -4,6 +4,7 @@ import { createInsertSchema } from "drizzle-zod";
 // Users table
 export const usersTable = pgTable("users", {
   id: text("id").primaryKey(),
+  iservUsername: text("iserv_username").unique(),
   firstName: text("first_name"),
   lastName: text("last_name"),
   email: text("email"),

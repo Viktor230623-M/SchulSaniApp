@@ -3,6 +3,7 @@ import * as Haptics from "expo-haptics";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Platform,
   Pressable,
   ScrollView,
@@ -36,15 +37,21 @@ export default function DutyScreen() {
   const setDutyLoading = useAppStore((s) => s.setDutyLoading);
 
   const [onDutyUsers, setOnDutyUsers] = useState<User[]>([]);
+  const [listLoading, setListLoading] = useState(false);
 
   const isOnDuty = dutyStatus === "on_duty";
   const scale = useSharedValue(1);
   const animatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
 
   useEffect(() => {
+    setListLoading(true);
     ApiService.getOnDutyUsers()
       .then(setOnDutyUsers)
-      .catch((err) => console.error("Failed to load on-duty users:", err));
+      .catch((err) => {
+        console.error("Failed to load on-duty users:", err);
+        Alert.alert("Fehler", "Dienststatus konnte nicht geladen werden.");
+      })
+      .finally(() => setListLoading(false));
   }, []);
 
   async function handleToggle() {
@@ -63,6 +70,8 @@ export default function DutyScreen() {
     } catch (err) {
       console.error("Failed to update duty status:", err);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      const message = err instanceof Error ? err.message : "Dienststatus konnte nicht aktualisiert werden.";
+      Alert.alert("Fehler", message);
     } finally {
       setDutyLoading(false);
     }
@@ -142,7 +151,9 @@ export default function DutyScreen() {
           <Text style={[styles.sectionTitle, { color: theme.textTertiary }]}>
             {t("duty.whoIsOnDuty", lang)}
           </Text>
-          {onDutyUsers.length === 0 ? (
+          {listLoading ? (
+            <ActivityIndicator color={theme.tint} />
+          ) : onDutyUsers.length === 0 ? (
             <Text style={[styles.noOne, { color: theme.textSecondary }]}>
               {t("duty.noOneDuty", lang)}
             </Text>

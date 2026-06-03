@@ -20,32 +20,36 @@ const JWT_SECRET = process.env["JWT_SECRET"];
 if (!JWT_SECRET) {
   throw new Error("JWT_SECRET environment variable is required");
 }
+if (JWT_SECRET.length < 32) {
+  throw new Error("JWT_SECRET must be at least 32 characters long");
+}
+
 const ISERV_BASE = "https://gymbla.de";
+
+const EMAIL_DOMAIN = process.env["EMAIL_DOMAIN"] ?? "gymbla.de";
+
 const UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1 SchulSanitaeter/1.0";
 
-function loadRoleMap(): Record<string, string> {
+// Roles are always resolved from the database after login.
+// There is no hardcoded username→role mapping — all roles are stored in the DB.
+// Use the ROLE_MAP_PATH env var only for bootstrapping a fresh install (file must
+// contain generic role assignments, never real names).
+function loadBootstrapRoleMap(): Record<string, string> {
   const roleMapPath = process.env["ROLE_MAP_PATH"];
   if (roleMapPath) {
     try {
-      return JSON.parse(fs.readFileSync(roleMapPath, "utf-8"));
+      return JSON.parse(fs.readFileSync(roleMapPath, "utf-8")) as Record<string, string>;
     } catch (err) {
-      console.error("Failed to load role map:", err);
+      console.error("Failed to load bootstrap role map:", err);
     }
   }
-  return {
-    "viktor.gnjatic": "cto",
-    "david.gnjatic": "admin",
-    "katharina.merouani": "teacher",
-    "oliver.petz": "sanitaeter_leitung_admin",
-    "hannah.hentschel": "sanitaeter_leitung",
-    "lena.nendel": "sanitaeter_leitung",
-  };
+  return {};
 }
 
-const ROLE_MAP = loadRoleMap();
+const BOOTSTRAP_ROLE_MAP = loadBootstrapRoleMap();
 
 function getRoleForUser(username: string): string {
-  return ROLE_MAP[username.toLowerCase().trim()] ?? "student_paramedic";
+  return BOOTSTRAP_ROLE_MAP[username.toLowerCase().trim()] ?? "sanitaeter";
 }
 
 interface HttpResponse {
@@ -139,7 +143,7 @@ async function iServAuth(username: string, password: string): Promise<{ firstNam
 
   let firstName = username;
   let lastName = "";
-  let email = `${username}@gymbla.de`;
+  let email = `${username}@${EMAIL_DOMAIN}`;
   const phone = "";
 
   try {
@@ -195,7 +199,7 @@ router.post("/login", authLimiter, async (req, res) => {
 
   let firstName = cleanUsername.split(".")[0] || cleanUsername;
   let lastName = cleanUsername.split(".").slice(1).join(" ") || "";
-  let email = `${cleanUsername}@gymbla.de`;
+  let email = `${cleanUsername}@${EMAIL_DOMAIN}`;
   let phone = "";
 
   try {
@@ -204,54 +208,62 @@ router.post("/login", authLimiter, async (req, res) => {
     if (profile.lastName) lastName = profile.lastName;
     if (profile.email) email = profile.email;
     if (profile.phone) phone = profile.phone;
-  } catch (err: any) {
-    const msg: string = err?.message ?? "";
+  } catch (err: unknown) {
+    const msg: string = err instanceof Error ? err.message : "";
     if (msg.includes("Ungültige Zugangsdaten") || msg.includes("IServ-Sitzung")) {
       res.status(401).json({ error: "Ungültige Zugangsdaten" });
       return;
     }
-    console.error("IServ profile fetch failed:", err);
+    console.error("IServ profile fetch failed");
   }
 
   try {
     const role = getRoleForUser(cleanUsername);
-    const userId = `iserv-${cleanUsername}`;
 
-    const user = {
+    // Look up existing user by IServ username to get a stable UUID; create one on first login.
+    const existing = await db
+      .select({ id: usersTable.id })
+      .from(usersTable)
+      .where(eq(usersTable.iservUsername, cleanUsername))
+      .limit(1);
+
+    const userId: string = existing[0]?.id ?? crypto.randomUUID();
+
+    const userValues = {
       id: userId,
+      iservUsername: cleanUsername,
       firstName,
       lastName,
       email,
       phone,
-      role: role as any,
-      schoolId: "gymbla",
-      passwordHash: "",
+      role,
+      schoolId: process.env["SCHOOL_ID"] ?? "school",
       createdAt: new Date(),
       updatedAt: new Date(),
     };
 
-    await db.insert(usersTable).values(user).onConflictDoUpdate({
+    await db.insert(usersTable).values(userValues).onConflictDoUpdate({
       target: usersTable.id,
       set: { firstName, lastName, email, updatedAt: new Date() },
     });
 
-    const token = jwt.sign({ userId, role }, JWT_SECRET, { expiresIn: "24h" });
-    const isTealUnlocked = role === "cto";
+    const token = jwt.sign({ userId, role }, JWT_SECRET, { expiresIn: "7d" });
 
-        const isWeb = req.headers['user-agent']?.includes('Mozilla') || req.headers['sec-fetch-dest'] === 'document';
+    const isWeb = req.headers["user-agent"]?.includes("Mozilla") || req.headers["sec-fetch-dest"] === "document";
     if (rememberMe && isWeb) {
-      res.cookie('sani-token', token, {
+      res.cookie("sani-token", token, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 24 * 60 * 60 * 1000,
+        secure: process.env["NODE_ENV"] === "production",
+        sameSite: "lax",
+        maxAge: 7 * 24 * 60 * 60 * 1000,
       });
     }
 
-    res.json({ token, user, isTealUnlocked });
-  } catch (err: any) {
-    const message = err?.cause?.message || err?.message || "Anmeldung fehlgeschlagen";
-    console.error("Login error details:", err?.cause || err);
+    const { role: userRole, id: userId2 } = userValues;
+    res.json({ token, user: { id: userId2, firstName, lastName, email, role: userRole }, isTealUnlocked: userRole === "cto" });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Anmeldung fehlgeschlagen";
+    console.error("Login error");
     res.status(401).json({ error: message });
   }
 });
