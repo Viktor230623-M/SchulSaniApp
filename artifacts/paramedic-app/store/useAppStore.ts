@@ -153,21 +153,13 @@ export const useAppStore = create<AppState>()(
       name: "paramedic-store-v3",
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (state) => ({
-        user: state.user,
-        isAuthenticated: state.isAuthenticated,
-        token: state.token,
         theme: state.theme,
         language: state.language,
-        dutyStatus: state.dutyStatus,
         avatarUriMap: state.avatarUriMap,
       }),
       merge: (persistedState, currentState) => ({
         ...currentState,
         ...(persistedState as Partial<AppState>),
-        notifications: [],
-        missions: [],
-        news: [],
-        loaRequests: [],
       }),
     }
   )

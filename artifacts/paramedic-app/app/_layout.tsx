@@ -22,31 +22,13 @@ SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
 
-function isTokenExpired(token: string | null): boolean {
-  if (!token) return true;
-  try {
-    const payload = JSON.parse(atob(token.split(".")[1])) as { exp?: number };
-    if (!payload.exp) return false;
-    return Date.now() / 1000 >= payload.exp;
-  } catch {
-    return true;
-  }
-}
-
 function RootLayoutNav() {
   const isAuthenticated = useAppStore((s) => s.isAuthenticated);
   const token = useAppStore((s) => s.token);
-  const logout = useAppStore((s) => s.logout);
 
   useEffect(() => {
     if (token) setAuthToken(token);
   }, [token]);
-
-  useEffect(() => {
-    if (isAuthenticated && isTokenExpired(token)) {
-      logout();
-    }
-  }, []);
 
   useEffect(() => {
     if (isAuthenticated) {
