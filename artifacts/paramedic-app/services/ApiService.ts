@@ -301,6 +301,49 @@ const ApiService = {
     return resp.json();
   },
 
+  async getPendingUsers(): Promise<User[]> {
+    const resp = await apiFetch(`${API_BASE}/users/pending`, { headers: headers() });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      throw new Error(data.error ?? "Ausstehende Benutzer konnten nicht geladen werden");
+    }
+    return resp.json();
+  },
+
+  async approveUser(id: string, role: string): Promise<User> {
+    const resp = await apiFetch(`${API_BASE}/users/${id}/approve`, {
+      method: "PATCH",
+      headers: headers(),
+      body: JSON.stringify({ role }),
+    });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      throw new Error(data.error ?? "Benutzer konnte nicht freigeschaltet werden");
+    }
+    return resp.json();
+  },
+
+  async updateUserRole(id: string, role: string): Promise<User> {
+    const resp = await apiFetch(`${API_BASE}/users/${id}/role`, {
+      method: "PATCH",
+      headers: headers(),
+      body: JSON.stringify({ role }),
+    });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      throw new Error(data.error ?? "Rolle konnte nicht geändert werden");
+    }
+    return resp.json();
+  },
+
+  async deleteUser(id: string): Promise<void> {
+    const resp = await apiFetch(`${API_BASE}/users/${id}`, { method: "DELETE", headers: headers() });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      throw new Error(data.error ?? "Benutzer konnte nicht gelöscht werden");
+    }
+  },
+
   async updateProfile(userId: string, data: { avatarUrl?: string }): Promise<User> {
     const resp = await apiFetch(`${API_BASE}/users/${userId}`, {
       method: "PATCH",

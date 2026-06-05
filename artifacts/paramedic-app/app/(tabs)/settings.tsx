@@ -80,6 +80,13 @@ export default function SettingsScreen() {
   const [saniActivityData, setSaniActivityData] = useState<(Mission & { assignedUser: User | null })[]>([]);
   const [loadingSaniActivity, setLoadingSaniActivity] = useState(false);
 
+  const isAdmin = ["admin", "cto"].includes(user?.role ?? "");
+  const [showAdmin, setShowAdmin] = useState(false);
+  const [pendingUsers, setPendingUsers] = useState<User[]>([]);
+  const [loadingPending, setLoadingPending] = useState(false);
+  const [pendingRoles, setPendingRoles] = useState<Record<string, string>>({});
+  const [adminProcessing, setAdminProcessing] = useState<string | null>(null);
+
   useEffect(() => {
     if (canSeeAllUsers && user) {
       setLoadingUsers(true);
@@ -138,6 +145,71 @@ export default function SettingsScreen() {
         .finally(() => setLoadingSaniActivity(false));
     }
   }, [showSaniActivity, user]);
+
+  useEffect(() => {
+    if (isAdmin && user) {
+      setLoadingPending(true);
+      ApiService.getPendingUsers()
+        .then((data) => {
+          const list = Array.isArray(data) ? data : [];
+          setPendingUsers(list);
+          const defaults: Record<string, string> = {};
+          list.forEach((u) => { defaults[u.id] = "sanitaeter"; });
+          setPendingRoles(defaults);
+        })
+        .catch((err) => console.error("Failed to load pending users:", err))
+        .finally(() => setLoadingPending(false));
+    }
+  }, [isAdmin, user?.id]);
+
+  async function handleApproveUser(userId: string) {
+    const role = pendingRoles[userId] ?? "sanitaeter";
+    setAdminProcessing(userId);
+    try {
+      await ApiService.approveUser(userId, role);
+      setPendingUsers((prev) => prev.filter((u) => u.id !== userId));
+      try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } catch {}
+    } catch (err) {
+      Alert.alert("Fehler", err instanceof Error ? err.message : "Freischaltung fehlgeschlagen");
+    } finally {
+      setAdminProcessing(null);
+    }
+  }
+
+  async function handleChangeRole(userId: string, role: string) {
+    try {
+      const updated = await ApiService.updateUserRole(userId, role);
+      setAllUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, ...updated } : u)));
+      try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } catch {}
+    } catch (err) {
+      Alert.alert("Fehler", err instanceof Error ? err.message : "Rollenänderung fehlgeschlagen");
+    }
+  }
+
+  function handleDeleteUser(userId: string, name: string) {
+    if (Platform.OS === "web") {
+      ApiService.deleteUser(userId)
+        .then(() => setAllUsers((prev) => prev.filter((u) => u.id !== userId)))
+        .catch((err) => Alert.alert("Fehler", err instanceof Error ? err.message : "Fehler"));
+      return;
+    }
+    Alert.alert("Benutzer löschen", `${name} wirklich löschen?`, [
+      { text: "Abbrechen", style: "cancel" },
+      {
+        text: "Löschen",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await ApiService.deleteUser(userId);
+            setAllUsers((prev) => prev.filter((u) => u.id !== userId));
+            try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning); } catch {}
+          } catch (err) {
+            Alert.alert("Fehler", err instanceof Error ? err.message : "Fehler");
+          }
+        },
+      },
+    ]);
+  }
 
   async function handlePickImage() {
     if (!user) return;
@@ -429,6 +501,205 @@ export default function SettingsScreen() {
         </View>
       )}
 
+      {isAdmin && (
+        <View style={[styles.section, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
+          {/* ── Section Header (collapsible) ── */}
+          <Pressable
+            onPress={() => {
+              setShowAdmin((v) => !v);
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }}
+            style={styles.sectionHeaderRow}
+          >
+            <View style={styles.adminHeaderLeft}>
+              <Ionicons name="shield-checkmark-outline" size={13} color={theme.textTertiary} />
+              <Text style={[styles.sectionTitle, { color: theme.textTertiary }]}>BENUTZERVERWALTUNG</Text>
+            </View>
+            <View style={styles.rowRight}>
+              {pendingUsers.length > 0 && (
+                <View style={styles.pendingCountBadge}>
+                  <Text style={styles.pendingCountText}>{pendingUsers.length}</Text>
+                </View>
+              )}
+              <Ionicons name={showAdmin ? "chevron-up" : "chevron-down"} size={16} color={theme.textTertiary} />
+            </View>
+          </Pressable>
+
+          {showAdmin && (
+            <>
+              {/* ── Pending Approvals ── */}
+              <View style={[styles.adminSubHeader, { borderTopColor: theme.cardBorder }]}>
+                <Text style={[styles.adminSubtitle, { color: theme.text }]}>Ausstehende Freischaltungen</Text>
+                {!loadingPending && pendingUsers.length > 0 && (
+                  <View style={styles.amberCountBadge}>
+                    <Text style={styles.amberCountText}>{pendingUsers.length}</Text>
+                  </View>
+                )}
+              </View>
+
+              {loadingPending ? (
+                <View style={styles.adminLoadingRow}>
+                  <ActivityIndicator color={theme.tint} size="small" />
+                  <Text style={[styles.adminLoadingText, { color: theme.textTertiary }]}>Lade Anfragen…</Text>
+                </View>
+              ) : pendingUsers.length === 0 ? (
+                <View style={styles.adminEmptyRow}>
+                  <View style={styles.adminEmptyIcon}>
+                    <Ionicons name="checkmark-circle-outline" size={20} color="#16A34A" />
+                  </View>
+                  <Text style={[styles.emptyText, { color: theme.textTertiary }]}>Alle Accounts freigeschalten</Text>
+                </View>
+              ) : (
+                pendingUsers.map((u) => {
+                  const pendingRoleBtns: { key: string; label: string }[] = [
+                    { key: "sanitaeter", label: "Sanitäter" },
+                    { key: "sanitaeter_leitung", label: "Leitung" },
+                    { key: "teacher", label: "Lehrer" },
+                    { key: "admin", label: "Admin" },
+                  ];
+                  const selectedRole = pendingRoles[u.id] ?? "sanitaeter";
+                  const isProcessing = adminProcessing === u.id;
+                  return (
+                    <View key={u.id} style={[styles.pendingCard, { borderColor: "#F59E0B", backgroundColor: theme.backgroundTertiary }]}>
+                      <View style={styles.adminCardHeader}>
+                        <View style={[styles.userAvatar, { backgroundColor: "#FEF3C7" }]}>
+                          <Text style={[styles.userAvatarText, { color: "#B45309" }]}>
+                            {formatName(u.firstName || "")[0]}{formatName(u.lastName || "")[0]}
+                          </Text>
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.userName, { color: theme.text }]}>{formatFullName(u.firstName, u.lastName)}</Text>
+                          <Text style={[styles.userEmail, { color: theme.textTertiary }]}>{u.iservUsername ?? u.email}</Text>
+                        </View>
+                        <View style={styles.pendingStatusPill}>
+                          <Text style={styles.pendingStatusText}>Ausstehend</Text>
+                        </View>
+                      </View>
+                      <View style={styles.rolePicker}>
+                        {pendingRoleBtns.map((r) => {
+                          const selected = selectedRole === r.key;
+                          return (
+                            <Pressable
+                              key={r.key}
+                              onPress={() => {
+                                setPendingRoles((prev) => ({ ...prev, [u.id]: r.key }));
+                                Haptics.selectionAsync();
+                              }}
+                              style={({ pressed }) => [
+                                styles.roleChip,
+                                {
+                                  backgroundColor: selected ? theme.tint : theme.backgroundTertiary,
+                                  borderColor: selected ? theme.tint : theme.cardBorder,
+                                  opacity: pressed ? 0.7 : 1,
+                                },
+                              ]}
+                            >
+                              <Text style={[styles.roleChipText, { color: selected ? "#fff" : theme.textSecondary }]}>{r.label}</Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                      <Pressable
+                        onPress={() => handleApproveUser(u.id)}
+                        disabled={isProcessing}
+                        style={({ pressed }) => [
+                          styles.approveBtn,
+                          { backgroundColor: "#16A34A", opacity: isProcessing || pressed ? 0.7 : 1 },
+                        ]}
+                      >
+                        {isProcessing ? (
+                          <ActivityIndicator color="#fff" size="small" />
+                        ) : (
+                          <>
+                            <Ionicons name="checkmark-circle-outline" size={16} color="#fff" />
+                            <Text style={styles.approveBtnText}>Freischalten</Text>
+                          </>
+                        )}
+                      </Pressable>
+                    </View>
+                  );
+                })
+              )}
+
+              {/* ── Role Management ── */}
+              <View style={[styles.adminSubHeader, { borderTopColor: theme.cardBorder, marginTop: 4 }]}>
+                <Text style={[styles.adminSubtitle, { color: theme.text }]}>Rollen verwalten</Text>
+              </View>
+
+              {loadingUsers ? (
+                <View style={styles.adminLoadingRow}>
+                  <ActivityIndicator color={theme.tint} size="small" />
+                  <Text style={[styles.adminLoadingText, { color: theme.textTertiary }]}>Lade Benutzer…</Text>
+                </View>
+              ) : (
+                allUsers.map((u) => {
+                  const cfg = ROLE_CONFIG[u.role] ?? { label: u.role, bg: "#F3F4F6", text: "#6B7280", icon: "" };
+                  const isCurrentUser = u.id === user?.id;
+                  const roleManageBtns: { key: string; label: string }[] = [
+                    { key: "sanitaeter", label: "Sanitäter" },
+                    { key: "sanitaeter_leitung", label: "Leitung" },
+                    { key: "teacher", label: "Lehrer" },
+                    { key: "admin", label: "Admin" },
+                  ];
+                  return (
+                    <View key={u.id} style={[styles.adminCard, { borderColor: theme.cardBorder }]}>
+                      <View style={styles.adminCardHeader}>
+                        <View style={[styles.userAvatar, { backgroundColor: cfg.bg }]}>
+                          <Text style={[styles.userAvatarText, { color: cfg.text }]}>
+                            {formatName(u.firstName || "")[0]}{formatName(u.lastName || "")[0]}
+                          </Text>
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.userName, { color: theme.text }]}>{formatFullName(u.firstName, u.lastName)}</Text>
+                          <View style={[styles.smallRoleBadge, { backgroundColor: cfg.bg, alignSelf: "flex-start", marginTop: 2 }]}>
+                            <Text style={[styles.smallRoleText, { color: cfg.text }]}>{cfg.label}</Text>
+                          </View>
+                        </View>
+                        {!isCurrentUser ? (
+                          <Pressable
+                            onPress={() => handleDeleteUser(u.id, formatFullName(u.firstName, u.lastName))}
+                            style={({ pressed }) => [styles.deleteBtn, { opacity: pressed ? 0.5 : 1 }]}
+                          >
+                            <Ionicons name="trash-outline" size={16} color={theme.danger} />
+                          </Pressable>
+                        ) : (
+                          <View style={styles.selfTag}>
+                            <Text style={[styles.selfTagText, { color: theme.textTertiary }]}>Du</Text>
+                          </View>
+                        )}
+                      </View>
+                      {!isCurrentUser && (
+                        <View style={styles.rolePicker}>
+                          {roleManageBtns.map((r) => {
+                            const selected = u.role === r.key;
+                            return (
+                              <Pressable
+                                key={r.key}
+                                onPress={() => handleChangeRole(u.id, r.key)}
+                                style={({ pressed }) => [
+                                  styles.roleChip,
+                                  {
+                                    backgroundColor: selected ? theme.tint : theme.backgroundTertiary,
+                                    borderColor: selected ? theme.tint : theme.cardBorder,
+                                    opacity: pressed ? 0.7 : 1,
+                                  },
+                                ]}
+                              >
+                                <Text style={[styles.roleChipText, { color: selected ? "#fff" : theme.textSecondary }]}>{r.label}</Text>
+                              </Pressable>
+                            );
+                          })}
+                        </View>
+                      )}
+                    </View>
+                  );
+                })
+              )}
+            </>
+          )}
+        </View>
+      )}
+
       <Pressable
         onPress={handleLogout}
         style={({ pressed }) => [
@@ -475,6 +746,30 @@ const styles = StyleSheet.create({
   themeBtn: { flexDirection: "row", alignItems: "center", gap: 12, padding: 12, borderRadius: 12 },
   themePreview: { width: 28, height: 28, borderRadius: 8, borderWidth: 1 },
   themeLabel: { flex: 1, fontSize: 15, fontFamily: "Inter_500Medium" },
+  adminHeaderLeft: { flexDirection: "row", alignItems: "center", gap: 6 },
+  pendingCountBadge: { backgroundColor: "#EF4444", paddingHorizontal: 7, paddingVertical: 2, borderRadius: 10 },
+  pendingCountText: { fontSize: 11, fontFamily: "Inter_700Bold", color: "#fff" },
+  adminSubHeader: { flexDirection: "row", alignItems: "center", gap: 8, paddingTop: 12, borderTopWidth: 1 },
+  adminSubtitle: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  amberCountBadge: { backgroundColor: "#FEF3C7", paddingHorizontal: 7, paddingVertical: 2, borderRadius: 8 },
+  amberCountText: { fontSize: 11, fontFamily: "Inter_700Bold", color: "#D97706" },
+  adminLoadingRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 8 },
+  adminLoadingText: { fontSize: 13, fontFamily: "Inter_400Regular" },
+  adminEmptyRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8 },
+  adminEmptyIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: "#DCFCE7", alignItems: "center", justifyContent: "center" },
+  pendingCard: { borderRadius: 12, borderWidth: 1.5, padding: 12, gap: 10 },
+  pendingStatusPill: { backgroundColor: "#FEF3C7", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+  pendingStatusText: { fontSize: 10, fontFamily: "Inter_600SemiBold", color: "#B45309" },
+  adminCard: { borderRadius: 12, borderWidth: 1, padding: 12, gap: 10 },
+  adminCardHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
+  rolePicker: { flexDirection: "row", gap: 6, flexWrap: "wrap" },
+  roleChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, borderWidth: 1 },
+  roleChipText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  approveBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 11, borderRadius: 10 },
+  approveBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: "#fff" },
+  deleteBtn: { width: 36, height: 36, borderRadius: 8, alignItems: "center", justifyContent: "center" },
+  selfTag: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: "#F3F4F6" },
+  selfTagText: { fontSize: 11, fontFamily: "Inter_500Medium" },
   userRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingTop: 12, borderTopWidth: 1 },
   userAvatar: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   userAvatarText: { fontSize: 13, fontFamily: "Inter_700Bold" },

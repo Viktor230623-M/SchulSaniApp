@@ -9,12 +9,14 @@ export type UserRole =
 
 export interface User {
   id: string;
+  iservUsername?: string;
   firstName: string;
   lastName: string;
   email: string;
   phone: string;
   role: UserRole;
   schoolId: string;
+  isApproved?: boolean;
   avatarUri?: string;
   createdAt: string;
   updatedAt: string;

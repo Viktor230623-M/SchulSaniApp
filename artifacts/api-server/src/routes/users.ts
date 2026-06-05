@@ -3,6 +3,8 @@ import { eq } from "drizzle-orm";
 import { db, usersTable } from "@workspace/db";
 import { requireAuth, requireRole, type AuthRequest } from "../middlewares/auth";
 
+const VALID_ROLES = ["cto", "admin", "sanitaeter_leitung_admin", "sanitaeter_leitung", "teacher", "sanitaeter", "student_paramedic"] as const;
+
 const router = Router();
 
 function safeUser(u: typeof usersTable.$inferSelect) {
@@ -58,6 +60,57 @@ router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
   }
   
   res.json(safeUser(existingUser));
+});
+
+// --- Admin endpoints ---
+
+router.get("/pending", requireAuth, requireRole("admin", "cto"), async (_req, res) => {
+  const users = await db.select().from(usersTable).where(eq(usersTable.isApproved, false));
+  res.json(users.map(safeUser));
+});
+
+router.patch("/:id/approve", requireAuth, requireRole("admin", "cto"), async (req: AuthRequest, res) => {
+  const { id } = req.params as { id: string };
+  const { role } = req.body as { role?: string };
+
+  const [existing] = await db.select().from(usersTable).where(eq(usersTable.id, id));
+  if (!existing) { res.status(404).json({ error: "User not found" }); return; }
+
+  const newRole = role && (VALID_ROLES as readonly string[]).includes(role) ? role : existing.role ?? "sanitaeter";
+  const [updated] = await db
+    .update(usersTable)
+    .set({ isApproved: true, approvedBy: req.user!.userId, role: newRole, updatedAt: new Date() })
+    .where(eq(usersTable.id, id))
+    .returning();
+  res.json(safeUser(updated!));
+});
+
+router.patch("/:id/role", requireAuth, requireRole("admin", "cto"), async (req: AuthRequest, res) => {
+  const { id } = req.params as { id: string };
+  const { role } = req.body as { role: string };
+
+  if (!role || !(VALID_ROLES as readonly string[]).includes(role)) {
+    res.status(400).json({ error: "Invalid role" }); return;
+  }
+  if (req.user!.userId === id && req.user!.role !== "cto") {
+    res.status(403).json({ error: "Cannot change your own role" }); return;
+  }
+
+  const [updated] = await db
+    .update(usersTable)
+    .set({ role, updatedAt: new Date() })
+    .where(eq(usersTable.id, id))
+    .returning();
+  if (!updated) { res.status(404).json({ error: "User not found" }); return; }
+  res.json(safeUser(updated));
+});
+
+router.delete("/:id", requireAuth, requireRole("admin", "cto"), async (req: AuthRequest, res) => {
+  const { id } = req.params as { id: string };
+  if (req.user!.userId === id) { res.status(403).json({ error: "Cannot delete your own account" }); return; }
+  const result = await db.delete(usersTable).where(eq(usersTable.id, id)).returning();
+  if (result.length === 0) { res.status(404).json({ error: "User not found" }); return; }
+  res.status(204).send();
 });
 
 export default router;
