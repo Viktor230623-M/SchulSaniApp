@@ -1,10 +1,33 @@
 import { randomUUID } from "crypto";
 import { Router } from "express";
 import { eq } from "drizzle-orm";
-import { db, missionsTable } from "@workspace/db";
+import { db, missionsTable, missionActivityLogTable, usersTable } from "@workspace/db";
 import { requireAuth, requireRole, type AuthRequest } from "../middlewares/auth";
 import { addDismissal, getDismissedFor, removeDismissal } from "../data/dismissals";
 import { notifySanitaeters, notifyUser } from "../services/notifications";
+
+async function logMissionAction(
+  userId: string,
+  missionId: string,
+  missionTitle: string,
+  action: "accepted" | "dismissed" | "completed" | "unanswered"
+): Promise<void> {
+  const now = new Date();
+  const [user] = await db
+    .select({ firstName: usersTable.firstName, lastName: usersTable.lastName })
+    .from(usersTable)
+    .where(eq(usersTable.id, userId));
+  const userName = user ? `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() : userId;
+  const dayKey = now.toISOString().split("T")[0]!;
+  const d = new Date(now);
+  d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7));
+  const w1 = new Date(d.getFullYear(), 0, 4);
+  const wn = 1 + Math.round(((d.getTime() - w1.getTime()) / 86400000 - 3 + ((w1.getDay() + 6) % 7)) / 7);
+  const weekKey = `${d.getFullYear()}-W${String(wn).padStart(2, "0")}`;
+  await db.insert(missionActivityLogTable).values({
+    id: randomUUID(), userId, userName, missionId, missionTitle, action, weekKey, dayKey, createdAt: now,
+  }).onConflictDoNothing();
+}
 
 const router = Router();
 
@@ -12,7 +35,7 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
   const role = req.user!.role;
   const canSeePatientInfo = ["admin", "cto", "sanitaeter_leitung", "sanitaeter_leitung_admin", "teacher"].includes(role);
   const all = await db.select().from(missionsTable);
-  const dismissed = getDismissedFor(req.user!.userId);
+  const dismissed = await getDismissedFor(req.user!.userId);
   const visible = all
     .filter((m) => m.status !== "rejected" && !dismissed.has(m.id))
     .map((m) => canSeePatientInfo ? m : { ...m, patientInfo: undefined });
@@ -76,19 +99,23 @@ router.post("/:id/accept", requireAuth, async (req: AuthRequest, res) => {
     body: `Deine Mission "${m.title}" wurde angenommen`,
     relatedId: m.id,
   }).catch(console.error);
-  
+
+  logMissionAction(req.user!.userId, m.id, m.title, "accepted").catch(console.error);
+
   res.json(m);
 });
 
 router.post("/:id/dismiss", requireAuth, async (req: AuthRequest, res) => {
   const missionId = req.params["id"]!;
-  addDismissal(req.user!.userId, missionId);
+  await addDismissal(req.user!.userId, missionId);
+  const [mission] = await db.select({ title: missionsTable.title }).from(missionsTable).where(eq(missionsTable.id, missionId));
+  if (mission) logMissionAction(req.user!.userId, missionId, mission.title, "dismissed").catch(console.error);
   res.json({ success: true, missionId });
 });
 
 router.post("/:id/undismiss", requireAuth, async (req: AuthRequest, res) => {
   const missionId = req.params["id"]!;
-  removeDismissal(req.user!.userId, missionId);
+  await removeDismissal(req.user!.userId, missionId);
   res.json({ success: true, missionId });
 });
 
@@ -113,7 +140,11 @@ router.post("/:id/complete", requireAuth, requireRole("admin", "sanitaeter_leitu
     body: `Die Mission "${m.title}" wurde abgeschlossen`,
     relatedId: m.id,
   }).catch(console.error);
-  
+
+  if (m.assignedParamedicId) {
+    logMissionAction(m.assignedParamedicId, m.id, m.title, "completed").catch(console.error);
+  }
+
   res.json(m);
 });
 

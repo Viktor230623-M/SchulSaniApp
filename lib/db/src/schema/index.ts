@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, json, boolean, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, json, boolean, integer, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 
 // Users table
@@ -99,6 +99,14 @@ export const missionActivityLogTable = pgTable("mission_activity_log", {
   metadata: json("metadata"),
 });
 
+// Mission dismissals (replaces dismissed-missions.json)
+export const missionDismissalsTable = pgTable("mission_dismissals", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  missionId: text("mission_id").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [uniqueIndex("mission_dismissals_user_mission_idx").on(t.userId, t.missionId)]);
+
 // Device tokens for push notifications
 export const deviceTokensTable = pgTable("device_tokens", {
   id: text("id").primaryKey(),
@@ -123,3 +131,5 @@ export type MissionActivityLog = typeof missionActivityLogTable.$inferSelect;
 export type NewMissionActivityLog = typeof missionActivityLogTable.$inferInsert;
 export type DeviceToken = typeof deviceTokensTable.$inferSelect;
 export type NewDeviceToken = typeof deviceTokensTable.$inferInsert;
+export type MissionDismissal = typeof missionDismissalsTable.$inferSelect;
+export type NewMissionDismissal = typeof missionDismissalsTable.$inferInsert;
