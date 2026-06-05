@@ -12,6 +12,8 @@ export const usersTable = pgTable("users", {
   role: text("role").default("student_paramedic"),
   schoolId: text("school_id"),
   passwordHash: text("password_hash").default(""),
+  isApproved: boolean("is_approved").default(false).notNull(),
+  approvedBy: text("approved_by"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

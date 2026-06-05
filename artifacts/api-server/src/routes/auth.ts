@@ -1,6 +1,5 @@
 import * as https from "https";
 import * as http from "http";
-import fs from "fs";
 import { Router } from "express";
 import jwt from "jsonwebtoken";
 import rateLimit from "express-rate-limit";
@@ -181,22 +180,6 @@ router.post("/login", authLimiter, async (req, res) => {
 
   const cleanUsername = username.toLowerCase().trim();
 
-  // Whitelist check
-  const whitelistPath = process.env["WHITELIST_PATH"] || "/var/www/SchulSaniApp/whitelist.json";
-  let whitelist: { allowed: string[] } | null = null;
-  try {
-    whitelist = JSON.parse(fs.readFileSync(whitelistPath, "utf-8"));
-  } catch (err) {
-    console.error("Failed to load whitelist:", err);
-    res.status(500).json({ error: "Server configuration error" });
-    return;
-  }
-  
-  if (!whitelist || !whitelist.allowed.includes(cleanUsername)) {
-    res.status(403).json({ error: "Zugriff verweigert. Du bist nicht berechtigt diese App zu nutzen." });
-    return;
-  }
-
   let firstName = cleanUsername.split(".")[0] || cleanUsername;
   let lastName = cleanUsername.split(".").slice(1).join(" ") || "";
   let email = `${cleanUsername}@${EMAIL_DOMAIN}`;
@@ -220,15 +203,15 @@ router.post("/login", authLimiter, async (req, res) => {
   }
 
   try {
-    // Look up existing user by IServ username to get a stable UUID and their stored role.
     const existing = await db
-      .select({ id: usersTable.id, role: usersTable.role })
+      .select({ id: usersTable.id, role: usersTable.role, isApproved: usersTable.isApproved })
       .from(usersTable)
       .where(eq(usersTable.iservUsername, cleanUsername))
       .limit(1);
 
     const userId: string = existing[0]?.id ?? crypto.randomUUID();
     const role: string = existing[0]?.role ?? getRoleForUser(cleanUsername);
+    const isApproved: boolean = existing[0]?.isApproved ?? false;
 
     const userValues = {
       id: userId,
@@ -238,6 +221,7 @@ router.post("/login", authLimiter, async (req, res) => {
       email,
       phone,
       role,
+      isApproved,
       schoolId: process.env["SCHOOL_ID"] ?? "school",
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -247,6 +231,11 @@ router.post("/login", authLimiter, async (req, res) => {
       target: usersTable.id,
       set: { firstName, lastName, email, updatedAt: new Date() },
     });
+
+    if (!isApproved) {
+      res.status(403).json({ error: "Dein Account wartet auf Freischaltung durch einen Administrator." });
+      return;
+    }
 
     const token = jwt.sign({ userId, role }, JWT_SECRET, { expiresIn: "2h" });
 
