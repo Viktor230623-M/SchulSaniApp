@@ -22,6 +22,11 @@ router.get("/on-duty", requireAuth, async (_req, res) => {
   res.json(users.map(safeUser));
 });
 
+router.get("/pending", requireAuth, requireRole("admin", "cto"), async (_req, res) => {
+  const users = await db.select().from(usersTable).where(eq(usersTable.isApproved, false));
+  res.json(users.map(safeUser));
+});
+
 router.get("/:id", requireAuth, async (req: AuthRequest, res) => {
   const requestingUser = req.user!;
   const requestedId = req.params["id"]!;
@@ -63,11 +68,6 @@ router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
 });
 
 // --- Admin endpoints ---
-
-router.get("/pending", requireAuth, requireRole("admin", "cto"), async (_req, res) => {
-  const users = await db.select().from(usersTable).where(eq(usersTable.isApproved, false));
-  res.json(users.map(safeUser));
-});
 
 router.patch("/:id/approve", requireAuth, requireRole("admin", "cto"), async (req: AuthRequest, res) => {
   const { id } = req.params as { id: string };
