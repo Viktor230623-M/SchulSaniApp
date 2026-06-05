@@ -20,6 +20,15 @@ export function setAuthToken(token: string | null) {
   authToken = token;
 }
 
+async function apiFetch(url: string, init?: RequestInit): Promise<Response> {
+  const resp = await fetch(url, init);
+  if (resp.status === 401) {
+    const { useAppStore } = await import("@/store/useAppStore");
+    useAppStore.getState().logout();
+  }
+  return resp;
+}
+
 function headers() {
   return {
     "Content-Type": "application/json",
@@ -30,7 +39,7 @@ function headers() {
 
 const ApiService = {
   async login(credentials: { username: string; password: string }, rememberMe?: boolean): Promise<{ user: User; isTealUnlocked: boolean; token: string }> {
-    const resp = await fetch(`${API_BASE}/auth/login`, {
+    const resp = await apiFetch(`${API_BASE}/auth/login`, {
       method: "POST",
       headers: headers(),
       body: JSON.stringify({ username: credentials.username.trim(), password: credentials.password, rememberMe }),
@@ -46,7 +55,7 @@ const ApiService = {
   },
 
   async getNews(): Promise<NewsItem[]> {
-    const resp = await fetch(`${API_BASE}/news`, { headers: headers() });
+    const resp = await apiFetch(`${API_BASE}/news`, { headers: headers() });
     if (!resp.ok) {
       const data = await resp.json().catch(() => ({}));
       throw new Error(data.error ?? "Nachrichten konnten nicht geladen werden");
@@ -55,7 +64,7 @@ const ApiService = {
   },
 
   async createNews(item: Omit<NewsItem, "id" | "publishedAt" | "status" | "isRead">): Promise<NewsItem> {
-    const resp = await fetch(`${API_BASE}/news`, { method: "POST", headers: headers(), body: JSON.stringify(item) });
+    const resp = await apiFetch(`${API_BASE}/news`, { method: "POST", headers: headers(), body: JSON.stringify(item) });
     if (!resp.ok) {
       const data = await resp.json().catch(() => ({}));
       throw new Error(data.error ?? "Nachricht konnte nicht erstellt werden");
@@ -64,7 +73,7 @@ const ApiService = {
   },
 
   async approveNews(id: string): Promise<NewsItem> {
-    const resp = await fetch(`${API_BASE}/news/${id}/approve`, { method: "POST", headers: headers() });
+    const resp = await apiFetch(`${API_BASE}/news/${id}/approve`, { method: "POST", headers: headers() });
     if (!resp.ok) {
       const data = await resp.json().catch(() => ({}));
       throw new Error(data.error ?? "Nachricht konnte nicht genehmigt werden");
@@ -73,7 +82,7 @@ const ApiService = {
   },
 
   async rejectNews(id: string, reason: string): Promise<NewsItem> {
-    const resp = await fetch(`${API_BASE}/news/${id}/reject`, { method: "POST", headers: headers(), body: JSON.stringify({ reason }) });
+    const resp = await apiFetch(`${API_BASE}/news/${id}/reject`, { method: "POST", headers: headers(), body: JSON.stringify({ reason }) });
     if (!resp.ok) {
       const data = await resp.json().catch(() => ({}));
       throw new Error(data.error ?? "Nachricht konnte nicht abgelehnt werden");
@@ -82,7 +91,7 @@ const ApiService = {
   },
 
   async editNews(id: string, data: { title: string; summary: string; content: string }): Promise<NewsItem> {
-    const resp = await fetch(`${API_BASE}/news/${id}`, { method: "PATCH", headers: headers(), body: JSON.stringify(data) });
+    const resp = await apiFetch(`${API_BASE}/news/${id}`, { method: "PATCH", headers: headers(), body: JSON.stringify(data) });
     if (!resp.ok) {
       const data = await resp.json().catch(() => ({}));
       throw new Error(data.error ?? "Nachricht konnte nicht bearbeitet werden");
@@ -91,7 +100,7 @@ const ApiService = {
   },
 
   async deleteNews(id: string): Promise<void> {
-    const resp = await fetch(`${API_BASE}/news/${id}`, { method: "DELETE", headers: headers() });
+    const resp = await apiFetch(`${API_BASE}/news/${id}`, { method: "DELETE", headers: headers() });
     if (!resp.ok) {
       const data = await resp.json().catch(() => ({}));
       throw new Error(data.error ?? "Nachricht konnte nicht gelöscht werden");
@@ -99,7 +108,7 @@ const ApiService = {
   },
 
   async markNewsRead(id: string): Promise<void> {
-    const resp = await fetch(`${API_BASE}/news/${id}/read`, { method: "POST", headers: headers() });
+    const resp = await apiFetch(`${API_BASE}/news/${id}/read`, { method: "POST", headers: headers() });
     if (!resp.ok) {
       const data = await resp.json().catch(() => ({}));
       throw new Error(data.error ?? "Nachricht konnte nicht als gelesen markiert werden");
@@ -107,7 +116,7 @@ const ApiService = {
   },
 
   async markAllNewsRead(): Promise<void> {
-    const resp = await fetch(`${API_BASE}/news/read-all`, { method: "POST", headers: headers() });
+    const resp = await apiFetch(`${API_BASE}/news/read-all`, { method: "POST", headers: headers() });
     if (!resp.ok) {
       const data = await resp.json().catch(() => ({}));
       throw new Error(data.error ?? "Nachrichten konnten nicht als gelesen markiert werden");
@@ -115,7 +124,7 @@ const ApiService = {
   },
 
   async getMissions(): Promise<Mission[]> {
-    const resp = await fetch(`${API_BASE}/missions`, { headers: headers() });
+    const resp = await apiFetch(`${API_BASE}/missions`, { headers: headers() });
     if (!resp.ok) {
       const data = await resp.json().catch(() => ({}));
       throw new Error(data.error ?? "Einsätze konnten nicht geladen werden");
@@ -131,7 +140,7 @@ const ApiService = {
     patientInfo?: string;
     scheduledFor?: string;
   }): Promise<Mission> {
-    const resp = await fetch(`${API_BASE}/missions`, {
+    const resp = await apiFetch(`${API_BASE}/missions`, {
       method: "POST",
       headers: headers(),
       body: JSON.stringify(m),
@@ -142,7 +151,7 @@ const ApiService = {
   },
 
   async acceptMission(id: string): Promise<Mission> {
-    const resp = await fetch(`${API_BASE}/missions/${id}/accept`, { method: "POST", headers: headers() });
+    const resp = await apiFetch(`${API_BASE}/missions/${id}/accept`, { method: "POST", headers: headers() });
     if (!resp.ok) {
       const data = await resp.json().catch(() => ({}));
       throw new Error(data.error ?? "Einsatz konnte nicht angenommen werden");
@@ -151,7 +160,7 @@ const ApiService = {
   },
 
   async rejectMission(id: string): Promise<Mission> {
-    const resp = await fetch(`${API_BASE}/missions/${id}/reject`, { method: "POST", headers: headers() });
+    const resp = await apiFetch(`${API_BASE}/missions/${id}/reject`, { method: "POST", headers: headers() });
     if (!resp.ok) {
       const data = await resp.json().catch(() => ({}));
       throw new Error(data.error ?? "Einsatz konnte nicht abgelehnt werden");
@@ -160,7 +169,7 @@ const ApiService = {
   },
 
     async dismissMission(id: string): Promise<void> {
-    const resp = await fetch(`${API_BASE}/missions/${id}/dismiss`, { method: "POST", headers: headers() });
+    const resp = await apiFetch(`${API_BASE}/missions/${id}/dismiss`, { method: "POST", headers: headers() });
     if (!resp.ok) {
       const data = await resp.json().catch(() => ({}));
       throw new Error(data.error ?? "Konnte Einsatz nicht ausblenden");
@@ -168,7 +177,7 @@ const ApiService = {
   },
 
   async getLOARequests(userId?: string): Promise<LOARequest[]> {
-    const resp = await fetch(`${API_BASE}/loa`, { headers: headers() });
+    const resp = await apiFetch(`${API_BASE}/loa`, { headers: headers() });
     if (!resp.ok) {
       const data = await resp.json().catch(() => ({}));
       throw new Error(data.error ?? "Abwesenheitsanträge konnten nicht geladen werden");
@@ -177,7 +186,7 @@ const ApiService = {
   },
 
   async createLOA(req: Omit<LOARequest, "id" | "createdAt" | "status">): Promise<LOARequest> {
-    const resp = await fetch(`${API_BASE}/loa`, { method: "POST", headers: headers(), body: JSON.stringify(req) });
+    const resp = await apiFetch(`${API_BASE}/loa`, { method: "POST", headers: headers(), body: JSON.stringify(req) });
     if (!resp.ok) {
       const data = await resp.json().catch(() => ({}));
       throw new Error(data.error ?? "Abwesenheitsantrag konnte nicht erstellt werden");
@@ -186,7 +195,7 @@ const ApiService = {
   },
 
   async approveLOA(id: string, note?: string): Promise<LOARequest> {
-    const resp = await fetch(`${API_BASE}/loa/${id}/approve`, { method: "POST", headers: headers(), body: JSON.stringify({ note }) });
+    const resp = await apiFetch(`${API_BASE}/loa/${id}/approve`, { method: "POST", headers: headers(), body: JSON.stringify({ note }) });
     if (!resp.ok) {
       const data = await resp.json().catch(() => ({}));
       throw new Error(data.error ?? "Abwesenheitsantrag konnte nicht genehmigt werden");
@@ -195,7 +204,7 @@ const ApiService = {
   },
 
   async rejectLOA(id: string, reason: string): Promise<LOARequest> {
-    const resp = await fetch(`${API_BASE}/loa/${id}/reject`, { method: "POST", headers: headers(), body: JSON.stringify({ reason }) });
+    const resp = await apiFetch(`${API_BASE}/loa/${id}/reject`, { method: "POST", headers: headers(), body: JSON.stringify({ reason }) });
     if (!resp.ok) {
       const data = await resp.json().catch(() => ({}));
       throw new Error(data.error ?? "Abwesenheitsantrag konnte nicht abgelehnt werden");
@@ -204,7 +213,7 @@ const ApiService = {
   },
 
   async appealLOA(id: string, appealNote: string): Promise<LOARequest> {
-    const resp = await fetch(`${API_BASE}/loa/${id}/appeal`, { method: "POST", headers: headers(), body: JSON.stringify({ appealNote }) });
+    const resp = await apiFetch(`${API_BASE}/loa/${id}/appeal`, { method: "POST", headers: headers(), body: JSON.stringify({ appealNote }) });
     if (!resp.ok) {
       const data = await resp.json().catch(() => ({}));
       throw new Error(data.error ?? "Abwesenheitsantrag konnte nicht eingelegt werden");
@@ -213,7 +222,7 @@ const ApiService = {
   },
 
   async getNotifications(): Promise<NotificationItem[]> {
-    const resp = await fetch(`${API_BASE}/notifications`, { headers: headers() });
+    const resp = await apiFetch(`${API_BASE}/notifications`, { headers: headers() });
     if (!resp.ok) {
       const data = await resp.json().catch(() => ({}));
       throw new Error(data.error ?? "Benachrichtigungen konnten nicht geladen werden");
@@ -222,7 +231,7 @@ const ApiService = {
   },
 
   async markAllNotificationsRead(): Promise<void> {
-    const resp = await fetch(`${API_BASE}/notifications/read-all`, { method: "POST", headers: headers() });
+    const resp = await apiFetch(`${API_BASE}/notifications/read-all`, { method: "POST", headers: headers() });
     if (!resp.ok) {
       const data = await resp.json().catch(() => ({}));
       throw new Error(data.error ?? "Benachrichtigungen konnten nicht als gelesen markiert werden");
@@ -230,7 +239,7 @@ const ApiService = {
   },
 
   async getDutyStatus(): Promise<DutyStatus> {
-    const resp = await fetch(`${API_BASE}/status`, { headers: headers() });
+    const resp = await apiFetch(`${API_BASE}/status`, { headers: headers() });
     if (!resp.ok) {
       const data = await resp.json().catch(() => ({}));
       throw new Error(data.error ?? "Dienststatus konnte nicht geladen werden");
@@ -239,7 +248,7 @@ const ApiService = {
   },
 
   async updateDutyStatus(status: DutyStatus["status"]): Promise<DutyStatus> {
-    const resp = await fetch(`${API_BASE}/status`, { method: "POST", headers: headers(), body: JSON.stringify({ status }) });
+    const resp = await apiFetch(`${API_BASE}/status`, { method: "POST", headers: headers(), body: JSON.stringify({ status }) });
     if (!resp.ok) {
       const data = await resp.json().catch(() => ({}));
       throw new Error(data.error ?? "Dienststatus konnte nicht aktualisiert werden");
@@ -248,7 +257,7 @@ const ApiService = {
   },
 
   async getAllUsers(): Promise<User[]> {
-    const resp = await fetch(`${API_BASE}/users`, { headers: headers() });
+    const resp = await apiFetch(`${API_BASE}/users`, { headers: headers() });
     if (!resp.ok) {
       const data = await resp.json().catch(() => ({}));
       throw new Error(data.error ?? "Benutzer konnten nicht geladen werden");
@@ -257,7 +266,7 @@ const ApiService = {
   },
 
   async getOnDutyUsers(): Promise<User[]> {
-    const resp = await fetch(`${API_BASE}/status/on-duty`, { headers: headers() });
+    const resp = await apiFetch(`${API_BASE}/status/on-duty`, { headers: headers() });
     if (!resp.ok) {
       const data = await resp.json().catch(() => ({}));
       throw new Error(data.error ?? "Benutzer im Dienst konnten nicht geladen werden");
@@ -266,7 +275,7 @@ const ApiService = {
   },
 
   async getMyActivity(): Promise<ActivityLog[]> {
-    const resp = await fetch(`${API_BASE}/activity/my`, { headers: headers() });
+    const resp = await apiFetch(`${API_BASE}/activity/my`, { headers: headers() });
     if (!resp.ok) {
       const data = await resp.json().catch(() => ({}));
       throw new Error(data.error ?? "Aktivitäten konnten nicht geladen werden");
@@ -275,7 +284,7 @@ const ApiService = {
   },
 
   async getUserActivity(userId: string): Promise<ActivityLog[]> {
-    const resp = await fetch(`${API_BASE}/activity/user/${userId}`, { headers: headers() });
+    const resp = await apiFetch(`${API_BASE}/activity/user/${userId}`, { headers: headers() });
     if (!resp.ok) {
       const data = await resp.json().catch(() => ({}));
       throw new Error(data.error ?? "Benutzeraktivitäten konnten nicht geladen werden");
@@ -284,7 +293,7 @@ const ApiService = {
   },
 
   async getActivityUsers(): Promise<ActivitySummary[]> {
-    const resp = await fetch(`${API_BASE}/activity/users`, { headers: headers() });
+    const resp = await apiFetch(`${API_BASE}/activity/users`, { headers: headers() });
     if (!resp.ok) {
       const data = await resp.json().catch(() => ({}));
       throw new Error(data.error ?? "Benutzerübersicht konnte nicht geladen werden");
@@ -293,7 +302,7 @@ const ApiService = {
   },
 
   async updateProfile(userId: string, data: { avatarUrl?: string }): Promise<User> {
-    const resp = await fetch(`${API_BASE}/users/${userId}`, {
+    const resp = await apiFetch(`${API_BASE}/users/${userId}`, {
       method: "PATCH",
       headers: headers(),
       body: JSON.stringify(data),
@@ -306,7 +315,7 @@ const ApiService = {
   },
 
   async registerDeviceToken(token: string, platform: "ios" | "android" | "web", deviceId?: string): Promise<void> {
-    const resp = await fetch(`${API_BASE}/notifications/register-device`, {
+    const resp = await apiFetch(`${API_BASE}/notifications/register-device`, {
       method: "POST",
       headers: headers(),
       body: JSON.stringify({ token, platform, deviceId }),
@@ -318,7 +327,7 @@ const ApiService = {
   },
 
   async unregisterDeviceToken(token: string): Promise<void> {
-    const resp = await fetch(`${API_BASE}/notifications/unregister-device`, {
+    const resp = await apiFetch(`${API_BASE}/notifications/unregister-device`, {
       method: "POST",
       headers: headers(),
       body: JSON.stringify({ token }),
