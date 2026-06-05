@@ -161,6 +161,14 @@ export const useAppStore = create<AppState>()(
         dutyStatus: state.dutyStatus,
         avatarUriMap: state.avatarUriMap,
       }),
+      merge: (persistedState, currentState) => ({
+        ...currentState,
+        ...(persistedState as Partial<AppState>),
+        notifications: [],
+        missions: [],
+        news: [],
+        loaRequests: [],
+      }),
     }
   )
 );

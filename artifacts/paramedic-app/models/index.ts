@@ -65,6 +65,8 @@ export interface NewsItem {
 export type NotificationType =
   | "mission_assigned"
   | "mission_cancelled"
+  | "mission_completed"
+  | "mission_created"
   | "status_changed"
   | "news"
   | "loa_update"
