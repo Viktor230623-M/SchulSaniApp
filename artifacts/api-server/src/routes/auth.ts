@@ -210,11 +210,13 @@ router.post("/login", authLimiter, async (req, res) => {
     if (profile.phone) phone = profile.phone;
   } catch (err: unknown) {
     const msg: string = err instanceof Error ? err.message : "";
-    if (msg.includes("Ungültige Zugangsdaten") || msg.includes("IServ-Sitzung")) {
+    if (msg.includes("Ungültige Zugangsdaten")) {
       res.status(401).json({ error: "Ungültige Zugangsdaten" });
       return;
     }
-    console.error("IServ profile fetch failed");
+    console.error("IServ auth unavailable — denying login");
+    res.status(503).json({ error: "Anmeldedienst nicht erreichbar. Bitte später erneut versuchen." });
+    return;
   }
 
   try {
@@ -246,7 +248,7 @@ router.post("/login", authLimiter, async (req, res) => {
       set: { firstName, lastName, email, updatedAt: new Date() },
     });
 
-    const token = jwt.sign({ userId, role }, JWT_SECRET, { expiresIn: "7d" });
+    const token = jwt.sign({ userId, role }, JWT_SECRET, { expiresIn: "2h" });
 
     const isWeb = req.headers["user-agent"]?.includes("Mozilla") || req.headers["sec-fetch-dest"] === "document";
     if (rememberMe && isWeb) {
@@ -254,7 +256,7 @@ router.post("/login", authLimiter, async (req, res) => {
         httpOnly: true,
         secure: process.env["NODE_ENV"] === "production",
         sameSite: "lax",
-        maxAge: 7 * 24 * 60 * 60 * 1000,
+        maxAge: 2 * 60 * 60 * 1000,
       });
     }
 

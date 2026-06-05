@@ -1,6 +1,7 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import React, { useEffect, useState } from "react";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import {
   ActivityIndicator,
   FlatList,
@@ -20,19 +21,22 @@ import ApiService from "@/services/ApiService";
 import { useAppStore } from "@/store/useAppStore";
 
 function notifConfig(type: NotificationType) {
-  const map = {
-    mission_assigned: { icon: "flash" as const, color: "#3B82F6", bg: "#EFF6FF" },
-    mission_cancelled: { icon: "flash-off" as const, color: "#EF4444", bg: "#FEF2F2" },
-    status_changed: { icon: "shield-checkmark" as const, color: "#22C55E", bg: "#F0FDF4" },
-    news: { icon: "newspaper" as const, color: "#8B5CF6", bg: "#F5F3FF" },
-    loa_update: { icon: "calendar" as const, color: "#CA8A04", bg: "#FEF9C3" },
-    reminder: { icon: "alarm" as const, color: "#F97316", bg: "#FFF7ED" },
-    high_priority_alert: { icon: "warning" as const, color: "#EF4444", bg: "#FEF2F2" },
+  const map: Record<string, { icon: React.ComponentProps<typeof Ionicons>["name"]; color: string; bg: string }> = {
+    mission_assigned: { icon: "flash", color: "#3B82F6", bg: "#EFF6FF" },
+    mission_cancelled: { icon: "flash-off", color: "#EF4444", bg: "#FEF2F2" },
+    mission_completed: { icon: "checkmark-circle", color: "#22C55E", bg: "#F0FDF4" },
+    mission_created: { icon: "flash", color: "#3B82F6", bg: "#EFF6FF" },
+    status_changed: { icon: "shield-checkmark", color: "#22C55E", bg: "#F0FDF4" },
+    news: { icon: "newspaper", color: "#8B5CF6", bg: "#F5F3FF" },
+    loa_update: { icon: "calendar", color: "#CA8A04", bg: "#FEF9C3" },
+    reminder: { icon: "alarm", color: "#F97316", bg: "#FFF7ED" },
+    high_priority_alert: { icon: "warning", color: "#EF4444", bg: "#FEF2F2" },
   };
-  return map[type] ?? map.reminder;
+  return map[type] ?? map["reminder"]!;
 }
 
-function timeAgo(iso: string) {
+function timeAgo(iso: string | null | undefined) {
+  if (!iso) return "";
   const diff = Date.now() - new Date(iso).getTime();
   const m = Math.floor(diff / 60000);
   if (m < 1) return "Gerade eben";
@@ -116,17 +120,19 @@ export default function NotificationsScreen() {
   }
 
   async function handleMarkAllRead() {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } catch {}
     await ApiService.markAllNotificationsRead();
     markAllNotificationsRead();
   }
 
-  const highPriority = notifications.filter((n) => n.priority === "high" && !n.isRead);
-  const normal = notifications.filter((n) => n.priority !== "high");
-  const unread = notifications.filter((n) => !n.isRead).length;
+  const safeNotifications = Array.isArray(notifications) ? notifications : [];
+  const highPriority = safeNotifications.filter((n) => n.priority === "high" && !n.isRead);
+  const normal = safeNotifications.filter((n) => n.priority !== "high");
+  const unread = safeNotifications.filter((n) => !n.isRead).length;
   const topPad = Platform.OS === "web" ? 67 : insets.top;
 
   return (
+    <ErrorBoundary>
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <FlatList
         data={normal}
@@ -179,6 +185,7 @@ export default function NotificationsScreen() {
         showsVerticalScrollIndicator={false}
       />
     </View>
+    </ErrorBoundary>
   );
 }
 
