@@ -554,6 +554,7 @@ export default function SettingsScreen() {
                   const pendingRoleBtns: { key: string; label: string }[] = [
                     { key: "sanitaeter", label: "Sanitäter" },
                     { key: "sanitaeter_leitung", label: "Leitung" },
+                    { key: "sanitaeter_leitung_admin", label: "Leitung Admin" },
                     { key: "teacher", label: "Lehrer" },
                     { key: "admin", label: "Admin" },
                   ];
@@ -638,6 +639,7 @@ export default function SettingsScreen() {
                   const roleManageBtns: { key: string; label: string }[] = [
                     { key: "sanitaeter", label: "Sanitäter" },
                     { key: "sanitaeter_leitung", label: "Leitung" },
+                    { key: "sanitaeter_leitung_admin", label: "Leitung Admin" },
                     { key: "teacher", label: "Lehrer" },
                     { key: "admin", label: "Admin" },
                   ];
