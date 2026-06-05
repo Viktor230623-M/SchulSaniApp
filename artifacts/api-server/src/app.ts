@@ -30,6 +30,7 @@ app.use(cookieParser());
 app.use(express.json({
   limit: "50kb",
   verify: (req, _res, buf) => {
+    if (buf.length === 0) return;
     try {
       JSON.parse(buf.toString());
     } catch {
