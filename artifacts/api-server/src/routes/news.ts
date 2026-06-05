@@ -64,7 +64,11 @@ router.post("/:id/approve", requireAuth, requireRole("admin", "teacher", "cto"),
 });
 
 router.post("/:id/reject", requireAuth, requireRole("admin", "teacher", "cto"), async (req, res) => {
-  const reason = req.body.reason ?? "Bitte überarbeite den Beitrag.";
+  const { reason } = req.body as { reason?: string };
+  if (!reason || !reason.trim()) {
+    res.status(400).json({ error: "reason is required" });
+    return;
+  }
   if (reason.length > 500) {
     res.status(400).json({ error: "reason max 500 characters" });
     return;
