@@ -54,13 +54,13 @@ function canEditUserRole(requestorRole: string, targetRole: string): boolean {
   return blocked.length > 0 && !blocked.includes(targetRole);
 }
 
-function getAllowedRoles(requestorRole: string): { key: string; label: string }[] {
-  const all: { key: string; label: string }[] = [
-    { key: "sanitaeter", label: "Sanitäter" },
-    { key: "sanitaeter_leitung", label: "Leitung" },
-    { key: "sanitaeter_leitung_admin", label: "Leitung Admin" },
-    { key: "teacher", label: "Lehrer" },
-    { key: "admin", label: "Admin" },
+function getAllowedRoles(requestorRole: string): { key: string }[] {
+  const all = [
+    { key: "sanitaeter" },
+    { key: "sanitaeter_leitung" },
+    { key: "sanitaeter_leitung_admin" },
+    { key: "teacher" },
+    { key: "admin" },
   ];
   if (requestorRole === "cto") return all;
   if (requestorRole === "admin") return all.filter((r) => ["sanitaeter", "sanitaeter_leitung"].includes(r.key));
@@ -70,7 +70,7 @@ function getAllowedRoles(requestorRole: string): { key: string; label: string }[
 
 function RoleBadgeLarge({ role, theme, lang }: { role: User["role"]; theme: ThemeColors; lang: AppLanguage }) {
   const cfg = ROLE_CONFIG[role];
-  const label = role === "cto" ? t("roles.cto", lang) : cfg.label;
+  const label = t(`roles.${role}`, lang);
   return (
     <View style={[styles.roleBadgeLarge, { backgroundColor: cfg.bg, borderColor: cfg.text + "30" }]}>
       <Text style={[styles.roleBadgeLargeText, { color: cfg.text }]}>{label}</Text>
@@ -198,7 +198,7 @@ export default function SettingsScreen() {
       setAllUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, ...updated } : u)));
       try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } catch {}
     } catch (err) {
-      Alert.alert("Fehler", err instanceof Error ? err.message : "Freischaltung fehlgeschlagen");
+      Alert.alert(t("common.error", lang), err instanceof Error ? err.message : t("settings.approveFailed", lang));
     } finally {
       setAdminProcessing(null);
     }
@@ -210,7 +210,7 @@ export default function SettingsScreen() {
       setAllUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, ...updated } : u)));
       try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } catch {}
     } catch (err) {
-      Alert.alert("Fehler", err instanceof Error ? err.message : "Rollenänderung fehlgeschlagen");
+      Alert.alert(t("common.error", lang), err instanceof Error ? err.message : t("settings.roleChangeFailed", lang));
     }
   }
 
@@ -218,13 +218,13 @@ export default function SettingsScreen() {
     if (Platform.OS === "web") {
       ApiService.deleteUser(userId)
         .then(() => setAllUsers((prev) => prev.filter((u) => u.id !== userId)))
-        .catch((err) => Alert.alert("Fehler", err instanceof Error ? err.message : "Fehler"));
+        .catch((err) => Alert.alert(t("common.error", lang), err instanceof Error ? err.message : t("common.error", lang)));
       return;
     }
-    Alert.alert("Benutzer löschen", `${name} wirklich löschen?`, [
-      { text: "Abbrechen", style: "cancel" },
+    Alert.alert(t("settings.deleteUserTitle", lang), t("settings.deleteUserConfirm", lang).replace("{name}", name), [
+      { text: t("common.cancel", lang), style: "cancel" },
       {
-        text: "Löschen",
+        text: t("common.delete", lang),
         style: "destructive",
         onPress: async () => {
           try {
@@ -232,7 +232,7 @@ export default function SettingsScreen() {
             setAllUsers((prev) => prev.filter((u) => u.id !== userId));
             try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning); } catch {}
           } catch (err) {
-            Alert.alert("Fehler", err instanceof Error ? err.message : "Fehler");
+            Alert.alert(t("common.error", lang), err instanceof Error ? err.message : t("common.error", lang));
           }
         },
       },
@@ -375,7 +375,7 @@ export default function SettingsScreen() {
                 </View>
                 <View style={[styles.statusBadge, { backgroundColor: (item.type === "mission" ? (item.status === "completed" ? "#DCFCE7" : "#FEF3C7") : (item.status === "approved" ? "#DCFCE7" : "#FEF3C7")) }]}>
                   <Text style={[styles.statusText, { color: (item.type === "mission" ? (item.status === "completed" ? "#16A34A" : "#D97706") : (item.status === "approved" ? "#16A34A" : "#D97706")) }]}>
-                    {item.type === "mission" ? (item.status === "completed" ? "Erledigt" : item.status === "accepted" ? "Angenommen" : "Ausstehend") : (item.status === "approved" ? "Genehmigt" : item.status === "rejected" ? "Abgelehnt" : "Ausstehend")}
+                    {item.type === "mission" ? (item.status === "completed" ? t("missions.completed", lang) : item.status === "accepted" ? t("missions.accepted", lang) : t("missions.pending", lang)) : (item.status === "approved" ? t("loa.approved", lang) : item.status === "rejected" ? t("loa.rejected", lang) : t("loa.pending", lang))}
                   </Text>
                 </View>
               </View>
@@ -472,7 +472,7 @@ export default function SettingsScreen() {
                       <Text style={[styles.userEmail, { color: theme.textTertiary }]}>{u.email}</Text>
                     </View>
                     <View style={[styles.smallRoleBadge, { backgroundColor: cfg.bg }]}>
-                      <Text style={[styles.smallRoleText, { color: cfg.text }]}>{cfg.label}</Text>
+                      <Text style={[styles.smallRoleText, { color: cfg.text }]}>{t(`roles.${u.role}`, lang)}</Text>
                     </View>
                   </View>
                 );
@@ -536,7 +536,7 @@ export default function SettingsScreen() {
           >
             <View style={styles.adminHeaderLeft}>
               <Ionicons name="shield-checkmark-outline" size={13} color={theme.textTertiary} />
-              <Text style={[styles.sectionTitle, { color: theme.textTertiary }]}>BENUTZERVERWALTUNG</Text>
+              <Text style={[styles.sectionTitle, { color: theme.textTertiary }]}>{t("settings.userManagement", lang)}</Text>
             </View>
             <View style={styles.rowRight}>
               {pendingUsers.length > 0 && (
@@ -553,7 +553,7 @@ export default function SettingsScreen() {
               {/* ── Pending Approvals (admin/cto only) ── */}
               {isAdmin && (
               <><View style={[styles.adminSubHeader, { borderTopColor: theme.cardBorder }]}>
-                <Text style={[styles.adminSubtitle, { color: theme.text }]}>Ausstehende Freischaltungen</Text>
+                <Text style={[styles.adminSubtitle, { color: theme.text }]}>{t("settings.pendingApprovals", lang)}</Text>
                 {!loadingPending && pendingUsers.length > 0 && (
                   <View style={styles.amberCountBadge}>
                     <Text style={styles.amberCountText}>{pendingUsers.length}</Text>
@@ -591,7 +591,7 @@ export default function SettingsScreen() {
                           <Text style={[styles.userEmail, { color: theme.textTertiary }]}>{u.iservUsername ?? u.email}</Text>
                         </View>
                         <View style={styles.pendingStatusPill}>
-                          <Text style={styles.pendingStatusText}>Ausstehend</Text>
+                          <Text style={styles.pendingStatusText}>{t("settings.pending", lang)}</Text>
                         </View>
                       </View>
                       <View style={styles.rolePicker}>
@@ -613,7 +613,7 @@ export default function SettingsScreen() {
                                 },
                               ]}
                             >
-                              <Text style={[styles.roleChipText, { color: selected ? "#fff" : theme.textSecondary }]}>{r.label}</Text>
+                              <Text style={[styles.roleChipText, { color: selected ? "#fff" : theme.textSecondary }]}>{t(`rolesShort.${r.key}`, lang)}</Text>
                             </Pressable>
                           );
                         })}
@@ -631,7 +631,7 @@ export default function SettingsScreen() {
                         ) : (
                           <>
                             <Ionicons name="checkmark-circle-outline" size={16} color="#fff" />
-                            <Text style={styles.approveBtnText}>Freischalten</Text>
+                            <Text style={styles.approveBtnText}>{t("settings.approve", lang)}</Text>
                           </>
                         )}
                       </Pressable>
@@ -643,13 +643,13 @@ export default function SettingsScreen() {
               </>)}
               {/* ── Role Management ── */}
               <View style={[styles.adminSubHeader, { borderTopColor: theme.cardBorder, marginTop: 4 }]}>
-                <Text style={[styles.adminSubtitle, { color: theme.text }]}>Rollen verwalten</Text>
+                <Text style={[styles.adminSubtitle, { color: theme.text }]}>{t("settings.manageRoles", lang)}</Text>
               </View>
 
               {loadingUsers ? (
                 <View style={styles.adminLoadingRow}>
                   <ActivityIndicator color={theme.tint} size="small" />
-                  <Text style={[styles.adminLoadingText, { color: theme.textTertiary }]}>Lade Benutzer…</Text>
+                  <Text style={[styles.adminLoadingText, { color: theme.textTertiary }]}>{t("settings.loadingUsers", lang)}</Text>
                 </View>
               ) : (
                 allUsers.map((u) => {
@@ -668,7 +668,7 @@ export default function SettingsScreen() {
                         <View style={{ flex: 1 }}>
                           <Text style={[styles.userName, { color: theme.text }]}>{formatFullName(u.firstName, u.lastName)}</Text>
                           <View style={[styles.smallRoleBadge, { backgroundColor: cfg.bg, alignSelf: "flex-start", marginTop: 2 }]}>
-                            <Text style={[styles.smallRoleText, { color: cfg.text }]}>{cfg.label}</Text>
+                            <Text style={[styles.smallRoleText, { color: cfg.text }]}>{t(`roles.${u.role}`, lang)}</Text>
                           </View>
                         </View>
                         {!isCurrentUser && canEdit ? (
@@ -701,7 +701,7 @@ export default function SettingsScreen() {
                                   },
                                 ]}
                               >
-                                <Text style={[styles.roleChipText, { color: selected ? "#fff" : theme.textSecondary }]}>{r.label}</Text>
+                                <Text style={[styles.roleChipText, { color: selected ? "#fff" : theme.textSecondary }]}>{t(`rolesShort.${r.key}`, lang)}</Text>
                               </Pressable>
                             );
                           })}
