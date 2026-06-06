@@ -37,6 +37,7 @@ export interface Mission {
   assignedParamedicId?: string;
   patientInfo?: string;
   notes?: string;
+  translationsJson?: string | null;
 }
 
 export type DutyStatusType = "on_duty" | "off_duty";
@@ -62,6 +63,7 @@ export interface NewsItem {
   imageUrl?: string;
   isRead: boolean;
   rejectionReason?: string;
+  translationsJson?: string | null;
 }
 
 export type NotificationType =
@@ -77,6 +79,7 @@ export type NotificationType =
 
 export interface NotificationItem {
   id: string;
+  userId: string;
   type: NotificationType;
   title: string;
   body: string;
@@ -101,6 +104,7 @@ export interface LOARequest {
   appealNote?: string;
   reviewedBy?: string;
   reviewedAt?: string;
+  translationsJson?: string | null;
 }
 
 export type ActivityType =

@@ -100,19 +100,21 @@ export function DatePickerField({ value, onChange, label }: Props) {
                   <Pressable
                     key={day}
                     onPress={() => select(day)}
-                    style={[
-                      styles.cell,
-                      isSelected && { backgroundColor: theme.tint, borderRadius: 20 },
-                      !isSelected && isToday && { borderRadius: 20, borderWidth: 1, borderColor: theme.tint },
-                    ]}
+                    style={styles.cell}
                   >
-                    <Text style={[
-                      styles.cellText,
-                      { color: isSelected ? "#fff" : isToday ? theme.tint : theme.text },
-                      isSelected && { fontFamily: "Inter_700Bold" },
+                    <View style={[
+                      styles.dayCircle,
+                      isSelected && { backgroundColor: theme.tint },
+                      !isSelected && isToday && { borderWidth: 1.5, borderColor: theme.tint },
                     ]}>
-                      {day}
-                    </Text>
+                      <Text style={[
+                        styles.cellText,
+                        { color: isSelected ? "#fff" : isToday ? theme.tint : theme.text },
+                        isSelected && { fontFamily: "Inter_700Bold" },
+                      ]}>
+                        {day}
+                      </Text>
+                    </View>
                   </Pressable>
                 );
               })}
@@ -141,7 +143,8 @@ const styles = StyleSheet.create({
   grid: { flexDirection: "row", flexWrap: "wrap" },
   dayHeader: { width: "14.28%", textAlign: "center", fontSize: 11, fontFamily: "Inter_600SemiBold", paddingBottom: 8 },
   cell: { width: "14.28%", aspectRatio: 1, alignItems: "center", justifyContent: "center" },
-  cellText: { fontSize: 14, fontFamily: "Inter_400Regular" },
+  dayCircle: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center" },
+  cellText: { fontSize: 14, fontFamily: "Inter_400Regular", lineHeight: 34, includeFontPadding: false },
   cancelBtn: { paddingVertical: 12, borderRadius: 12, alignItems: "center", borderWidth: 1, marginTop: 4 },
   cancelText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
 });

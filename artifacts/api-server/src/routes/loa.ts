@@ -4,6 +4,7 @@ import { desc, eq } from "drizzle-orm";
 import { db, loaTable } from "@workspace/db";
 import { requireAuth, requireRole, type AuthRequest } from "../middlewares/auth";
 import { notifyUser } from "../services/notifications";
+import { translateToLanguages } from "../services/translator";
 
 const router = Router();
 
@@ -53,6 +54,13 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
     reviewedAt: null,
   };
   await db.insert(loaTable).values(newReq);
+
+  translateToLanguages({ reason }, "de")
+    .then((t) => Object.keys(t).length > 0
+      ? db.update(loaTable).set({ translationsJson: JSON.stringify(t) }).where(eq(loaTable.id, newReq.id))
+      : null
+    ).catch(() => {});
+
   res.status(201).json(newReq);
 });
 

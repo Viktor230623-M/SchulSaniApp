@@ -68,11 +68,12 @@ function getAllowedRoles(requestorRole: string): { key: string; label: string }[
   return [];
 }
 
-function RoleBadgeLarge({ role, theme }: { role: User["role"]; theme: ThemeColors }) {
+function RoleBadgeLarge({ role, theme, lang }: { role: User["role"]; theme: ThemeColors; lang: AppLanguage }) {
   const cfg = ROLE_CONFIG[role];
+  const label = role === "cto" ? t("roles.cto", lang) : cfg.label;
   return (
     <View style={[styles.roleBadgeLarge, { backgroundColor: cfg.bg, borderColor: cfg.text + "30" }]}>
-      <Text style={[styles.roleBadgeLargeText, { color: cfg.text }]}>{cfg.label}</Text>
+      <Text style={[styles.roleBadgeLargeText, { color: cfg.text }]}>{label}</Text>
     </View>
   );
 }
@@ -339,7 +340,7 @@ export default function SettingsScreen() {
           <Text style={[styles.rankLabel, { color: theme.textTertiary }]}>
             {t("settings.myRank", lang)}
           </Text>
-          {user && <RoleBadgeLarge role={user.role} theme={theme} />}
+          {user && <RoleBadgeLarge role={user.role} theme={theme} lang={lang} />}
         </View>
       </View>
 

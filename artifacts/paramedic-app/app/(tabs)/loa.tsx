@@ -22,6 +22,7 @@ import { DatePickerField } from "@/components/DatePickerField";
 import type { LOARequest, LOAStatus } from "@/models";
 import ApiService from "@/services/ApiService";
 import { useAppStore } from "@/store/useAppStore";
+import { localized } from "@/utils/localize";
 
 function formatDisplayDate(dateStr: string): string {
   if (!dateStr) return "—";
@@ -75,8 +76,9 @@ export default function LOAScreen() {
   const [rejectReason, setRejectReason] = useState("");
 
   const role = user?.role ?? "";
-  const canModerate = ["admin", "sanitaeter_leitung_admin", "teacher", "cto"].includes(role);
+  const canModerate = ["admin", "sanitaeter_leitung", "sanitaeter_leitung_admin", "teacher", "cto"].includes(role);
   const canCreate = ["student_paramedic", "sanitaeter_leitung", "sanitaeter_leitung_admin", "admin", "cto", "sanitaeter"].includes(role);
+  const [tab, setTab] = useState<"mine" | "all">("mine");
 
   useEffect(() => { load(); }, []);
 
@@ -153,9 +155,14 @@ export default function LOAScreen() {
     setAppealText("");
   }
 
-  const visible = canModerate
-    ? loaRequests
-    : loaRequests.filter((r) => r.userId === user?.id);
+  const ownRequests = loaRequests.filter((r) => r.userId === user?.id);
+  const othersRequests = loaRequests.filter((r) => r.userId !== user?.id);
+  const visible = !canModerate
+    ? ownRequests
+    : tab === "mine"
+    ? ownRequests
+    : othersRequests;
+  const showModerationActions = canModerate && tab === "all";
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
 
@@ -172,15 +179,40 @@ export default function LOAScreen() {
           flexGrow: 1,
         }}
         ListHeaderComponent={
-          <View style={styles.headerRow}>
-            <Text style={[styles.heading, { color: theme.text }]}>{t("loa.title", lang)}</Text>
-            {canCreate && (
-              <Pressable
-                onPress={() => setShowCreate(true)}
-                style={[styles.iconBtn, { backgroundColor: theme.tint }]}
-              >
-                <Ionicons name="add" size={20} color="#fff" />
-              </Pressable>
+          <View style={{ gap: 12, marginBottom: 4 }}>
+            <View style={styles.headerRow}>
+              <Text style={[styles.heading, { color: theme.text }]}>{t("loa.title", lang)}</Text>
+              {canCreate && (
+                <Pressable
+                  onPress={() => setShowCreate(true)}
+                  style={[styles.iconBtn, { backgroundColor: theme.tint }]}
+                >
+                  <Ionicons name="add" size={20} color="#fff" />
+                </Pressable>
+              )}
+            </View>
+            {canModerate && (
+              <View style={[styles.segmentRow, { backgroundColor: theme.backgroundTertiary }]}>
+                <Pressable
+                  onPress={() => setTab("mine")}
+                  style={[styles.segmentBtn, tab === "mine" && { backgroundColor: theme.tint }]}
+                >
+                  <Text style={[styles.segmentText, { color: tab === "mine" ? "#fff" : theme.textSecondary }]}>
+                    {lang === "de" ? "Meine Anträge" : "My Requests"}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => setTab("all")}
+                  style={[styles.segmentBtn, tab === "all" && { backgroundColor: theme.tint }]}
+                >
+                  <Text style={[styles.segmentText, { color: tab === "all" ? "#fff" : theme.textSecondary }]}>
+                    {lang === "de" ? "Alle Anträge" : "All Requests"}
+                    {othersRequests.filter((r) => r.status === "pending").length > 0 && (
+                      <Text style={{ color: tab === "all" ? "#fff" : theme.tint }}>{" "}({othersRequests.filter((r) => r.status === "pending").length})</Text>
+                    )}
+                  </Text>
+                </Pressable>
+              </View>
             )}
           </View>
         }
@@ -204,13 +236,13 @@ export default function LOAScreen() {
             <Text style={[styles.dates, { color: theme.textSecondary }]}>
               {formatDisplayDate(item.fromDate)} – {formatDisplayDate(item.toDate)}
             </Text>
-            <Text style={[styles.reason, { color: theme.text }]}>{item.reason}</Text>
+            <Text style={[styles.reason, { color: theme.text }]}>{localized(item, "reason", lang, item.reason)}</Text>
             {item.adminNote && (
               <View style={[styles.noteBox, { backgroundColor: theme.backgroundTertiary }]}>
                 <Text style={[styles.noteText, { color: theme.textSecondary }]}>{item.adminNote}</Text>
               </View>
             )}
-            {canModerate && item.status === "pending" && (
+            {showModerationActions && item.status === "pending" && (
               <View style={styles.actions}>
                 <Pressable
                   onPress={() => { setRejectId(item.id); }}
@@ -356,6 +388,9 @@ const styles = StyleSheet.create({
   actions: { flexDirection: "row", gap: 8, marginTop: 8 },
   btn: { flex: 1, paddingVertical: 12, borderRadius: 10, borderWidth: 1, alignItems: "center" },
   btnText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  segmentRow: { flexDirection: "row", borderRadius: 12, padding: 3, gap: 3 },
+  segmentBtn: { flex: 1, paddingVertical: 9, borderRadius: 10, alignItems: "center" },
+  segmentText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
   empty: { flex: 1, alignItems: "center", justifyContent: "center", paddingTop: 80, gap: 12 },
   emptyTitle: { fontSize: 18, fontFamily: "Inter_600SemiBold" },
   modal: { flex: 1 },

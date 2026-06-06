@@ -31,6 +31,7 @@ export const newsTable = pgTable("news", {
   authorId: text("author_id"),
   isRead: boolean("is_read").default(false),
   rejectionReason: text("rejection_reason"),
+  translationsJson: text("translations_json"),
 });
 
 // Missions table
@@ -47,6 +48,7 @@ export const missionsTable = pgTable("missions", {
   patientInfo: text("patient_info"),
   assignedParamedicId: text("assigned_paramedic_id"),
   notes: text("notes"),
+  translationsJson: text("translations_json"),
 });
 
 // Notifications table
@@ -83,6 +85,7 @@ export const loaTable = pgTable("loa", {
   appealNote: text("appeal_note"),
   reviewedBy: text("reviewed_by"),
   reviewedAt: timestamp("reviewed_at"),
+  translationsJson: text("translations_json"),
 });
 
 // Mission activity log table (from BLOCK 2)
