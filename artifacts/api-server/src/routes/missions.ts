@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import { Router } from "express";
-import { eq } from "drizzle-orm";
+import { desc, eq, inArray, lt, sql } from "drizzle-orm";
 import { db, missionsTable, missionActivityLogTable, usersTable } from "@workspace/db";
 import { requireAuth, requireRole, type AuthRequest } from "../middlewares/auth";
 import { addDismissal, getDismissedFor, removeDismissal } from "../data/dismissals";
@@ -34,7 +34,17 @@ const router = Router();
 router.get("/", requireAuth, async (req: AuthRequest, res) => {
   const role = req.user!.role;
   const canSeePatientInfo = ["admin", "cto", "sanitaeter_leitung", "sanitaeter_leitung_admin", "teacher"].includes(role);
-  const all = await db.select().from(missionsTable);
+
+  // Auto-archive pending/accepted missions from previous calendar days
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  await db.update(missionsTable)
+    .set({ status: "archived" })
+    .where(
+      sql`${missionsTable.status} IN ('pending', 'accepted') AND ${missionsTable.requestedAt} < ${todayStart}`
+    );
+
+  const all = await db.select().from(missionsTable).orderBy(desc(missionsTable.requestedAt));
   const dismissed = await getDismissedFor(req.user!.userId);
   const visible = all
     .filter((m) => m.status !== "rejected" && !dismissed.has(m.id))

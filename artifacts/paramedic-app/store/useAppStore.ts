@@ -24,6 +24,7 @@ interface AppState {
   theme: AppTheme;
   language: AppLanguage;
   setTheme: (theme: AppTheme) => void;
+  setDefaultTheme: (theme: AppTheme) => void;
   setLanguage: (lang: AppLanguage) => void;
 
   dutyStatus: DutyStatus["status"];
@@ -87,6 +88,13 @@ export const useAppStore = create<AppState>()(
       theme: "light",
       language: "de",
       setTheme: (theme) => set({ theme }),
+      setDefaultTheme: (theme) => {
+        set({ theme });
+        const userId = useAppStore.getState().user?.id;
+        if (userId) {
+          AsyncStorage.setItem(`user_theme_${userId}`, theme).catch(() => {});
+        }
+      },
       setLanguage: (language) => set({ language }),
 
       dutyStatus: "off_duty",

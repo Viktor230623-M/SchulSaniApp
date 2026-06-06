@@ -85,13 +85,12 @@ export default function SettingsScreen() {
   const user = useAppStore((s) => s.user);
   const avatarUriMap = useAppStore((s) => s.avatarUriMap);
   const setTheme = useAppStore((s) => s.setTheme);
+  const setDefaultTheme = useAppStore((s) => s.setDefaultTheme);
   const setLanguage = useAppStore((s) => s.setLanguage);
   const setAvatarUri = useAppStore((s) => s.setAvatarUri);
   const logout = useAppStore((s) => s.logout);
 
   const avatarUri = user ? (avatarUriMap[user.id] ?? null) : null;
-
-  const exclusiveUnlocked = ["cto", "admin", "sanitaeter_leitung_admin"].includes(user?.role ?? "");
 
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
@@ -292,12 +291,7 @@ export default function SettingsScreen() {
     { key: "amethyst", label: t("settings.themeAmethyst", lang), color: "#8B5CF6", border: "#D8B4FE" },
   ];
 
-  const isCTO = user?.role === "cto";
-  const themes = isCTO
-    ? [...baseThemes, ...exclusiveThemes]
-    : exclusiveUnlocked
-    ? [...baseThemes, ...exclusiveThemes.filter((th) => th.key !== "teal")]
-    : baseThemes;
+  const themes = [...baseThemes, ...exclusiveThemes];
 
   const langs: { key: AppLanguage; label: string; flag: string }[] = [
     { key: "de", label: "Deutsch", flag: "🇩🇪" },
@@ -423,7 +417,7 @@ export default function SettingsScreen() {
           <Pressable
             key={th.key}
             onPress={() => {
-              setTheme(th.key);
+              setDefaultTheme(th.key);
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             }}
             style={[
