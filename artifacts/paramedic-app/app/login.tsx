@@ -16,6 +16,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { MedicalCross } from "@/components/MedicalCross";
+import { ISERV_DOMAIN, SCHOOL_NAME } from "@/constants/appConfig";
 import { t } from "@/constants/i18n";
 import { getTheme } from "@/constants/theme";
 import ApiService, { setAuthToken } from "@/services/ApiService";
@@ -85,9 +86,9 @@ export default function LoginScreen() {
         >
           <View style={styles.header}>
             <MedicalCross size={64} color={theme.tint} animate />
-            <Text style={[styles.appName, { color: theme.text }]}>SchulSanitäter</Text>
+            <Text style={[styles.appName, { color: theme.text }]}>{SCHOOL_NAME}</Text>
             <Text style={[styles.appSubtitle, { color: theme.textSecondary }]}>
-              Verwaltungssystem · gymbla.de
+              Verwaltungssystem · {ISERV_DOMAIN}
             </Text>
           </View>
 
@@ -206,7 +207,7 @@ export default function LoginScreen() {
             </Pressable>
 
             <Text style={[styles.footerNote, { color: theme.textTertiary }]}>
-              {t("auth.iservNote", lang)}
+              {t("auth.iservNote", lang).replace("{domain}", ISERV_DOMAIN)}
             </Text>
           </View>
         </ScrollView>

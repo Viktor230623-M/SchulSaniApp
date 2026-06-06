@@ -6,7 +6,7 @@ import {
   useFonts,
 } from "@expo-google-fonts/inter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Stack } from "expo-router";
+import { Redirect, Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -40,6 +40,7 @@ function RootLayoutNav() {
     return (
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="login" />
+        <Redirect href="/login" />
       </Stack>
     );
   }

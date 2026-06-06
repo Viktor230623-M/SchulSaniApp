@@ -85,15 +85,29 @@ router.patch("/:id/approve", requireAuth, requireRole("admin", "cto"), async (re
   res.json(safeUser(updated!));
 });
 
-router.patch("/:id/role", requireAuth, requireRole("admin", "cto"), async (req: AuthRequest, res) => {
+router.patch("/:id/role", requireAuth, requireRole("admin", "cto", "sanitaeter_leitung_admin"), async (req: AuthRequest, res) => {
   const { id } = req.params as { id: string };
   const { role } = req.body as { role: string };
+  const requestorRole = req.user!.role;
 
   if (!role || !(VALID_ROLES as readonly string[]).includes(role)) {
     res.status(400).json({ error: "Invalid role" }); return;
   }
-  if (req.user!.userId === id && req.user!.role !== "cto") {
+  if (req.user!.userId === id) {
     res.status(403).json({ error: "Cannot change your own role" }); return;
+  }
+
+  const [existing] = await db.select().from(usersTable).where(eq(usersTable.id, id));
+  if (!existing) { res.status(404).json({ error: "User not found" }); return; }
+
+  // Role hierarchy: define which target roles are protected from each requestor
+  const PROTECTED_FROM: Record<string, string[]> = {
+    admin: ["cto", "teacher", "sanitaeter_leitung_admin"],
+    sanitaeter_leitung_admin: ["cto", "teacher"],
+  };
+  const protectedRoles = PROTECTED_FROM[requestorRole] ?? [];
+  if (requestorRole !== "cto" && (protectedRoles.includes(existing.role) || role === "cto")) {
+    res.status(403).json({ error: "Insufficient permissions to change this user's role" }); return;
   }
 
   const [updated] = await db

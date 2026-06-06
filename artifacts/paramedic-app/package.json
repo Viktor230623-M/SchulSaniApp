@@ -1,6 +1,6 @@
 {
   "name": "@workspace/paramedic-app",
-  "version": "1.0.0-beta.1",
+  "version": "2.0.0",
   "private": true,
   "main": "expo-router/entry",
   "scripts": {

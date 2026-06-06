@@ -462,7 +462,7 @@ export default function NewsScreen() {
       <Modal visible={!!rejectNewsId} animationType="slide" presentationStyle="formSheet">
         <View style={[styles.modal, { backgroundColor: theme.background }]}>
           <View style={[styles.modalHeader, { borderBottomColor: theme.cardBorder }]}>
-            <Text style={[styles.modalTitle, { color: theme.text }]}>Grund für Ablehnung</Text>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>{t("news.rejectTitle", lang)}</Text>
             <Pressable onPress={() => setRejectNewsId(null)}>
               <Ionicons name="close" size={24} color={theme.text} />
             </Pressable>
@@ -471,7 +471,7 @@ export default function NewsScreen() {
             <TextInput
               value={rejectNewsReason}
               onChangeText={setRejectNewsReason}
-              placeholder="Begründung..."
+              placeholder={t("news.rejectPlaceholder", lang)}
               placeholderTextColor={theme.textTertiary}
               multiline
               numberOfLines={4}
@@ -482,7 +482,7 @@ export default function NewsScreen() {
               disabled={!rejectNewsReason.trim()}
               style={[styles.submitBtn, { backgroundColor: theme.danger }]}
             >
-              <Text style={styles.submitBtnText}>Ablehnen</Text>
+              <Text style={styles.submitBtnText}>{t("news.reject", lang)}</Text>
             </Pressable>
           </ScrollView>
         </View>
@@ -492,7 +492,7 @@ export default function NewsScreen() {
       <Modal visible={!!editItem} animationType="slide" presentationStyle="formSheet">
         <View style={[styles.modal, { backgroundColor: theme.background }]}>
           <View style={[styles.modalHeader, { borderBottomColor: theme.cardBorder }]}>
-            <Text style={[styles.modalTitle, { color: theme.text }]}>Beitrag bearbeiten</Text>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>{t("news.editTitle", lang)}</Text>
             <Pressable onPress={() => setEditItem(null)}>
               <Ionicons name="close" size={24} color={theme.text} />
             </Pressable>
@@ -521,9 +521,9 @@ export default function NewsScreen() {
               numberOfLines={6}
               style={[styles.textIn, { backgroundColor: theme.inputBackground, borderColor: theme.inputBorder, color: theme.text, height: 120, textAlignVertical: "top" }]}
             />
-            <Text style={[styles.hint, { color: theme.textTertiary }]}>Dein Beitrag wird nach dem Bearbeiten erneut zur Überprüfung eingereicht.</Text>
+            <Text style={[styles.hint, { color: theme.textTertiary }]}>{t("news.editSubmitHint", lang)}</Text>
             <Pressable onPress={handleEditSubmit} disabled={editSubmitting} style={[styles.submitBtn, { backgroundColor: "#8B5CF6" }]}>
-              {editSubmitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitBtnText}>Erneut einreichen</Text>}
+              {editSubmitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitBtnText}>{t("news.resubmit", lang)}</Text>}
             </Pressable>
           </ScrollView>
         </View>

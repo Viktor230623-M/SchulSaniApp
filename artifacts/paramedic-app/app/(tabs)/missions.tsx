@@ -168,11 +168,13 @@ function CreateMissionModal({
   onClose,
   onCreated,
   theme,
+  lang,
 }: {
   visible: boolean;
   onClose: () => void;
   onCreated: (m: Mission) => void;
   theme: ThemeColors;
+  lang: AppLanguage;
 }) {
   const [title, setTitle] = useState("");
   const [location, setLocation] = useState("");
@@ -191,7 +193,7 @@ function CreateMissionModal({
 
   async function submit() {
     if (!title.trim() || !location.trim()) {
-      Alert.alert("Fehler", "Titel und Ort sind Pflichtfelder.");
+      Alert.alert(t("common.error", lang), t("missions.requiredFieldsError", lang));
       return;
     }
     setSubmitting(true);
@@ -209,17 +211,17 @@ function CreateMissionModal({
       onClose();
     } catch (e) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      const message = e instanceof Error ? e.message : "Einsatz konnte nicht erstellt werden";
-      Alert.alert("Fehler", message);
+      const message = e instanceof Error ? e.message : t("missions.createError", lang);
+      Alert.alert(t("common.error", lang), message);
     } finally {
       setSubmitting(false);
     }
   }
 
   const priorities: { key: MissionPriority; label: string; color: string }[] = [
-    { key: "low", label: "Niedrig", color: "#22C55E" },
-    { key: "medium", label: "Mittel", color: "#F97316" },
-    { key: "high", label: "Hoch", color: "#EF4444" },
+    { key: "low", label: t("missions.low", lang), color: "#22C55E" },
+    { key: "medium", label: t("missions.medium", lang), color: "#F97316" },
+    { key: "high", label: t("missions.high", lang), color: "#EF4444" },
   ];
 
   return (
@@ -230,38 +232,38 @@ function CreateMissionModal({
       >
         <View style={[styles.modalHeader, { borderBottomColor: theme.cardBorder }]}>
           <Pressable onPress={onClose} hitSlop={10}>
-            <Text style={[styles.modalCancel, { color: theme.textSecondary }]}>Abbrechen</Text>
+            <Text style={[styles.modalCancel, { color: theme.textSecondary }]}>{t("common.cancel", lang)}</Text>
           </Pressable>
-          <Text style={[styles.modalTitle, { color: theme.text }]}>Neuer Einsatz</Text>
+          <Text style={[styles.modalTitle, { color: theme.text }]}>{t("missions.createTitle", lang)}</Text>
           <Pressable onPress={submit} disabled={submitting} hitSlop={10}>
             {submitting ? (
               <ActivityIndicator size="small" color={theme.tint} />
             ) : (
-              <Text style={[styles.modalSubmit, { color: theme.tint }]}>Erstellen</Text>
+              <Text style={[styles.modalSubmit, { color: theme.tint }]}>{t("news.create", lang)}</Text>
             )}
           </Pressable>
         </View>
 
         <ScrollView contentContainerStyle={styles.modalBody} keyboardShouldPersistTaps="handled">
-          <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>Titel *</Text>
+          <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>{t("missions.fieldTitle", lang)}</Text>
           <TextInput
             value={title}
             onChangeText={setTitle}
-            placeholder="z.B. Sturz auf dem Schulhof"
+            placeholder={t("missions.fieldTitlePlaceholder", lang)}
             placeholderTextColor={theme.textTertiary}
             style={[styles.input, { backgroundColor: theme.card, color: theme.text, borderColor: theme.cardBorder }]}
           />
 
-          <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>Ort *</Text>
+          <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>{t("missions.fieldLocation", lang)}</Text>
           <TextInput
             value={location}
             onChangeText={setLocation}
-            placeholder="z.B. Sporthalle 2"
+            placeholder={t("missions.fieldLocationPlaceholder", lang)}
             placeholderTextColor={theme.textTertiary}
             style={[styles.input, { backgroundColor: theme.card, color: theme.text, borderColor: theme.cardBorder }]}
           />
 
-          <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>Priorität</Text>
+          <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>{t("common.priority", lang)}</Text>
           <View style={styles.priorityRow}>
             {priorities.map((p) => {
               const selected = priority === p.key;
@@ -294,22 +296,22 @@ function CreateMissionModal({
             })}
           </View>
 
-          <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>Beschreibung</Text>
+          <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>{t("missions.fieldDescription", lang)}</Text>
           <TextInput
             value={description}
             onChangeText={setDescription}
-            placeholder="Was ist passiert?"
+            placeholder={t("missions.fieldDescriptionPlaceholder", lang)}
             placeholderTextColor={theme.textTertiary}
             multiline
             numberOfLines={4}
             style={[styles.input, styles.textarea, { backgroundColor: theme.card, color: theme.text, borderColor: theme.cardBorder }]}
           />
 
-          <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>Patienten-Info</Text>
+          <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>{t("missions.fieldPatient", lang)}</Text>
           <TextInput
             value={patientInfo}
             onChangeText={setPatientInfo}
-            placeholder="z.B. männlich, 15 Jahre, ansprechbar"
+            placeholder={t("missions.fieldPatientPlaceholder", lang)}
             placeholderTextColor={theme.textTertiary}
             multiline
             numberOfLines={3}
@@ -443,6 +445,7 @@ export default function MissionsScreen() {
         onClose={() => setCreateOpen(false)}
         onCreated={handleCreated}
         theme={theme}
+        lang={lang}
       />
     </View>
   );
