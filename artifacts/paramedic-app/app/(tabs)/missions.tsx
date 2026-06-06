@@ -72,11 +72,24 @@ function MissionCard({ mission, onAccept, onReject, theme, lang }: MissionCardPr
     setLoading(false);
   }
 
-  async function doReject() {
-    setLoading(true);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    await onReject();
-    setLoading(false);
+  function doReject() {
+    Alert.alert(
+      t("missions.reject", lang),
+      lang === "en" ? "Dismiss this mission?" : "Diesen Einsatz wirklich ablehnen?",
+      [
+        { text: t("common.cancel", lang), style: "cancel" },
+        {
+          text: t("missions.reject", lang),
+          style: "destructive",
+          onPress: async () => {
+            setLoading(true);
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            await onReject();
+            setLoading(false);
+          },
+        },
+      ]
+    );
   }
 
   function fmt(iso: string) {
@@ -442,7 +455,7 @@ const styles = StyleSheet.create({
   heading: { fontSize: 28, fontFamily: "Inter_700Bold" },
   countBadge: { borderRadius: 12, minWidth: 24, height: 24, alignItems: "center", justifyContent: "center", paddingHorizontal: 6 },
   countText: { color: "#fff", fontSize: 12, fontFamily: "Inter_700Bold" },
-  iconBtn: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  iconBtn: { width: 44, height: 44, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   card: { borderRadius: 16, padding: 16, borderWidth: 1, gap: 8, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 },
   cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
   badges: { flexDirection: "row", gap: 6, flexWrap: "wrap", flex: 1 },
