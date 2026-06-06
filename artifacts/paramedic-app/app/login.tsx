@@ -19,8 +19,10 @@ import { MedicalCross } from "@/components/MedicalCross";
 import { ISERV_DOMAIN, SCHOOL_NAME } from "@/constants/appConfig";
 import { t } from "@/constants/i18n";
 import { getTheme } from "@/constants/theme";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import ApiService, { setAuthToken } from "@/services/ApiService";
 import { useAppStore } from "@/store/useAppStore";
+import type { AppTheme } from "@/models";
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
@@ -51,7 +53,6 @@ export default function LoginScreen() {
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       const { user, isTealUnlocked, token } = await ApiService.login({ username, password }, rememberMe);
-      if (isTealUnlocked) setTheme("teal");
       if (token) {
         setAuthToken(token);
         if (rememberMe || Platform.OS !== "web") {
@@ -59,6 +60,12 @@ export default function LoginScreen() {
         }
       }
       login(user);
+      const savedTheme = await AsyncStorage.getItem(`user_theme_${user.id}`);
+      if (savedTheme) {
+        setTheme(savedTheme as AppTheme);
+      } else if (isTealUnlocked) {
+        setTheme("teal");
+      }
       router.replace("/(tabs)/news");
     } catch (err) {
       const message = err instanceof Error ? err.message : t("auth.loginFailed", lang);

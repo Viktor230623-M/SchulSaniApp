@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import { Router } from "express";
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { db, loaTable } from "@workspace/db";
 import { requireAuth, requireRole, type AuthRequest } from "../middlewares/auth";
 import { notifyUser } from "../services/notifications";
@@ -11,8 +11,8 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
   const { userId, role } = req.user!;
   const canSeeAll = ["admin", "teacher", "sanitaeter_leitung", "sanitaeter_leitung_admin", "cto"].includes(role);
   const items = canSeeAll
-    ? await db.select().from(loaTable)
-    : await db.select().from(loaTable).where(eq(loaTable.userId, userId));
+    ? await db.select().from(loaTable).orderBy(desc(loaTable.createdAt))
+    : await db.select().from(loaTable).where(eq(loaTable.userId, userId)).orderBy(desc(loaTable.createdAt));
   res.json(items);
 });
 
@@ -37,12 +37,13 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
     res.status(400).json({ error: "fromDate and toDate must be valid ISO date strings" });
     return;
   }
+  const toYMD = (d: Date) => d.toISOString().split("T")[0]!;
   const newReq = {
     id: randomUUID(),
     userId,
     userName: userName ?? userId,
-    fromDate: parsedFromDate,
-    toDate: parsedToDate,
+    fromDate: toYMD(parsedFromDate),
+    toDate: toYMD(parsedToDate),
     reason,
     status: "pending" as const,
     createdAt: new Date(),

@@ -18,20 +18,35 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { t } from "@/constants/i18n";
 import { getTheme } from "@/constants/theme";
+import { DatePickerField } from "@/components/DatePickerField";
 import type { LOARequest, LOAStatus } from "@/models";
 import ApiService from "@/services/ApiService";
 import { useAppStore } from "@/store/useAppStore";
 
-function StatusBadge({ status }: { status: LOAStatus }) {
+function formatDisplayDate(dateStr: string): string {
+  if (!dateStr) return "—";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  const month = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const year = d.getUTCFullYear();
+  return `${day}.${month}.${year}`;
+}
+
+function toYMD(d: Date): string {
+  return d.toISOString().split("T")[0]!;
+}
+
+function StatusBadge({ status, lang }: { status: LOAStatus; lang: string }) {
   const cfg = {
-    pending: { label: "Ausstehend", color: "#F97316", bg: "#FFF7ED" },
-    approved: { label: "Genehmigt", color: "#22C55E", bg: "#F0FDF4" },
-    rejected: { label: "Abgelehnt", color: "#EF4444", bg: "#FEF2F2" },
-    appealed: { label: "Einspruch", color: "#8B5CF6", bg: "#F5F3FF" },
+    pending: { key: "loa.pending", color: "#F97316", bg: "#FFF7ED" },
+    approved: { key: "loa.approved", color: "#22C55E", bg: "#F0FDF4" },
+    rejected: { key: "loa.rejected", color: "#EF4444", bg: "#FEF2F2" },
+    appealed: { key: "loa.appealed", color: "#8B5CF6", bg: "#F5F3FF" },
   }[status];
   return (
     <View style={[styles.badge, { backgroundColor: cfg.bg }]}>
-      <Text style={[styles.badgeText, { color: cfg.color }]}>{cfg.label}</Text>
+      <Text style={[styles.badgeText, { color: cfg.color }]}>{t(cfg.key, lang as any)}</Text>
     </View>
   );
 }
@@ -44,11 +59,14 @@ export default function LOAScreen() {
   const user = useAppStore((s) => s.user);
   const { loaRequests, setLOARequests, addLOA, updateLOA } = useAppStore();
 
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
+  const [fromDate, setFromDate] = useState<Date>(new Date(today));
+  const [toDate, setToDate] = useState<Date>(new Date(today));
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [appealText, setAppealText] = useState("");
@@ -58,7 +76,7 @@ export default function LOAScreen() {
 
   const role = user?.role ?? "";
   const canModerate = ["admin", "sanitaeter_leitung_admin", "teacher", "cto"].includes(role);
-  const canCreate = ["student_paramedic", "sanitaeter_leitung", "sanitaeter_leitung_admin", "admin", "cto"].includes(role);
+  const canCreate = ["student_paramedic", "sanitaeter_leitung", "sanitaeter_leitung_admin", "admin", "cto", "sanitaeter"].includes(role);
 
   useEffect(() => { load(); }, []);
 
@@ -81,32 +99,31 @@ export default function LOAScreen() {
   }
 
   async function handleCreate() {
-    if (!fromDate.trim() || !toDate.trim() || !reason.trim()) return;
+    if (!reason.trim()) return;
     setSubmitting(true);
     try {
       const req = await ApiService.createLOA({
         userId: user?.id ?? "",
         userName: `${user?.firstName} ${user?.lastName}`.trim(),
-        fromDate,
-        toDate,
+        fromDate: toYMD(fromDate),
+        toDate: toYMD(toDate),
         reason,
       });
-      // CTO LOA gets auto-approved — await create result first, then approve on returned id
       if (role === "cto") {
-        const approved = await ApiService.approveLOA(req.id, "Automatisch genehmigt");
+        const approved = await ApiService.approveLOA(req.id, t("loa.autoApproved", lang));
         addLOA(approved);
       } else {
         addLOA(req);
       }
-      setFromDate("");
-      setToDate("");
+      setFromDate(new Date(today));
+      setToDate(new Date(today));
       setReason("");
       setShowCreate(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (err) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      const message = err instanceof Error ? err.message : "Abwesenheitsantrag konnte nicht erstellt werden.";
-      Alert.alert("Fehler", message);
+      const message = err instanceof Error ? err.message : lang === "de" ? "Abwesenheitsantrag konnte nicht erstellt werden." : "Could not create absence request.";
+      Alert.alert(t("common.error", lang), message);
     } finally {
       setSubmitting(false);
     }
@@ -171,7 +188,7 @@ export default function LOAScreen() {
           !loading ? (
             <View style={styles.empty}>
               <Ionicons name="calendar-outline" size={52} color={theme.textTertiary} />
-              <Text style={[styles.emptyTitle, { color: theme.text }]}>Keine Anträge</Text>
+              <Text style={[styles.emptyTitle, { color: theme.text }]}>{t("loa.noRequests", lang)}</Text>
             </View>
           ) : (
             <ActivityIndicator size="large" color={theme.tint} style={{ marginTop: 60 }} />
@@ -182,41 +199,39 @@ export default function LOAScreen() {
           <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
             <View style={styles.cardRow}>
               <Text style={[styles.name, { color: theme.text }]}>{item.userName}</Text>
-              <StatusBadge status={item.status} />
+              <StatusBadge status={item.status} lang={lang} />
             </View>
             <Text style={[styles.dates, { color: theme.textSecondary }]}>
-              {item.fromDate} – {item.toDate}
+              {formatDisplayDate(item.fromDate)} – {formatDisplayDate(item.toDate)}
             </Text>
             <Text style={[styles.reason, { color: theme.text }]}>{item.reason}</Text>
             {item.adminNote && (
               <View style={[styles.noteBox, { backgroundColor: theme.backgroundTertiary }]}>
-                <Text style={[styles.noteText, { color: theme.textSecondary }]}>📝 {item.adminNote}</Text>
+                <Text style={[styles.noteText, { color: theme.textSecondary }]}>{item.adminNote}</Text>
               </View>
             )}
-            {/* Moderator actions */}
             {canModerate && item.status === "pending" && (
               <View style={styles.actions}>
                 <Pressable
                   onPress={() => { setRejectId(item.id); }}
                   style={[styles.btn, { borderColor: theme.danger }]}
                 >
-                  <Text style={[styles.btnText, { color: theme.danger }]}>Ablehnen</Text>
+                  <Text style={[styles.btnText, { color: theme.danger }]}>{t("loa.reject", lang)}</Text>
                 </Pressable>
                 <Pressable
                   onPress={() => handleApprove(item.id)}
                   style={[styles.btn, { backgroundColor: theme.tint, borderColor: theme.tint }]}
                 >
-                  <Text style={[styles.btnText, { color: "#fff" }]}>Genehmigen</Text>
+                  <Text style={[styles.btnText, { color: "#fff" }]}>{t("loa.approve", lang)}</Text>
                 </Pressable>
               </View>
             )}
-            {/* Appeal for own rejected */}
             {item.userId === user?.id && item.status === "rejected" && (
               <Pressable
                 onPress={() => setAppealId(item.id)}
                 style={[styles.btn, { borderColor: "#8B5CF6", marginTop: 8 }]}
               >
-                <Text style={[styles.btnText, { color: "#8B5CF6" }]}>Einspruch einlegen</Text>
+                <Text style={[styles.btnText, { color: "#8B5CF6" }]}>{t("loa.appeal", lang)}</Text>
               </Pressable>
             )}
           </View>
@@ -227,30 +242,26 @@ export default function LOAScreen() {
       <Modal visible={showCreate} animationType="slide" presentationStyle="formSheet">
         <View style={[styles.modal, { backgroundColor: theme.background }]}>
           <View style={[styles.modalHeader, { borderBottomColor: theme.cardBorder }]}>
-            <Text style={[styles.modalTitle, { color: theme.text }]}>Neuer LOA Antrag</Text>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>{t("loa.modalTitle", lang)}</Text>
             <Pressable onPress={() => setShowCreate(false)}>
               <Ionicons name="close" size={24} color={theme.text} />
             </Pressable>
           </View>
           <ScrollView contentContainerStyle={{ padding: 20, gap: 14 }}>
-            <TextInput
+            <DatePickerField
               value={fromDate}
-              onChangeText={setFromDate}
-              placeholder="Von (z.B. 2025-04-14)"
-              placeholderTextColor={theme.textTertiary}
-              style={[styles.input, { backgroundColor: theme.inputBackground, borderColor: theme.inputBorder, color: theme.text }]}
+              onChange={setFromDate}
+              label={t("loa.from", lang)}
             />
-            <TextInput
+            <DatePickerField
               value={toDate}
-              onChangeText={setToDate}
-              placeholder="Bis (z.B. 2025-04-18)"
-              placeholderTextColor={theme.textTertiary}
-              style={[styles.input, { backgroundColor: theme.inputBackground, borderColor: theme.inputBorder, color: theme.text }]}
+              onChange={setToDate}
+              label={t("loa.to", lang)}
             />
             <TextInput
               value={reason}
               onChangeText={setReason}
-              placeholder="Grund"
+              placeholder={t("loa.reasonPlaceholder", lang)}
               placeholderTextColor={theme.textTertiary}
               multiline
               numberOfLines={4}
@@ -261,7 +272,7 @@ export default function LOAScreen() {
               disabled={submitting}
               style={[styles.submitBtn, { backgroundColor: theme.tint }]}
             >
-              {submitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitBtnText}>Einreichen</Text>}
+              {submitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitBtnText}>{t("loa.submit", lang)}</Text>}
             </Pressable>
           </ScrollView>
         </View>
@@ -271,7 +282,7 @@ export default function LOAScreen() {
       <Modal visible={!!rejectId} animationType="slide" presentationStyle="formSheet">
         <View style={[styles.modal, { backgroundColor: theme.background }]}>
           <View style={[styles.modalHeader, { borderBottomColor: theme.cardBorder }]}>
-            <Text style={[styles.modalTitle, { color: theme.text }]}>Grund für Ablehnung</Text>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>{t("loa.rejectTitle", lang)}</Text>
             <Pressable onPress={() => setRejectId(null)}>
               <Ionicons name="close" size={24} color={theme.text} />
             </Pressable>
@@ -280,7 +291,7 @@ export default function LOAScreen() {
             <TextInput
               value={rejectReason}
               onChangeText={setRejectReason}
-              placeholder="Begründung..."
+              placeholder={t("loa.rejectPlaceholder", lang)}
               placeholderTextColor={theme.textTertiary}
               multiline
               numberOfLines={4}
@@ -290,7 +301,7 @@ export default function LOAScreen() {
               onPress={() => rejectId && handleReject(rejectId)}
               style={[styles.submitBtn, { backgroundColor: "#EF4444" }]}
             >
-              <Text style={styles.submitBtnText}>Ablehnen</Text>
+              <Text style={styles.submitBtnText}>{t("loa.reject", lang)}</Text>
             </Pressable>
           </View>
         </View>
@@ -300,7 +311,7 @@ export default function LOAScreen() {
       <Modal visible={!!appealId} animationType="slide" presentationStyle="formSheet">
         <View style={[styles.modal, { backgroundColor: theme.background }]}>
           <View style={[styles.modalHeader, { borderBottomColor: theme.cardBorder }]}>
-            <Text style={[styles.modalTitle, { color: theme.text }]}>Einspruch einlegen</Text>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>{t("loa.appealModalTitle", lang)}</Text>
             <Pressable onPress={() => setAppealId(null)}>
               <Ionicons name="close" size={24} color={theme.text} />
             </Pressable>
@@ -309,7 +320,7 @@ export default function LOAScreen() {
             <TextInput
               value={appealText}
               onChangeText={setAppealText}
-              placeholder="Dein Einspruch..."
+              placeholder={t("loa.appealPlaceholder", lang)}
               placeholderTextColor={theme.textTertiary}
               multiline
               numberOfLines={4}
@@ -319,7 +330,7 @@ export default function LOAScreen() {
               onPress={() => appealId && handleAppeal(appealId)}
               style={[styles.submitBtn, { backgroundColor: "#8B5CF6" }]}
             >
-              <Text style={styles.submitBtnText}>Einspruch einreichen</Text>
+              <Text style={styles.submitBtnText}>{t("loa.appealSubmit", lang)}</Text>
             </Pressable>
           </View>
         </View>

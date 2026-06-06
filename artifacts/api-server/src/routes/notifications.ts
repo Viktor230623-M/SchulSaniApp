@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { db, notificationsTable } from "@workspace/db";
 import { requireAuth, type AuthRequest } from "../middlewares/auth";
 import { saveDeviceToken, removeDeviceToken } from "../services/notifications";
@@ -10,8 +10,8 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
   const { userId, role } = req.user!;
   const canSeeAll = ["admin", "cto", "sanitaeter_leitung", "sanitaeter_leitung_admin"].includes(role);
   const items = canSeeAll
-    ? await db.select().from(notificationsTable)
-    : await db.select().from(notificationsTable).where(eq(notificationsTable.userId, userId));
+    ? await db.select().from(notificationsTable).orderBy(desc(notificationsTable.createdAt))
+    : await db.select().from(notificationsTable).where(eq(notificationsTable.userId, userId)).orderBy(desc(notificationsTable.createdAt));
   res.json(items);
 });
 

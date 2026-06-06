@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import { Router } from "express";
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { db, newsTable, usersTable } from "@workspace/db";
 import { requireAuth, requireRole, type AuthRequest } from "../middlewares/auth";
 import { notifySanitaeters } from "../services/notifications";
@@ -10,7 +10,7 @@ const router = Router();
 router.get("/", requireAuth, async (req: AuthRequest, res) => {
   const { role, userId } = req.user!;
   const canModerate = ["admin", "teacher", "cto"].includes(role);
-  const items = await db.select().from(newsTable);
+  const items = await db.select().from(newsTable).orderBy(desc(newsTable.publishedAt));
   const filtered = items.filter((n) => {
     if (canModerate) return true;
     if (n.status === "rejected") return false;

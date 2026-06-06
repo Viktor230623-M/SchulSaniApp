@@ -44,6 +44,10 @@ export default function DutyScreen() {
   const animatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
 
   useEffect(() => {
+    // sync own duty status from backend so it's correct after app reopen
+    ApiService.getDutyStatus()
+      .then((s) => setDutyStatus(s.status))
+      .catch(() => {});
     setListLoading(true);
     ApiService.getOnDutyUsers()
       .then(setOnDutyUsers)
@@ -78,15 +82,15 @@ export default function DutyScreen() {
   }
 
   function roleLabelShort(role: User["role"]) {
-  return {
-    cto: "CTO",
-    student_paramedic: "San.",
-    sanitaeter_leitung: "Ltg.",
-    sanitaeter_leitung_admin: "Ltg.",
-    admin: "Admin",
-    teacher: "Lehrer",
-  }[role] ?? role;
-}
+    return {
+      cto: lang === "de" ? "Eigent." : "Owner",
+      student_paramedic: "San.",
+      sanitaeter_leitung: "Ltg.",
+      sanitaeter_leitung_admin: "Ltg.",
+      admin: "Admin",
+      teacher: "Lehrer",
+    }[role] ?? role;
+  }
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
 
