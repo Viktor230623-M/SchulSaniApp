@@ -5,6 +5,7 @@ import rateLimit from "express-rate-limit";
 import router from "./routes";
 
 const app: Express = express();
+app.disable("x-powered-by");
 
 const allowedOrigins = process.env["ALLOWED_ORIGINS"]?.split(",").map((o) => o.trim()) || ["https://sani.avo-network.com"];
 app.use(cors({
@@ -40,6 +41,9 @@ app.use(express.json({
 }));
 app.use(express.urlencoded({ extended: true, limit: "50kb" }));
 
+app.use("/api", router);
+
+// Error handler must be registered AFTER routes so it catches errors thrown within them.
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   if (err.message === "Invalid JSON") {
     res.status(400).json({ error: "Invalid JSON in request body" });
@@ -48,7 +52,5 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
   console.error("Unhandled error:", err);
   res.status(500).json({ error: "Internal server error" });
 });
-
-app.use("/api", router);
 
 export default app;

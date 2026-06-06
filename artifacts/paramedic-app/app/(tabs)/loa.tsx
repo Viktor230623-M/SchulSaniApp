@@ -15,6 +15,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import Animated, { useSharedValue, useAnimatedStyle, withSpring } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { t } from "@/constants/i18n";
 import { getTheme } from "@/constants/theme";
@@ -79,6 +80,18 @@ export default function LOAScreen() {
   const canModerate = ["admin", "sanitaeter_leitung", "sanitaeter_leitung_admin", "teacher", "cto"].includes(role);
   const canCreate = ["student_paramedic", "sanitaeter_leitung", "sanitaeter_leitung_admin", "admin", "cto", "sanitaeter"].includes(role);
   const [tab, setTab] = useState<"mine" | "all">("mine");
+  const [segmentWidth, setSegmentWidth] = useState(0);
+  const tabAnim = useSharedValue(0);
+  const pillWidth = segmentWidth > 0 ? (segmentWidth - 6) / 2 : 0;
+  const pillStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: tabAnim.value * pillWidth }],
+  }));
+
+  function switchTab(newTab: "mine" | "all") {
+    setTab(newTab);
+    tabAnim.value = withSpring(newTab === "all" ? 1 : 0, { damping: 20, stiffness: 250 });
+    Haptics.selectionAsync().catch(() => {});
+  }
 
   useEffect(() => { load(); }, []);
 
@@ -192,19 +205,21 @@ export default function LOAScreen() {
               )}
             </View>
             {canModerate && (
-              <View style={[styles.segmentRow, { backgroundColor: theme.backgroundTertiary }]}>
-                <Pressable
-                  onPress={() => setTab("mine")}
-                  style={[styles.segmentBtn, tab === "mine" && { backgroundColor: theme.tint }]}
-                >
+              <View
+                style={[styles.segmentRow, { backgroundColor: theme.backgroundTertiary }]}
+                onLayout={(e) => setSegmentWidth(e.nativeEvent.layout.width)}
+              >
+                {segmentWidth > 0 && (
+                  <Animated.View
+                    style={[styles.segmentPill, { backgroundColor: theme.tint, width: pillWidth }, pillStyle]}
+                  />
+                )}
+                <Pressable onPress={() => switchTab("mine")} style={styles.segmentBtn}>
                   <Text style={[styles.segmentText, { color: tab === "mine" ? "#fff" : theme.textSecondary }]}>
                     {lang === "de" ? "Meine Anträge" : "My Requests"}
                   </Text>
                 </Pressable>
-                <Pressable
-                  onPress={() => setTab("all")}
-                  style={[styles.segmentBtn, tab === "all" && { backgroundColor: theme.tint }]}
-                >
+                <Pressable onPress={() => switchTab("all")} style={styles.segmentBtn}>
                   <Text style={[styles.segmentText, { color: tab === "all" ? "#fff" : theme.textSecondary }]}>
                     {lang === "de" ? "Alle Anträge" : "All Requests"}
                     {othersRequests.filter((r) => r.status === "pending").length > 0 && (
@@ -388,8 +403,9 @@ const styles = StyleSheet.create({
   actions: { flexDirection: "row", gap: 8, marginTop: 8 },
   btn: { flex: 1, paddingVertical: 12, borderRadius: 10, borderWidth: 1, alignItems: "center" },
   btnText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
-  segmentRow: { flexDirection: "row", borderRadius: 12, padding: 3, gap: 3 },
-  segmentBtn: { flex: 1, paddingVertical: 9, borderRadius: 10, alignItems: "center" },
+  segmentRow: { flexDirection: "row", borderRadius: 12, padding: 3 },
+  segmentPill: { position: "absolute", top: 3, bottom: 3, left: 3, borderRadius: 10 },
+  segmentBtn: { flex: 1, paddingVertical: 9, borderRadius: 10, alignItems: "center", zIndex: 1 },
   segmentText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
   empty: { flex: 1, alignItems: "center", justifyContent: "center", paddingTop: 80, gap: 12 },
   emptyTitle: { fontSize: 18, fontFamily: "Inter_600SemiBold" },

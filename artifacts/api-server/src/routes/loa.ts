@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import { Router } from "express";
 import { desc, eq } from "drizzle-orm";
-import { db, loaTable } from "@workspace/db";
+import { db, loaTable, usersTable } from "@workspace/db";
 import { requireAuth, requireRole, type AuthRequest } from "../middlewares/auth";
 import { notifyUser } from "../services/notifications";
 import { translateToLanguages } from "../services/translator";
@@ -19,7 +19,7 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
 
 router.post("/", requireAuth, async (req: AuthRequest, res) => {
   const { userId } = req.user!;
-  const { fromDate, toDate, reason, userName } = req.body;
+  const { fromDate, toDate, reason } = req.body;
   if (!fromDate || !toDate || !reason) {
     res.status(400).json({ error: "fromDate, toDate, reason required" });
     return;
@@ -28,21 +28,25 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
     res.status(400).json({ error: "reason max 1000 characters" });
     return;
   }
-  if (userName && (typeof userName !== "string" || userName.length > 200)) {
-    res.status(400).json({ error: "userName max 200 characters" });
-    return;
-  }
   const parsedFromDate = new Date(fromDate);
   const parsedToDate = new Date(toDate);
   if (isNaN(parsedFromDate.getTime()) || isNaN(parsedToDate.getTime())) {
     res.status(400).json({ error: "fromDate and toDate must be valid ISO date strings" });
     return;
   }
+  // Derive the display name server-side from the authenticated user — never trust the client.
+  const [profile] = await db
+    .select({ firstName: usersTable.firstName, lastName: usersTable.lastName })
+    .from(usersTable)
+    .where(eq(usersTable.id, userId));
+  const resolvedName = profile
+    ? `${profile.firstName ?? ""} ${profile.lastName ?? ""}`.trim() || userId
+    : userId;
   const toYMD = (d: Date) => d.toISOString().split("T")[0]!;
   const newReq = {
     id: randomUUID(),
     userId,
-    userName: userName ?? userId,
+    userName: resolvedName,
     fromDate: toYMD(parsedFromDate),
     toDate: toYMD(parsedToDate),
     reason,

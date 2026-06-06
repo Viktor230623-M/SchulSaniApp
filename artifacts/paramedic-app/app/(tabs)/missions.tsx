@@ -42,12 +42,14 @@ function PriorityBadge({ priority }: { priority: MissionPriority }) {
 }
 
 function StatusBadge({ status }: { status: MissionStatus }) {
-  const cfg = {
+  const cfg = ({
     pending: { label: "Ausstehend", bg: "#EFF6FF", text: "#3B82F6" },
     accepted: { label: "Angenommen", bg: "#F0FDF4", text: "#22C55E" },
     rejected: { label: "Abgelehnt", bg: "#FEF2F2", text: "#EF4444" },
     completed: { label: "Abgeschlossen", bg: "#F3F4F6", text: "#6B7280" },
-  }[status];
+    archived: { label: "Archiviert", bg: "#F3F4F6", text: "#9CA3AF" },
+  } as Record<string, { label: string; bg: string; text: string }>)[status]
+    ?? { label: status, bg: "#F3F4F6", text: "#9CA3AF" };
   return (
     <View style={[styles.statusBadge, { backgroundColor: cfg.bg }]}>
       <Text style={[styles.statusBadgeText, { color: cfg.text }]}>{cfg.label}</Text>
