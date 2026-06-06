@@ -145,6 +145,12 @@ const translations = {
       noNotificationsDesc: "Du bist auf dem neuesten Stand.",
       highPriority: "Wichtige Meldungen",
     },
+    time: {
+      justNow: "Gerade eben",
+      minutesAgo: "vor {n} Min.",
+      hoursAgo: "vor {n} Std.",
+      daysAgo: "vor {n} Tagen",
+    },
     settings: {
       title: "Einstellungen",
       profile: "Profil",
@@ -328,6 +334,12 @@ const translations = {
       noNotifications: "No Notifications",
       noNotificationsDesc: "You're all caught up.",
       highPriority: "Priority Alerts",
+    },
+    time: {
+      justNow: "Just now",
+      minutesAgo: "{n}m ago",
+      hoursAgo: "{n}h ago",
+      daysAgo: "{n}d ago",
     },
     settings: {
       title: "Settings",

@@ -35,7 +35,7 @@ export default function TabLayout() {
           ...(isWeb ? { height: 84 } : {}),
         },
         tabBarLabelStyle: {
-          fontSize: 10,
+          fontSize: 11,
           fontFamily: "Inter_500Medium",
         },
         tabBarBackground: () =>

@@ -35,31 +35,31 @@ function notifConfig(type: NotificationType) {
   return map[type] ?? map["reminder"]!;
 }
 
-function timeAgo(iso: string | null | undefined) {
+function timeAgo(iso: string | null | undefined, lang: AppLanguage) {
   if (!iso) return "";
   const diff = Date.now() - new Date(iso).getTime();
   const m = Math.floor(diff / 60000);
-  if (m < 1) return "Gerade eben";
-  if (m < 60) return `vor ${m} Min.`;
+  if (m < 1) return t("time.justNow", lang);
+  if (m < 60) return t("time.minutesAgo", lang).replace("{n}", String(m));
   const h = Math.floor(m / 60);
-  if (h < 24) return `vor ${h} Std.`;
-  return `vor ${Math.floor(h / 24)} Tagen`;
+  if (h < 24) return t("time.hoursAgo", lang).replace("{n}", String(h));
+  return t("time.daysAgo", lang).replace("{n}", String(Math.floor(h / 24)));
 }
 
 function HighPriorityBanner({ items, theme }: { items: NotificationItem[]; theme: ThemeColors }) {
   if (items.length === 0) return null;
   return (
-    <View style={styles.hpSection}>
+    <View style={[styles.hpSection, { backgroundColor: theme.danger + "20", borderColor: theme.danger + "40" }]}>
       <View style={styles.hpHeader}>
-        <Ionicons name="warning" size={16} color="#EF4444" />
-        <Text style={styles.hpTitle}>Wichtige Meldungen</Text>
+        <Ionicons name="warning" size={16} color={theme.danger} />
+        <Text style={[styles.hpTitle, { color: theme.danger }]}>Wichtige Meldungen</Text>
       </View>
       {items.map((n) => (
         <View key={n.id} style={styles.hpCard}>
-          <View style={styles.hpDot} />
+          <View style={[styles.hpDot, { backgroundColor: theme.danger }]} />
           <View style={{ flex: 1 }}>
-            <Text style={styles.hpCardTitle}>{n.title}</Text>
-            <Text style={styles.hpCardBody}>{n.body}</Text>
+            <Text style={[styles.hpCardTitle, { color: theme.danger }]}>{n.title}</Text>
+            <Text style={[styles.hpCardBody, { color: theme.danger }]}>{n.body}</Text>
           </View>
         </View>
       ))}
@@ -67,7 +67,7 @@ function HighPriorityBanner({ items, theme }: { items: NotificationItem[]; theme
   );
 }
 
-function NotifCard({ item, theme }: { item: NotificationItem; theme: ThemeColors }) {
+function NotifCard({ item, theme, lang }: { item: NotificationItem; theme: ThemeColors; lang: AppLanguage }) {
   const conf = notifConfig(item.type);
   return (
     <View style={[styles.card, { backgroundColor: theme.card, borderColor: !item.isRead ? theme.tint + "44" : theme.cardBorder }]}>
@@ -79,7 +79,7 @@ function NotifCard({ item, theme }: { item: NotificationItem; theme: ThemeColors
           <Text style={[styles.notifTitle, { color: theme.text, fontFamily: !item.isRead ? "Inter_700Bold" : "Inter_500Medium" }]} numberOfLines={1}>
             {item.title}
           </Text>
-          <Text style={[styles.timeText, { color: theme.textTertiary }]}>{timeAgo(item.createdAt)}</Text>
+          <Text style={[styles.timeText, { color: theme.textTertiary }]}>{timeAgo(item.createdAt, lang)}</Text>
         </View>
         <Text style={[styles.notifBody, { color: theme.textSecondary }]} numberOfLines={2}>{item.body}</Text>
       </View>
@@ -95,6 +95,7 @@ export default function NotificationsScreen() {
   const theme = getTheme(themeKey);
   const { notifications, notificationsLoading, setNotifications, setNotificationsLoading, markAllNotificationsRead } = useAppStore();
   const [refreshing, setRefreshing] = useState(false);
+  const [markingAll, setMarkingAll] = useState(false);
 
   useEffect(() => { load(); }, []);
 
@@ -120,9 +121,14 @@ export default function NotificationsScreen() {
   }
 
   async function handleMarkAllRead() {
+    setMarkingAll(true);
     try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } catch {}
-    await ApiService.markAllNotificationsRead();
-    markAllNotificationsRead();
+    try {
+      await ApiService.markAllNotificationsRead();
+      markAllNotificationsRead();
+    } finally {
+      setMarkingAll(false);
+    }
   }
 
   const safeNotifications = Array.isArray(notifications) ? notifications : [];
@@ -160,9 +166,13 @@ export default function NotificationsScreen() {
               {unread > 0 && (
                 <Pressable
                   onPress={handleMarkAllRead}
-                  style={[styles.markAllBtn, { backgroundColor: theme.tintLight, borderColor: theme.tint + "44" }]}
+                  disabled={markingAll}
+                  style={[styles.markAllBtn, { backgroundColor: theme.tintLight, borderColor: theme.tint + "44", opacity: markingAll ? 0.6 : 1 }]}
                 >
-                  <Text style={[styles.markAllText, { color: theme.tintDark }]}>{t("notifications.markAllRead", lang)}</Text>
+                  {markingAll
+                    ? <ActivityIndicator size="small" color={theme.tintDark} />
+                    : <Text style={[styles.markAllText, { color: theme.tintDark }]}>{t("notifications.markAllRead", lang)}</Text>
+                  }
                 </Pressable>
               )}
             </View>
@@ -181,7 +191,7 @@ export default function NotificationsScreen() {
           )
         }
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.tint} />}
-        renderItem={({ item }) => <NotifCard item={item} theme={theme} />}
+        renderItem={({ item }) => <NotifCard item={item} theme={theme} lang={lang} />}
         showsVerticalScrollIndicator={false}
       />
     </View>
@@ -194,7 +204,7 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 12 },
   heading: { fontSize: 28, fontFamily: "Inter_700Bold" },
   unreadHint: { fontSize: 13, fontFamily: "Inter_400Regular", marginTop: 2 },
-  markAllBtn: { paddingHorizontal: 12, paddingVertical: 7, backgroundColor: "#F0FDF4", borderRadius: 10, borderWidth: 1 },
+  markAllBtn: { paddingHorizontal: 12, paddingVertical: 11, backgroundColor: "#F0FDF4", borderRadius: 10, borderWidth: 1 },
   markAllText: { fontSize: 13, fontFamily: "Inter_500Medium" },
   hpSection: { backgroundColor: "#FEF2F2", borderRadius: 14, padding: 14, marginBottom: 14, gap: 10, borderWidth: 1, borderColor: "#FECACA" },
   hpHeader: { flexDirection: "row", alignItems: "center", gap: 6 },
@@ -203,8 +213,8 @@ const styles = StyleSheet.create({
   hpDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#EF4444", marginTop: 5, flexShrink: 0 },
   hpCardTitle: { fontSize: 13, fontFamily: "Inter_700Bold", color: "#991B1B" },
   hpCardBody: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#DC2626", lineHeight: 16, marginTop: 2 },
-  card: { flexDirection: "row", borderRadius: 14, padding: 14, borderWidth: 1, gap: 12, alignItems: "center", shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 6, elevation: 1 },
-  iconWrap: { width: 42, height: 42, borderRadius: 13, alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  card: { flexDirection: "row", borderRadius: 14, padding: 14, borderWidth: 1, gap: 12, alignItems: "center", shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 },
+  iconWrap: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center", flexShrink: 0 },
   cardContent: { flex: 1, gap: 4 },
   cardTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 8 },
   notifTitle: { fontSize: 14, flex: 1 },
