@@ -15,7 +15,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import Animated, { useSharedValue, useAnimatedStyle, withSpring } from "react-native-reanimated";
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { t } from "@/constants/i18n";
 import { getTheme } from "@/constants/theme";
@@ -89,7 +89,7 @@ export default function LOAScreen() {
 
   function switchTab(newTab: "mine" | "all") {
     setTab(newTab);
-    tabAnim.value = withSpring(newTab === "all" ? 1 : 0, { damping: 20, stiffness: 250 });
+    tabAnim.value = withTiming(newTab === "all" ? 1 : 0, { duration: 200, easing: Easing.out(Easing.cubic) });
     Haptics.selectionAsync().catch(() => {});
   }
 
