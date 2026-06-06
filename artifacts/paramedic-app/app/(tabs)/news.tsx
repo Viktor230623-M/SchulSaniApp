@@ -26,20 +26,20 @@ import { localized } from "@/utils/localize";
 
 type Filter = "all" | NewsStatus;
 
-function categoryConfig(cat: NewsItem["category"], tint: string) {
+function categoryConfig(cat: NewsItem["category"], tint: string, lang: AppLanguage) {
   return {
-    announcement: { label: "Ankündigung", icon: "megaphone-outline" as const, color: "#3B82F6", bg: "#EFF6FF" },
-    training: { label: "Training", icon: "fitness-outline" as const, color: "#8B5CF6", bg: "#F5F3FF" },
-    update: { label: "Update", icon: "refresh-outline" as const, color: tint, bg: "#F0FDF4" },
-    alert: { label: "Wichtig", icon: "alert-circle-outline" as const, color: "#EF4444", bg: "#FEF2F2" },
+    announcement: { label: t("news.catAnnouncement", lang), icon: "megaphone-outline" as const, color: "#3B82F6", bg: "#EFF6FF" },
+    training: { label: t("news.catTraining", lang), icon: "fitness-outline" as const, color: "#8B5CF6", bg: "#F5F3FF" },
+    update: { label: t("news.catUpdate", lang), icon: "refresh-outline" as const, color: tint, bg: "#F0FDF4" },
+    alert: { label: t("news.catAlert", lang), icon: "alert-circle-outline" as const, color: "#EF4444", bg: "#FEF2F2" },
   }[cat];
 }
 
-function StatusChip({ status }: { status: NewsStatus }) {
+function StatusChip({ status, lang }: { status: NewsStatus; lang: AppLanguage }) {
   const cfg = {
-    pending: { label: "Ausstehend", color: "#F97316", bg: "#FFF7ED" },
-    approved: { label: "Genehmigt", color: "#22C55E", bg: "#F0FDF4" },
-    rejected: { label: "Abgelehnt", color: "#EF4444", bg: "#FEF2F2" },
+    pending: { label: t("news.statusPending", lang), color: "#F97316", bg: "#FFF7ED" },
+    approved: { label: t("news.statusApproved", lang), color: "#22C55E", bg: "#F0FDF4" },
+    rejected: { label: t("news.statusRejected", lang), color: "#EF4444", bg: "#FEF2F2" },
   }[status];
   return (
     <View style={[styles.chip, { backgroundColor: cfg.bg }]}>
@@ -67,7 +67,7 @@ function NewsCard({
   theme, lang,
 }: NewsCardProps) {
   const [expanded, setExpanded] = useState(false);
-  const cat = categoryConfig(item.category, theme.tint);
+  const cat = categoryConfig(item.category, theme.tint, lang);
   const canDelete = isOwner || canModerate;
 
   function handleDelete() {
@@ -102,7 +102,7 @@ function NewsCard({
           <Ionicons name={cat.icon} size={12} color={cat.color} />
           <Text style={[styles.catText, { color: cat.color }]}>{cat.label}</Text>
         </View>
-        <StatusChip status={item.status} />
+        <StatusChip status={item.status} lang={lang} />
         {!item.isRead && item.status === "approved" && (
           <View style={[styles.unreadDot, { backgroundColor: theme.tint }]} />
         )}
@@ -127,8 +127,8 @@ function NewsCard({
           <Ionicons name="alert-circle" size={13} color="#EF4444" />
           <Text style={styles.rejectionText}>
             {canModerate
-              ? `Abgelehnt: ${item.rejectionReason}`
-              : `Dein Beitrag wurde abgelehnt: ${item.rejectionReason} – Du kannst ihn bearbeiten und erneut einreichen.`}
+              ? `${t("news.statusRejected", lang)}: ${item.rejectionReason}`
+              : `${t("news.rejectedAuthorPrefix", lang)}: ${item.rejectionReason} – ${t("news.rejectedAuthorHint", lang)}`}
           </Text>
         </View>
       )}
