@@ -23,7 +23,7 @@ if (JWT_SECRET.length < 32) {
   throw new Error("JWT_SECRET must be at least 32 characters long");
 }
 
-const ISERV_BASE = "https://gymbla.de";
+const ISERV_BASE = process.env["ISERV_BASE_URL"] ?? "https://gymbla.de";
 
 const EMAIL_DOMAIN = process.env["EMAIL_DOMAIN"] ?? "gymbla.de";
 

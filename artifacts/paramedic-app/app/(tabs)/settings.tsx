@@ -11,6 +11,7 @@ import { Feather, Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import Constants from "expo-constants";
+import { ISERV_DOMAIN, SCHOOL_NAME } from "@/constants/appConfig";
 import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
@@ -33,7 +34,7 @@ import ApiService from "@/services/ApiService";
 import { useAppStore } from "@/store/useAppStore";
 
 const ROLE_CONFIG: Record<User["role"], { label: string; bg: string; text: string; icon: string }> = {
-  cto: { label: "CTO", bg: "#CCFBF1", text: "#0F766E", icon: "" },
+  cto: { label: "Owner", bg: "#CCFBF1", text: "#0F766E", icon: "" },
   admin: { label: "Administrator", bg: "#FEF2F2", text: "#DC2626", icon: "" },
   sanitaeter_leitung_admin: { label: "Sanitäter Leitung", bg: "#EFF6FF", text: "#2563EB", icon: "" },
   sanitaeter_leitung: { label: "Sanitäter Leitung", bg: "#EFF6FF", text: "#2563EB", icon: "" },
@@ -41,6 +42,31 @@ const ROLE_CONFIG: Record<User["role"], { label: string; bg: string; text: strin
   sanitaeter: { label: "Sanitäter", bg: "#F0FDF4", text: "#16A34A", icon: "" },
   student_paramedic: { label: "Sanitäter", bg: "#F0FDF4", text: "#16A34A", icon: "" },
 };
+
+const ROLE_PROTECTED_FROM: Record<string, string[]> = {
+  admin: ["cto", "teacher", "sanitaeter_leitung_admin"],
+  sanitaeter_leitung_admin: ["cto", "teacher"],
+};
+
+function canEditUserRole(requestorRole: string, targetRole: string): boolean {
+  if (requestorRole === "cto") return true;
+  const blocked = ROLE_PROTECTED_FROM[requestorRole] ?? [];
+  return blocked.length > 0 && !blocked.includes(targetRole);
+}
+
+function getAllowedRoles(requestorRole: string): { key: string; label: string }[] {
+  const all: { key: string; label: string }[] = [
+    { key: "sanitaeter", label: "Sanitäter" },
+    { key: "sanitaeter_leitung", label: "Leitung" },
+    { key: "sanitaeter_leitung_admin", label: "Leitung Admin" },
+    { key: "teacher", label: "Lehrer" },
+    { key: "admin", label: "Admin" },
+  ];
+  if (requestorRole === "cto") return all;
+  if (requestorRole === "admin") return all.filter((r) => ["sanitaeter", "sanitaeter_leitung"].includes(r.key));
+  if (requestorRole === "sanitaeter_leitung_admin") return all.filter((r) => ["sanitaeter", "sanitaeter_leitung", "admin"].includes(r.key));
+  return [];
+}
 
 function RoleBadgeLarge({ role, theme }: { role: User["role"]; theme: ThemeColors }) {
   const cfg = ROLE_CONFIG[role];
@@ -81,6 +107,7 @@ export default function SettingsScreen() {
   const [loadingSaniActivity, setLoadingSaniActivity] = useState(false);
 
   const isAdmin = ["admin", "cto"].includes(user?.role ?? "");
+  const canManageRoles = ["admin", "cto", "sanitaeter_leitung_admin"].includes(user?.role ?? "");
   const [showAdmin, setShowAdmin] = useState(false);
   const [pendingUsers, setPendingUsers] = useState<User[]>([]);
   const [loadingPending, setLoadingPending] = useState(false);
@@ -166,8 +193,9 @@ export default function SettingsScreen() {
     const role = pendingRoles[userId] ?? "sanitaeter";
     setAdminProcessing(userId);
     try {
-      await ApiService.approveUser(userId, role);
+      const updated = await ApiService.approveUser(userId, role);
       setPendingUsers((prev) => prev.filter((u) => u.id !== userId));
+      setAllUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, ...updated } : u)));
       try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } catch {}
     } catch (err) {
       Alert.alert("Fehler", err instanceof Error ? err.message : "Freischaltung fehlgeschlagen");
@@ -501,7 +529,7 @@ export default function SettingsScreen() {
         </View>
       )}
 
-      {isAdmin && (
+      {canManageRoles && (
         <View style={[styles.section, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
           {/* ── Section Header (collapsible) ── */}
           <Pressable
@@ -527,8 +555,9 @@ export default function SettingsScreen() {
 
           {showAdmin && (
             <>
-              {/* ── Pending Approvals ── */}
-              <View style={[styles.adminSubHeader, { borderTopColor: theme.cardBorder }]}>
+              {/* ── Pending Approvals (admin/cto only) ── */}
+              {isAdmin && (
+              <><View style={[styles.adminSubHeader, { borderTopColor: theme.cardBorder }]}>
                 <Text style={[styles.adminSubtitle, { color: theme.text }]}>Ausstehende Freischaltungen</Text>
                 {!loadingPending && pendingUsers.length > 0 && (
                   <View style={styles.amberCountBadge}>
@@ -551,13 +580,7 @@ export default function SettingsScreen() {
                 </View>
               ) : (
                 pendingUsers.map((u) => {
-                  const pendingRoleBtns: { key: string; label: string }[] = [
-                    { key: "sanitaeter", label: "Sanitäter" },
-                    { key: "sanitaeter_leitung", label: "Leitung" },
-                    { key: "sanitaeter_leitung_admin", label: "Leitung Admin" },
-                    { key: "teacher", label: "Lehrer" },
-                    { key: "admin", label: "Admin" },
-                  ];
+                  const pendingRoleBtns = getAllowedRoles(user?.role ?? "");
                   const selectedRole = pendingRoles[u.id] ?? "sanitaeter";
                   const isProcessing = adminProcessing === u.id;
                   return (
@@ -622,6 +645,7 @@ export default function SettingsScreen() {
                 })
               )}
 
+              </>)}
               {/* ── Role Management ── */}
               <View style={[styles.adminSubHeader, { borderTopColor: theme.cardBorder, marginTop: 4 }]}>
                 <Text style={[styles.adminSubtitle, { color: theme.text }]}>Rollen verwalten</Text>
@@ -636,13 +660,8 @@ export default function SettingsScreen() {
                 allUsers.map((u) => {
                   const cfg = ROLE_CONFIG[u.role] ?? { label: u.role, bg: "#F3F4F6", text: "#6B7280", icon: "" };
                   const isCurrentUser = u.id === user?.id;
-                  const roleManageBtns: { key: string; label: string }[] = [
-                    { key: "sanitaeter", label: "Sanitäter" },
-                    { key: "sanitaeter_leitung", label: "Leitung" },
-                    { key: "sanitaeter_leitung_admin", label: "Leitung Admin" },
-                    { key: "teacher", label: "Lehrer" },
-                    { key: "admin", label: "Admin" },
-                  ];
+                  const roleManageBtns = getAllowedRoles(user?.role ?? "");
+                  const canEdit = !isCurrentUser && canEditUserRole(user?.role ?? "", u.role);
                   return (
                     <View key={u.id} style={[styles.adminCard, { borderColor: theme.cardBorder }]}>
                       <View style={styles.adminCardHeader}>
@@ -657,7 +676,7 @@ export default function SettingsScreen() {
                             <Text style={[styles.smallRoleText, { color: cfg.text }]}>{cfg.label}</Text>
                           </View>
                         </View>
-                        {!isCurrentUser ? (
+                        {!isCurrentUser && canEdit ? (
                           <Pressable
                             onPress={() => handleDeleteUser(u.id, formatFullName(u.firstName, u.lastName))}
                             style={({ pressed }) => [styles.deleteBtn, { opacity: pressed ? 0.5 : 1 }]}
@@ -666,11 +685,11 @@ export default function SettingsScreen() {
                           </Pressable>
                         ) : (
                           <View style={styles.selfTag}>
-                            <Text style={[styles.selfTagText, { color: theme.textTertiary }]}>Du</Text>
+                            <Text style={[styles.selfTagText, { color: theme.textTertiary }]}>{isCurrentUser ? "Du" : ""}</Text>
                           </View>
                         )}
                       </View>
-                      {!isCurrentUser && (
+                      {canEdit && (
                         <View style={styles.rolePicker}>
                           {roleManageBtns.map((r) => {
                             const selected = u.role === r.key;
@@ -714,7 +733,7 @@ export default function SettingsScreen() {
       </Pressable>
 
       <Text style={[styles.version, { color: theme.textTertiary }]}>
-        {t("settings.version", lang)} {Constants.expoConfig?.version ?? "1.0.0-beta.1"} · SchulSanitäter · gymbla.de
+        {t("settings.version", lang)} {Constants.expoConfig?.version ?? "2.0.0"} · {SCHOOL_NAME} · {ISERV_DOMAIN}
       </Text>
     </ScrollView>
   );
