@@ -185,6 +185,7 @@ export default function NewsScreen() {
 
   const [filter, setFilter] = useState<Filter>("all");
   const [refreshing, setRefreshing] = useState(false);
+  const [markingAll, setMarkingAll] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newSummary, setNewSummary] = useState("");
@@ -226,9 +227,14 @@ export default function NewsScreen() {
   }
 
   async function handleMarkAllRead() {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    await ApiService.markAllNewsRead();
-    news.forEach((n) => updateNewsItem(n.id, { isRead: true }));
+    setMarkingAll(true);
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      await ApiService.markAllNewsRead();
+      news.forEach((n) => updateNewsItem(n.id, { isRead: true }));
+    } finally {
+      setMarkingAll(false);
+    }
   }
 
   async function handleApprove(id: string) {
@@ -344,9 +350,13 @@ export default function NewsScreen() {
                 {unread > 0 && (
                   <Pressable
                     onPress={handleMarkAllRead}
-                    style={[styles.iconBtn, { backgroundColor: theme.tintLight }]}
+                    disabled={markingAll}
+                    style={[styles.markAllBtn, { backgroundColor: theme.tintLight, borderColor: theme.tint + "44", opacity: markingAll ? 0.6 : 1 }]}
                   >
-                    <Ionicons name="checkmark-done" size={18} color={theme.tint} />
+                    {markingAll
+                      ? <ActivityIndicator size="small" color={theme.tintDark} />
+                      : <Text style={[styles.markAllText, { color: theme.tintDark }]}>{t("news.markAllRead", lang)}</Text>
+                    }
                   </Pressable>
                 )}
                 <Pressable
@@ -528,7 +538,9 @@ const styles = StyleSheet.create({
   unreadHint: { fontSize: 13, fontFamily: "Inter_400Regular", marginTop: 2 },
   headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 },
   headerBtns: { flexDirection: "row", gap: 8 },
-  iconBtn: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  iconBtn: { width: 44, height: 44, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  markAllBtn: { paddingHorizontal: 12, paddingVertical: 11, borderRadius: 10, borderWidth: 1 },
+  markAllText: { fontSize: 13, fontFamily: "Inter_500Medium" },
   filterScroll: { marginBottom: 8 },
   filterPill: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, marginRight: 8 },
   filterPillText: { fontSize: 13, fontFamily: "Inter_500Medium" },

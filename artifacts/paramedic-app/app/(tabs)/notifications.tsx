@@ -16,7 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { t } from "@/constants/i18n";
 import { getTheme, type ThemeColors } from "@/constants/theme";
-import type { NotificationItem, NotificationType } from "@/models";
+import type { AppLanguage, NotificationItem, NotificationType } from "@/models";
 import ApiService from "@/services/ApiService";
 import { useAppStore } from "@/store/useAppStore";
 
