@@ -89,7 +89,7 @@ export default function LOAScreen() {
 
   function switchTab(newTab: "mine" | "all") {
     setTab(newTab);
-    tabAnim.value = withTiming(newTab === "all" ? 1 : 0, { duration: 200, easing: Easing.out(Easing.cubic) });
+    tabAnim.value = withTiming(newTab === "all" ? 1 : 0, { duration: 300, easing: Easing.out(Easing.cubic) });
     Haptics.selectionAsync().catch(() => {});
   }
 
