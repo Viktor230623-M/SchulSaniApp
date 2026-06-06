@@ -131,10 +131,11 @@ export default function NotificationsScreen() {
     }
   }
 
+  const user = useAppStore((s) => s.user);
   const safeNotifications = Array.isArray(notifications) ? notifications : [];
   const highPriority = safeNotifications.filter((n) => n.priority === "high" && !n.isRead);
   const normal = safeNotifications.filter((n) => n.priority !== "high");
-  const unread = safeNotifications.filter((n) => !n.isRead).length;
+  const unread = safeNotifications.filter((n) => !n.isRead && n.userId === user?.id).length;
   const topPad = Platform.OS === "web" ? 67 : insets.top;
 
   return (

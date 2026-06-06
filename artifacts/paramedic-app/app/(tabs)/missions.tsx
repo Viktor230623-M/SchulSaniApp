@@ -23,6 +23,7 @@ import { getTheme, type ThemeColors } from "@/constants/theme";
 import type { AppLanguage, Mission, MissionPriority, MissionStatus } from "@/models";
 import ApiService from "@/services/ApiService";
 import { useAppStore } from "@/store/useAppStore";
+import { localized } from "@/utils/localize";
 
 const CREATE_ROLES = ["cto", "admin", "sanitaeter_leitung_admin", "sanitaeter_leitung", "teacher"];
 
@@ -111,8 +112,8 @@ function MissionCard({ mission, onAccept, onReject, theme, lang }: MissionCardPr
         </View>
       </View>
 
-      <Text style={[styles.missionTitle, { color: theme.text }]}>{mission.title}</Text>
-      <Text style={[styles.missionDesc, { color: theme.textSecondary }]}>{mission.description}</Text>
+      <Text style={[styles.missionTitle, { color: theme.text }]}>{localized(mission, "title", lang, mission.title)}</Text>
+      <Text style={[styles.missionDesc, { color: theme.textSecondary }]}>{localized(mission, "description", lang, mission.description)}</Text>
 
       <View style={styles.metaRow}>
         <Feather name="map-pin" size={13} color={theme.textTertiary} />

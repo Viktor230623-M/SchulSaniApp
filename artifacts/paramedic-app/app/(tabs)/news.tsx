@@ -22,6 +22,7 @@ import { getTheme, type ThemeColors } from "@/constants/theme";
 import type { AppLanguage, NewsItem, NewsStatus } from "@/models";
 import ApiService from "@/services/ApiService";
 import { useAppStore } from "@/store/useAppStore";
+import { localized } from "@/utils/localize";
 
 type Filter = "all" | NewsStatus;
 
@@ -112,12 +113,12 @@ function NewsCard({
         )}
       </View>
 
-      <Text style={[styles.title, { color: theme.text }]}>{item.title}</Text>
-      <Text style={[styles.summary, { color: theme.textSecondary }]}>{item.summary}</Text>
+      <Text style={[styles.title, { color: theme.text }]}>{localized(item, "title", lang, item.title)}</Text>
+      <Text style={[styles.summary, { color: theme.textSecondary }]}>{localized(item, "summary", lang, item.summary)}</Text>
 
       {expanded && (
         <Text style={[styles.content, { color: theme.text, borderTopColor: theme.cardBorder }]}>
-          {item.content}
+          {localized(item, "content", lang, item.content)}
         </Text>
       )}
 

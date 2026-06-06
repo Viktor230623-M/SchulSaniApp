@@ -5,6 +5,7 @@ import { db, missionsTable, missionActivityLogTable, usersTable } from "@workspa
 import { requireAuth, requireRole, type AuthRequest } from "../middlewares/auth";
 import { addDismissal, getDismissedFor, removeDismissal } from "../data/dismissals";
 import { notifySanitaeters, notifyUser } from "../services/notifications";
+import { translateToLanguages } from "../services/translator";
 
 async function logMissionAction(
   userId: string,
@@ -85,7 +86,13 @@ router.post("/", requireAuth, requireRole("admin", "sanitaeter_leitung", "sanita
     notes: null,
   };
   await db.insert(missionsTable).values(m);
-  
+
+  translateToLanguages({ title, description: description ?? "", location }, "de")
+    .then((t) => Object.keys(t).length > 0
+      ? db.update(missionsTable).set({ translationsJson: JSON.stringify(t) }).where(eq(missionsTable.id, m.id))
+      : null
+    ).catch(() => {});
+
   notifySanitaeters({
     type: "mission_created",
     title: "Neue Mission",
@@ -93,7 +100,7 @@ router.post("/", requireAuth, requireRole("admin", "sanitaeter_leitung", "sanita
     priority: priority === "high" ? "high" : "normal",
     relatedId: m.id,
   }).catch(console.error);
-  
+
   res.status(201).json(m);
 });
 

@@ -83,7 +83,7 @@ export default function DutyScreen() {
 
   function roleLabelShort(role: User["role"]) {
     return {
-      cto: lang === "de" ? "Eigent." : "Owner",
+      cto: lang === "de" ? "Eigentümer" : "Owner",
       student_paramedic: "San.",
       sanitaeter_leitung: "Ltg.",
       sanitaeter_leitung_admin: "Ltg.",
