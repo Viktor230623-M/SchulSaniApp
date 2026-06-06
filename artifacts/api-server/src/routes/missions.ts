@@ -48,7 +48,7 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
   const all = await db.select().from(missionsTable).orderBy(desc(missionsTable.requestedAt));
   const dismissed = await getDismissedFor(req.user!.userId);
   const visible = all
-    .filter((m) => m.status !== "rejected" && !dismissed.has(m.id))
+    .filter((m) => m.status !== "rejected" && m.status !== "archived" && !dismissed.has(m.id))
     .map((m) => canSeePatientInfo ? m : { ...m, patientInfo: undefined });
   res.json(visible);
 });

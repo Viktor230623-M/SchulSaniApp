@@ -22,7 +22,7 @@ export interface User {
   updatedAt: string;
 }
 
-export type MissionStatus = "pending" | "accepted" | "rejected" | "completed";
+export type MissionStatus = "pending" | "accepted" | "rejected" | "completed" | "archived";
 export type MissionPriority = "high" | "medium" | "low";
 
 export interface Mission {

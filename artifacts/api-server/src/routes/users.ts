@@ -12,12 +12,23 @@ function safeUser(u: typeof usersTable.$inferSelect) {
   return rest;
 }
 
-router.get("/", requireAuth, requireRole("admin", "cto", "sanitaeter_leitung_admin", "teacher"), async (_req, res) => {
-  const users = await db.select().from(usersTable);
-  res.json(users.map(safeUser));
-});
+// Which roles a requester is permitted to assign. Only the Owner (cto) may grant cto.
+function allowedTargetRoles(requester: string): string[] {
+  if (requester === "cto") return [...VALID_ROLES];
+  if (requester === "admin") return ["admin", "sanitaeter_leitung", "sanitaeter", "student_paramedic"];
+  if (requester === "sanitaeter_leitung_admin") return ["admin", "sanitaeter_leitung", "sanitaeter", "student_paramedic"];
+  return [];
+}
 
-router.get("/on-duty", requireAuth, async (_req, res) => {
+// Whether a requester may modify (change role of / delete) a user who currently holds existingRole.
+function canModifyTarget(requester: string, existingRole: string): boolean {
+  if (requester === "cto") return true;
+  if (requester === "admin") return !["cto", "teacher", "sanitaeter_leitung_admin"].includes(existingRole);
+  if (requester === "sanitaeter_leitung_admin") return !["cto", "teacher"].includes(existingRole);
+  return false;
+}
+
+router.get("/", requireAuth, requireRole("admin", "cto", "sanitaeter_leitung_admin", "teacher"), async (_req, res) => {
   const users = await db.select().from(usersTable);
   res.json(users.map(safeUser));
 });
@@ -76,6 +87,10 @@ router.patch("/:id/approve", requireAuth, requireRole("admin", "cto"), async (re
   const [existing] = await db.select().from(usersTable).where(eq(usersTable.id, id));
   if (!existing) { res.status(404).json({ error: "User not found" }); return; }
 
+  if (role && !allowedTargetRoles(req.user!.role).includes(role)) {
+    res.status(403).json({ error: "Insufficient permissions to assign this role" }); return;
+  }
+
   const newRole = role && (VALID_ROLES as readonly string[]).includes(role) ? role : existing.role ?? "sanitaeter";
   const [updated] = await db
     .update(usersTable)
@@ -100,13 +115,8 @@ router.patch("/:id/role", requireAuth, requireRole("admin", "cto", "sanitaeter_l
   const [existing] = await db.select().from(usersTable).where(eq(usersTable.id, id));
   if (!existing) { res.status(404).json({ error: "User not found" }); return; }
 
-  // Role hierarchy: define which target roles are protected from each requestor
-  const PROTECTED_FROM: Record<string, string[]> = {
-    admin: ["cto", "teacher", "sanitaeter_leitung_admin"],
-    sanitaeter_leitung_admin: ["cto", "teacher"],
-  };
-  const protectedRoles = PROTECTED_FROM[requestorRole] ?? [];
-  if (requestorRole !== "cto" && (protectedRoles.includes(existing.role) || role === "cto")) {
+  // Requester must be allowed to modify this target AND allowed to assign the new role.
+  if (!canModifyTarget(requestorRole, existing.role ?? "sanitaeter") || !allowedTargetRoles(requestorRole).includes(role)) {
     res.status(403).json({ error: "Insufficient permissions to change this user's role" }); return;
   }
 
@@ -122,6 +132,11 @@ router.patch("/:id/role", requireAuth, requireRole("admin", "cto", "sanitaeter_l
 router.delete("/:id", requireAuth, requireRole("admin", "cto"), async (req: AuthRequest, res) => {
   const { id } = req.params as { id: string };
   if (req.user!.userId === id) { res.status(403).json({ error: "Cannot delete your own account" }); return; }
+  const [target] = await db.select({ role: usersTable.role }).from(usersTable).where(eq(usersTable.id, id));
+  if (!target) { res.status(404).json({ error: "User not found" }); return; }
+  if (!canModifyTarget(req.user!.role, target.role ?? "sanitaeter")) {
+    res.status(403).json({ error: "Insufficient permissions to delete this user" }); return;
+  }
   const result = await db.delete(usersTable).where(eq(usersTable.id, id)).returning();
   if (result.length === 0) { res.status(404).json({ error: "User not found" }); return; }
   res.status(204).send();
