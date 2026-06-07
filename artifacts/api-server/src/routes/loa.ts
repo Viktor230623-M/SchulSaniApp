@@ -59,11 +59,11 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
   };
   await db.insert(loaTable).values(newReq);
 
-  translateToLanguages({ reason }, "de")
-    .then((t) => Object.keys(t).length > 0
-      ? db.update(loaTable).set({ translationsJson: JSON.stringify(t) }).where(eq(loaTable.id, newReq.id))
-      : null
-    ).catch(() => {});
+  const t = await translateToLanguages({ reason }, "de").catch(() => ({}));
+  if (Object.keys(t).length > 0) {
+    await db.update(loaTable).set({ translationsJson: JSON.stringify(t) }).where(eq(loaTable.id, newReq.id));
+    newReq.translationsJson = JSON.stringify(t);
+  }
 
   res.status(201).json(newReq);
 });
