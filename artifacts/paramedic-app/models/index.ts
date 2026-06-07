@@ -159,3 +159,70 @@ export interface ActivitySummary {
 
 export type AppTheme = "light" | "dark" | "red" | "teal" | "crimson" | "midnight" | "sunset" | "amethyst";
 export type AppLanguage = "de" | "en";
+
+export type IncidentCategory =
+  | "injury_sport" | "fall" | "cut_wound" | "bruise" | "nosebleed" | "head_injury"
+  | "faint" | "dizziness" | "nausea_vomiting" | "headache" | "abdominal_pain"
+  | "allergic_reaction" | "asthma" | "seizure" | "insect_sting" | "burn"
+  | "dental" | "psychological" | "circulatory" | "other";
+
+export type IncidentOutcome =
+  | "back_to_class" | "rest_then_return" | "sent_home" | "picked_up_by_parents"
+  | "family_doctor" | "ambulance_112" | "hospital" | "other";
+
+export type TreatmentMeasure =
+  | "wound_cleaning" | "plaster" | "bandage" | "cooling" | "elevation"
+  | "recovery_position" | "rest" | "fluids" | "reassurance" | "immobilization"
+  | "cpr" | "aed" | "epipen" | "inhaler" | "other";
+
+export type PatientType = "student" | "staff" | "visitor" | "other";
+export type AvpuScore = "A" | "V" | "P" | "U";
+export type ReportStatus = "draft" | "submitted";
+
+export interface ReportAddendum {
+  authorId: string;
+  authorName: string;
+  text: string;
+  createdAt: string;
+}
+
+export interface IncidentReport {
+  id: string;
+  schoolId?: string | null;
+  missionId?: string | null;
+  authorId: string;
+  status: ReportStatus;
+  // Patient (restricted)
+  patientType?: PatientType | null;
+  patientFirstName?: string | null;
+  patientLastName?: string | null;
+  patientClass?: string | null;
+  // Incident
+  incidentAt?: string | null;
+  location?: string | null;
+  careStartedAt?: string | null;
+  careEndedAt?: string | null;
+  category?: IncidentCategory | null;
+  description?: string | null;
+  // Treatment
+  measures?: TreatmentMeasure[] | null;
+  treatmentNotes?: string | null;
+  // Vitals
+  pulseBpm?: number | null;
+  spo2?: number | null;
+  respRate?: number | null;
+  bloodPressure?: string | null;
+  consciousnessAvpu?: AvpuScore | null;
+  painScore?: number | null;
+  // Outcome
+  outcome?: IncidentOutcome | null;
+  outcomeNotes?: string | null;
+  // People
+  responderIds?: string[] | null;
+  witnesses?: string | null;
+  // Meta
+  addenda?: ReportAddendum[] | null;
+  createdAt: string;
+  updatedAt: string;
+  submittedAt?: string | null;
+}

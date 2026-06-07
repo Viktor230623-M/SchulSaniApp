@@ -6,6 +6,7 @@ import { requireAuth, requireRole, type AuthRequest } from "../middlewares/auth"
 import { addDismissal, getDismissedFor, removeDismissal } from "../data/dismissals";
 import { notifySanitaeters, notifyUser } from "../services/notifications";
 import { translateToLanguages } from "../services/translator";
+import { canSeePatientInfo } from "../lib/access";
 
 async function logMissionAction(
   userId: string,
@@ -34,7 +35,7 @@ const router = Router();
 
 router.get("/", requireAuth, async (req: AuthRequest, res) => {
   const role = req.user!.role;
-  const canSeePatientInfo = ["admin", "cto", "sanitaeter_leitung", "sanitaeter_leitung_admin", "teacher"].includes(role);
+  const _canSeePatient = canSeePatientInfo(role);
 
   // Auto-archive pending/accepted missions from previous calendar days
   const todayStart = new Date();
@@ -49,7 +50,7 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
   const dismissed = await getDismissedFor(req.user!.userId);
   const visible = all
     .filter((m) => m.status !== "rejected" && m.status !== "archived" && !dismissed.has(m.id))
-    .map((m) => canSeePatientInfo ? m : { ...m, patientInfo: undefined });
+    .map((m) => _canSeePatient ? m : { ...m, patientInfo: undefined });
   res.json(visible);
 });
 
@@ -142,12 +143,24 @@ router.post("/:id/reject", requireAuth, requireRole("admin", "sanitaeter_leitung
   res.json(m);
 });
 
-router.post("/:id/complete", requireAuth, requireRole("admin", "sanitaeter_leitung", "sanitaeter_leitung_admin", "cto", "teacher"), async (req: AuthRequest, res) => {
+router.post("/:id/complete", requireAuth, async (req: AuthRequest, res) => {
   const notes = req.body.notes ?? null;
   if (notes !== null && (typeof notes !== "string" || notes.length > 2000)) {
     res.status(400).json({ error: "notes max 2000 characters" });
     return;
   }
+  const [existing] = await db.select().from(missionsTable).where(eq(missionsTable.id, req.params["id"]!));
+  if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+
+  const userId = req.user!.userId;
+  const role = req.user!.role;
+  const isLeadership = ["admin", "sanitaeter_leitung", "sanitaeter_leitung_admin", "cto", "teacher"].includes(role);
+  const isAssignedResponder = existing.assignedParamedicId === userId;
+  if (!isLeadership && !isAssignedResponder) {
+    res.status(403).json({ error: "Forbidden – only the assigned responder or leadership can complete this mission" });
+    return;
+  }
+
   const [m] = await db.update(missionsTable).set({ status: "completed", notes }).where(eq(missionsTable.id, req.params["id"]!)).returning();
   if (!m) { res.status(404).json({ error: "Not found" }); return; }
   
