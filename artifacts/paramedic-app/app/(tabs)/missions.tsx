@@ -1,5 +1,6 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -57,15 +58,19 @@ function StatusBadge({ status, lang }: { status: MissionStatus; lang: AppLanguag
   );
 }
 
+const LEADERSHIP_ROLES = ["admin", "cto", "sanitaeter_leitung", "sanitaeter_leitung_admin", "teacher"];
+
 interface MissionCardProps {
   mission: Mission;
   onAccept: () => Promise<void>;
   onReject: () => Promise<void>;
   theme: ThemeColors;
   lang: AppLanguage;
+  currentUserId?: string;
+  currentUserRole?: string;
 }
 
-function MissionCard({ mission, onAccept, onReject, theme, lang }: MissionCardProps) {
+function MissionCard({ mission, onAccept, onReject, theme, lang, currentUserId, currentUserRole }: MissionCardProps) {
   const [loading, setLoading] = useState(false);
 
   async function doAccept() {
@@ -161,6 +166,28 @@ function MissionCard({ mission, onAccept, onReject, theme, lang }: MissionCardPr
             )}
           </Pressable>
         </View>
+      )}
+
+      {mission.status === "accepted" && (
+        (mission.assignedParamedicId === currentUserId || LEADERSHIP_ROLES.includes(currentUserRole ?? ""))
+      ) && (
+        <Pressable
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            router.push({
+              pathname: "/report/[id]",
+              params: {
+                id: "new",
+                missionId: mission.id,
+                location: mission.location,
+              },
+            });
+          }}
+          style={[styles.documentBtn, { backgroundColor: theme.tint + "15", borderColor: theme.tint + "40" }]}
+        >
+          <Ionicons name="document-text-outline" size={16} color={theme.tint} />
+          <Text style={[styles.documentBtnText, { color: theme.tint }]}>{t("report.documentAndComplete", lang)}</Text>
+        </Pressable>
       )}
     </View>
   );
@@ -391,20 +418,34 @@ export default function MissionsScreen() {
                 <Text style={styles.countText}>{missions.length}</Text>
               </View>
             </View>
-            {canCreate && (
+            <View style={styles.headerActions}>
               <Pressable
                 onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                  setCreateOpen(true);
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  router.push("/report");
                 }}
                 style={({ pressed }) => [
                   styles.iconBtn,
-                  { backgroundColor: theme.tint, opacity: pressed ? 0.8 : 1 },
+                  { backgroundColor: theme.card, borderColor: theme.cardBorder, borderWidth: 1, opacity: pressed ? 0.7 : 1 },
                 ]}
               >
-                <Ionicons name="add" size={20} color="#fff" />
+                <Ionicons name="document-text-outline" size={20} color={theme.tint} />
               </Pressable>
-            )}
+              {canCreate && (
+                <Pressable
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                    setCreateOpen(true);
+                  }}
+                  style={({ pressed }) => [
+                    styles.iconBtn,
+                    { backgroundColor: theme.tint, opacity: pressed ? 0.8 : 1 },
+                  ]}
+                >
+                  <Ionicons name="add" size={20} color="#fff" />
+                </Pressable>
+              )}
+            </View>
           </View>
         }
         ListEmptyComponent={
@@ -438,6 +479,8 @@ export default function MissionsScreen() {
             }}
             theme={theme}
             lang={lang}
+            currentUserId={user?.id}
+            currentUserRole={user?.role}
           />
         )}
         showsVerticalScrollIndicator={false}
@@ -457,7 +500,8 @@ export default function MissionsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
-  headerLeft: { flexDirection: "row", alignItems: "center", gap: 10 },
+  headerLeft: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1 },
+  headerActions: { flexDirection: "row", gap: 8 },
   heading: { fontSize: 28, fontFamily: "Inter_700Bold" },
   countBadge: { borderRadius: 12, minWidth: 24, height: 24, alignItems: "center", justifyContent: "center", paddingHorizontal: 6 },
   countText: { color: "#fff", fontSize: 12, fontFamily: "Inter_700Bold" },
@@ -481,6 +525,17 @@ const styles = StyleSheet.create({
   acceptBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: "#fff" },
   rejectBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 11, borderRadius: 12, borderWidth: 1, backgroundColor: "transparent" },
   rejectBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  documentBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginTop: 4,
+  },
+  documentBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
   empty: { flex: 1, alignItems: "center", justifyContent: "center", paddingTop: 80, gap: 12 },
   emptyTitle: { fontSize: 18, fontFamily: "Inter_600SemiBold" },
   emptyDesc: { fontSize: 14, fontFamily: "Inter_400Regular", textAlign: "center", paddingHorizontal: 40 },

@@ -3,6 +3,7 @@ import type {
   ActivityLog,
   ActivitySummary,
   DutyStatus,
+  IncidentReport,
   LOARequest,
   Mission,
   MissionActivityLog,
@@ -379,6 +380,83 @@ const ApiService = {
       console.error("Failed to unregister device token");
       Alert.alert("Fehler", "Push-Benachrichtigungen konnten nicht deaktiviert werden.");
     }
+  },
+
+  async getIncidentReports(params?: { missionId?: string; mine?: boolean }): Promise<IncidentReport[]> {
+    const query = new URLSearchParams();
+    if (params?.missionId) query.set("missionId", params.missionId);
+    if (params?.mine) query.set("mine", "true");
+    const qs = query.toString() ? `?${query}` : "";
+    const resp = await apiFetch(`${API_BASE}/incident-reports${qs}`, { headers: headers() });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      throw new Error(data.error ?? "Protokolle konnten nicht geladen werden");
+    }
+    return resp.json();
+  },
+
+  async getIncidentReport(id: string): Promise<IncidentReport> {
+    const resp = await apiFetch(`${API_BASE}/incident-reports/${id}`, { headers: headers() });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      throw new Error(data.error ?? "Protokoll konnte nicht geladen werden");
+    }
+    return resp.json();
+  },
+
+  async createIncidentReport(data: Partial<IncidentReport>): Promise<IncidentReport> {
+    const resp = await apiFetch(`${API_BASE}/incident-reports`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify(data),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error ?? "Protokoll konnte nicht erstellt werden");
+    }
+    return resp.json();
+  },
+
+  async updateIncidentReport(id: string, data: Partial<IncidentReport>): Promise<IncidentReport> {
+    const resp = await apiFetch(`${API_BASE}/incident-reports/${id}`, {
+      method: "PUT",
+      headers: headers(),
+      body: JSON.stringify(data),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error ?? "Protokoll konnte nicht aktualisiert werden");
+    }
+    return resp.json();
+  },
+
+  async submitIncidentReport(id: string): Promise<IncidentReport> {
+    const resp = await apiFetch(`${API_BASE}/incident-reports/${id}/submit`, {
+      method: "POST",
+      headers: headers(),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error ?? "Protokoll konnte nicht eingereicht werden");
+    }
+    return resp.json();
+  },
+
+  async addReportAddendum(id: string, text: string): Promise<IncidentReport> {
+    const resp = await apiFetch(`${API_BASE}/incident-reports/${id}/addendum`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({ text }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error ?? "Nachtrag konnte nicht hinzugefügt werden");
+    }
+    return resp.json();
+  },
+
+  getReportPdfUrl(id: string, lang: "de" | "en" = "de"): string {
+    return `${API_BASE}/incident-reports/${id}/pdf?lang=${lang}&token=${authToken ?? ""}`;
   },
 };
 
