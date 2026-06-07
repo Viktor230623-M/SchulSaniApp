@@ -87,11 +87,11 @@ router.post("/", requireAuth, requireRole("admin", "sanitaeter_leitung", "sanita
   };
   await db.insert(missionsTable).values(m);
 
-  translateToLanguages({ title, description: description ?? "", location }, "de")
-    .then((t) => Object.keys(t).length > 0
-      ? db.update(missionsTable).set({ translationsJson: JSON.stringify(t) }).where(eq(missionsTable.id, m.id))
-      : null
-    ).catch(() => {});
+  const t = await translateToLanguages({ title, description: description ?? "", location }, "de").catch(() => ({}));
+  if (Object.keys(t).length > 0) {
+    await db.update(missionsTable).set({ translationsJson: JSON.stringify(t) }).where(eq(missionsTable.id, m.id));
+    m.translationsJson = JSON.stringify(t);
+  }
 
   notifySanitaeters({
     type: "mission_created",

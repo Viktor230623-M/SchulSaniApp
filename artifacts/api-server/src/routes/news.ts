@@ -48,11 +48,11 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
   };
   await db.insert(newsTable).values(newItem);
 
-  translateToLanguages({ title, summary: newItem.summary ?? "", content }, "de")
-    .then((t) => Object.keys(t).length > 0
-      ? db.update(newsTable).set({ translationsJson: JSON.stringify(t) }).where(eq(newsTable.id, newItem.id))
-      : null
-    ).catch(() => {});
+  const t = await translateToLanguages({ title, summary: newItem.summary ?? "", content }, "de").catch(() => ({}));
+  if (Object.keys(t).length > 0) {
+    await db.update(newsTable).set({ translationsJson: JSON.stringify(t) }).where(eq(newsTable.id, newItem.id));
+    newItem.translationsJson = JSON.stringify(t);
+  }
 
   res.status(201).json(newItem);
 });
