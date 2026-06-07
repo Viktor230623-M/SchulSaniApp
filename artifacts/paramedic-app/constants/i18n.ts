@@ -49,6 +49,7 @@ const translations = {
       iservLogin: "Mit IServ anmelden",
       iservNote: "Verwende deine IServ-Zugangsdaten von {domain}",
       rememberMe: "Angemeldet bleiben",
+      adminSystem: "Verwaltungssystem",
     },
     roles: {
       cto: "Eigentümer",
@@ -79,6 +80,7 @@ const translations = {
       hint1: "Dein Status wird für alle Koordinatoren sichtbar sein.",
       hint2: "Du erhältst Benachrichtigungen, wenn du im Dienst bist.",
       hint3: "Bitte denke daran, deinen Status rechtzeitig zu aktualisieren.",
+      updateFailed: "Dienststatus konnte nicht aktualisiert werden.",
     },
     missions: {
       title: "Einsätze",
@@ -104,6 +106,9 @@ const translations = {
       fieldPatientPlaceholder: "z.B. männlich, 15 Jahre, ansprechbar",
       requiredFieldsError: "Titel und Ort sind Pflichtfelder.",
       createError: "Einsatz konnte nicht erstellt werden.",
+      unassigned: "Nicht zugewiesen",
+      rejectConfirm: "Diesen Einsatz wirklich ablehnen?",
+      dismissError: "Einsatz konnte nicht ausgeblendet werden.",
     },
     news: {
       title: "Neuigkeiten",
@@ -177,6 +182,7 @@ const translations = {
       autoApproved: "Automatisch genehmigt",
       appealModalTitle: "Einspruch einlegen",
       appealSubmit: "Einspruch einreichen",
+      createError: "Abwesenheitsantrag konnte nicht erstellt werden.",
     },
     notifications: {
       title: "Benachrichtigungen",
@@ -221,8 +227,13 @@ const translations = {
       logoutConfirm: "Wirklich abmelden?",
       version: "Version",
       myRank: "Mein Rang",
-        activityLog: "Mein Aktivitätslog",
-        saniActivity: "Sani-Aktivität",
+      activityLog: "Mein Aktivitätslog",
+      saniActivity: "Sani-Aktivität",
+      loadingRequests: "Lade Anfragen…",
+      allAccountsApproved: "Alle Accounts freigeschalten",
+      noSaniActivities: "Keine Sani-Aktivitäten",
+      photoPermissionTitle: "Berechtigung",
+      photoPermissionMessage: "Fotobibliothek-Zugriff wird benötigt.",
     },
     common: {
       loading: "Laden...",
@@ -239,6 +250,11 @@ const translations = {
       type: "Typ",
       send: "Senden",
       delete: "Löschen",
+      close: "Schließen",
+      edit: "Bearbeiten",
+      you: "Du",
+      unknown: "Unbekannt",
+      accessDenied: "Zugriff verweigert",
     },
   },
   en: {
@@ -289,6 +305,7 @@ const translations = {
       iservLogin: "Sign in with IServ",
       iservNote: "Use your IServ credentials from {domain}",
       rememberMe: "Remember me",
+      adminSystem: "Administration System",
     },
     roles: {
       cto: "Owner",
@@ -319,6 +336,7 @@ const translations = {
       hint1: "Your status will be visible to all coordinators.",
       hint2: "You will receive notifications for new missions when on duty.",
       hint3: "Please remember to update your status in time.",
+      updateFailed: "Could not update duty status.",
     },
     missions: {
       title: "Missions",
@@ -344,6 +362,9 @@ const translations = {
       fieldPatientPlaceholder: "e.g. male, 15 years old, responsive",
       requiredFieldsError: "Title and location are required.",
       createError: "Could not create mission.",
+      unassigned: "Unassigned",
+      rejectConfirm: "Really reject this mission?",
+      dismissError: "Could not dismiss mission.",
     },
     news: {
       title: "News",
@@ -417,6 +438,7 @@ const translations = {
       autoApproved: "Auto-approved",
       appealModalTitle: "File Appeal",
       appealSubmit: "Submit Appeal",
+      createError: "Could not create absence request.",
     },
     notifications: {
       title: "Notifications",
@@ -463,6 +485,11 @@ const translations = {
       myRank: "My Rank",
       activityLog: "My Activity Log",
       saniActivity: "Paramedic Activity",
+      loadingRequests: "Loading requests…",
+      allAccountsApproved: "All accounts approved",
+      noSaniActivities: "No paramedic activities",
+      photoPermissionTitle: "Permission",
+      photoPermissionMessage: "Photo library access is required.",
     },
     common: {
   
@@ -481,6 +508,11 @@ const translations = {
       type: "Type",
       send: "Send",
       delete: "Delete",
+      close: "Close",
+      edit: "Edit",
+      you: "You",
+      unknown: "Unknown",
+      accessDenied: "Access Denied",
     },
   },
 };

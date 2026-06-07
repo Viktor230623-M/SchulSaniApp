@@ -167,7 +167,7 @@ function NewsCard({
               onPress={() => onEdit(item)}
               style={[styles.smallBtn, { borderColor: "#8B5CF6" }]}
             >
-              <Text style={[styles.smallBtnText, { color: "#8B5CF6" }]}>Bearbeiten</Text>
+              <Text style={[styles.smallBtnText, { color: "#8B5CF6" }]}>{t("common.edit", lang)}</Text>
             </Pressable>
           )}
         </View>
@@ -258,7 +258,7 @@ export default function NewsScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Nachricht konnte nicht abgelehnt werden.";
-      Alert.alert("Fehler", message);
+      Alert.alert(t("common.error", lang), message);
     } finally {
       setRejectNewsId(null);
       setRejectNewsReason("");
@@ -300,7 +300,7 @@ export default function NewsScreen() {
       summary: newSummary || newContent.substring(0, 80) + "...",
       content: newContent,
       category: "announcement",
-      author: user ? `${user.firstName} ${user.lastName}` : "Unbekannt",
+      author: user ? `${user.firstName} ${user.lastName}` : t("common.unknown", lang),
       authorId: user?.id ?? "",
     });
     addNewsItem(item);

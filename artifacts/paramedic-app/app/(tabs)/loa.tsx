@@ -137,7 +137,7 @@ export default function LOAScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (err) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      const message = err instanceof Error ? err.message : lang === "de" ? "Abwesenheitsantrag konnte nicht erstellt werden." : "Could not create absence request.";
+      const message = err instanceof Error ? err.message : t("loa.createError", lang);
       Alert.alert(t("common.error", lang), message);
     } finally {
       setSubmitting(false);

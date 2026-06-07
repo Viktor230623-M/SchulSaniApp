@@ -46,13 +46,13 @@ function timeAgo(iso: string | null | undefined, lang: AppLanguage) {
   return t("time.daysAgo", lang).replace("{n}", String(Math.floor(h / 24)));
 }
 
-function HighPriorityBanner({ items, theme }: { items: NotificationItem[]; theme: ThemeColors }) {
+function HighPriorityBanner({ items, theme, lang }: { items: NotificationItem[]; theme: ThemeColors; lang: AppLanguage }) {
   if (items.length === 0) return null;
   return (
     <View style={[styles.hpSection, { backgroundColor: theme.danger + "20", borderColor: theme.danger + "40" }]}>
       <View style={styles.hpHeader}>
         <Ionicons name="warning" size={16} color={theme.danger} />
-        <Text style={[styles.hpTitle, { color: theme.danger }]}>Wichtige Meldungen</Text>
+        <Text style={[styles.hpTitle, { color: theme.danger }]}>{t("notifications.highPriority", lang)}</Text>
       </View>
       {items.map((n) => (
         <View key={n.id} style={styles.hpCard}>
@@ -177,7 +177,7 @@ export default function NotificationsScreen() {
                 </Pressable>
               )}
             </View>
-            <HighPriorityBanner items={highPriority} theme={theme} />
+            <HighPriorityBanner items={highPriority} theme={theme} lang={lang} />
           </View>
         }
         ListEmptyComponent={

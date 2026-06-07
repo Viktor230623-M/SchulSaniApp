@@ -33,10 +33,10 @@ interface ActivityUser {
 const ROLE_CONFIG: Record<User["role"], { label: string; bg: string; text: string }> = {
   cto: { label: "CTO", bg: "#CCFBF1", text: "#0F766E" },
   admin: { label: "Administrator", bg: "#FEF2F2", text: "#DC2626" },
-  sanitaeter_leitung_admin: { label: "Sanitäter Leitung", bg: "#EFF6FF", text: "#2563EB" },
-  sanitaeter_leitung: { label: "Sanitäter Leitung", bg: "#EFF6FF", text: "#2563EB" },
-  teacher: { label: "Lehrer", bg: "#FFF7ED", text: "#EA580C" },
-  student_paramedic: { label: "Sanitäter", bg: "#F0FDF4", text: "#16A34A" },
+  sanitaeter_leitung_admin: { label: "Head Admin", bg: "#EFF6FF", text: "#2563EB" },
+  sanitaeter_leitung: { label: "Head Paramedic", bg: "#EFF6FF", text: "#2563EB" },
+  teacher: { label: "Teacher", bg: "#FFF7ED", text: "#EA580C" },
+  student_paramedic: { label: "Paramedic", bg: "#F0FDF4", text: "#16A34A" },
 };
 
 const ACTION_CONFIG: Record<string, { icon: string; color: string }> = {
@@ -118,7 +118,7 @@ export default function SaniActivityScreen() {
     const diffHours = Math.floor(diffMs / 3600000);
     const diffDays = Math.floor(diffMs / 86400000);
 
-    if (diffMins < 1) return lang === "de" ? "Gerade eben" : "Just now";
+    if (diffMins < 1) return t("time.justNow", lang);
     if (diffMins < 60) return `${diffMins} min`;
     if (diffHours < 24) return `${diffHours} h`;
     if (diffDays < 7) return `${diffDays}d`;
@@ -170,7 +170,7 @@ export default function SaniActivityScreen() {
           </View>
           <View style={[styles.emptyCard, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
             <Ionicons name="lock-closed-outline" size={52} color={theme.danger} />
-            <Text style={[styles.emptyTitle, { color: theme.text }]}>Zugriff verweigert</Text>
+            <Text style={[styles.emptyTitle, { color: theme.text }]}>{t("common.accessDenied", lang)}</Text>
             <Text style={[styles.emptySubtitle, { color: theme.textSecondary }]}>
               {t("common.error", lang)}
             </Text>
@@ -255,7 +255,7 @@ export default function SaniActivityScreen() {
                         {activityUser.userName}
                       </Text>
                       <View style={[styles.roleBadge, { backgroundColor: cfg.bg }]}>
-                        <Text style={[styles.roleText, { color: cfg.text }]}>{cfg.label}</Text>
+                        <Text style={[styles.roleText, { color: cfg.text }]}>{t(`roles.${activityUser.role}`, lang)}</Text>
                       </View>
                     </View>
                   </View>

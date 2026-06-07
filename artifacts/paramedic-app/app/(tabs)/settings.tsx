@@ -36,11 +36,11 @@ import { useAppStore } from "@/store/useAppStore";
 const ROLE_CONFIG: Record<User["role"], { label: string; bg: string; text: string; icon: string }> = {
   cto: { label: "Owner", bg: "#CCFBF1", text: "#0F766E", icon: "" },
   admin: { label: "Administrator", bg: "#FEF2F2", text: "#DC2626", icon: "" },
-  sanitaeter_leitung_admin: { label: "Sanitäter Leitung", bg: "#EFF6FF", text: "#2563EB", icon: "" },
-  sanitaeter_leitung: { label: "Sanitäter Leitung", bg: "#EFF6FF", text: "#2563EB", icon: "" },
-  teacher: { label: "Lehrer", bg: "#FFF7ED", text: "#EA580C", icon: "" },
-  sanitaeter: { label: "Sanitäter", bg: "#F0FDF4", text: "#16A34A", icon: "" },
-  student_paramedic: { label: "Sanitäter", bg: "#F0FDF4", text: "#16A34A", icon: "" },
+  sanitaeter_leitung_admin: { label: "Head Admin", bg: "#EFF6FF", text: "#2563EB", icon: "" },
+  sanitaeter_leitung: { label: "Head Paramedic", bg: "#EFF6FF", text: "#2563EB", icon: "" },
+  teacher: { label: "Teacher", bg: "#FFF7ED", text: "#EA580C", icon: "" },
+  sanitaeter: { label: "Paramedic", bg: "#F0FDF4", text: "#16A34A", icon: "" },
+  student_paramedic: { label: "Paramedic", bg: "#F0FDF4", text: "#16A34A", icon: "" },
 };
 
 const ROLE_PROTECTED_FROM: Record<string, string[]> = {
@@ -243,7 +243,7 @@ export default function SettingsScreen() {
     if (!user) return;
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== "granted") {
-      Alert.alert("Berechtigung", "Fotobibliothek-Zugriff wird benötigt.");
+      Alert.alert(t("settings.photoPermissionTitle", lang), t("settings.photoPermissionMessage", lang));
       return;
     }
      const result = await ImagePicker.launchImageLibraryAsync({
@@ -358,7 +358,7 @@ export default function SettingsScreen() {
           loadingActivityLog ? (
             <ActivityIndicator color={theme.tint} />
           ) : activityLogData.length === 0 ? (
-            <Text style={[styles.emptyText, { color: theme.textTertiary }]}>Keine Aktivitäten</Text>
+            <Text style={[styles.emptyText, { color: theme.textTertiary }]}>{t("activityLog.noActivity", lang)}</Text>
           ) : (
             activityLogData.map((item, index) => (
               <View key={item.id || index} style={[styles.activityRow, { borderTopColor: theme.cardBorder }]}>
@@ -497,7 +497,7 @@ export default function SettingsScreen() {
             loadingSaniActivity ? (
               <ActivityIndicator color={theme.tint} />
             ) : saniActivityData.length === 0 ? (
-              <Text style={[styles.emptyText, { color: theme.textTertiary }]}>Keine Sani-Aktivitäten</Text>
+              <Text style={[styles.emptyText, { color: theme.textTertiary }]}>{t("settings.noSaniActivities", lang)}</Text>
             ) : (
               saniActivityData.map((item, index) => (
                 <View key={item.id || index} style={[styles.saniActivityRow, { borderTopColor: theme.cardBorder }]}>
@@ -508,7 +508,7 @@ export default function SettingsScreen() {
                   </View>
                   <View style={styles.saniInfo}>
                     <Text style={[styles.saniName, { color: theme.text }]}>
-                      {item.assignedUser ? formatFullName(item.assignedUser.firstName, item.assignedUser.lastName) : "Nicht zugewiesen"}
+                      {item.assignedUser ? formatFullName(item.assignedUser.firstName, item.assignedUser.lastName) : t("missions.unassigned", lang)}
                     </Text>
                     <Text style={[styles.saniMission, { color: theme.textTertiary }]} numberOfLines={1}>
                       {item.title}
@@ -564,14 +564,14 @@ export default function SettingsScreen() {
               {loadingPending ? (
                 <View style={styles.adminLoadingRow}>
                   <ActivityIndicator color={theme.tint} size="small" />
-                  <Text style={[styles.adminLoadingText, { color: theme.textTertiary }]}>Lade Anfragen…</Text>
+                  <Text style={[styles.adminLoadingText, { color: theme.textTertiary }]}>{t("settings.loadingRequests", lang)}</Text>
                 </View>
               ) : pendingUsers.length === 0 ? (
                 <View style={styles.adminEmptyRow}>
                   <View style={styles.adminEmptyIcon}>
                     <Ionicons name="checkmark-circle-outline" size={20} color="#16A34A" />
                   </View>
-                  <Text style={[styles.emptyText, { color: theme.textTertiary }]}>Alle Accounts freigeschalten</Text>
+                  <Text style={[styles.emptyText, { color: theme.textTertiary }]}>{t("settings.allAccountsApproved", lang)}</Text>
                 </View>
               ) : (
                 pendingUsers.map((u) => {
@@ -680,7 +680,7 @@ export default function SettingsScreen() {
                           </Pressable>
                         ) : (
                           <View style={styles.selfTag}>
-                            <Text style={[styles.selfTagText, { color: theme.textTertiary }]}>{isCurrentUser ? "Du" : ""}</Text>
+                            <Text style={[styles.selfTagText, { color: theme.textTertiary }]}>{isCurrentUser ? t("common.you", lang) : ""}</Text>
                           </View>
                         )}
                       </View>
