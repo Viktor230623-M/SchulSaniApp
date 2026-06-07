@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import React, { useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { t } from "@/constants/i18n";
 import { getTheme } from "@/constants/theme";
 import { useAppStore } from "@/store/useAppStore";
 
@@ -27,6 +28,7 @@ const MONTHS = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "A
 
 export function DatePickerField({ value, onChange, label }: Props) {
   const themeKey = useAppStore((s) => s.theme);
+  const lang = useAppStore((s) => s.lang);
   const theme = getTheme(themeKey);
   const [open, setOpen] = useState(false);
   const [viewDate, setViewDate] = useState(new Date(value));
@@ -121,7 +123,7 @@ export function DatePickerField({ value, onChange, label }: Props) {
             </View>
 
             <Pressable onPress={() => setOpen(false)} style={[styles.cancelBtn, { borderColor: theme.cardBorder }]}>
-              <Text style={[styles.cancelText, { color: theme.textSecondary }]}>Schließen</Text>
+              <Text style={[styles.cancelText, { color: theme.textSecondary }]}>{t("common.close", lang)}</Text>
             </Pressable>
           </Pressable>
         </Pressable>

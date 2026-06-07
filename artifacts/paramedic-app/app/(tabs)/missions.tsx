@@ -27,11 +27,11 @@ import { localized } from "@/utils/localize";
 
 const CREATE_ROLES = ["cto", "admin", "sanitaeter_leitung_admin", "sanitaeter_leitung", "teacher"];
 
-function PriorityBadge({ priority }: { priority: MissionPriority }) {
+function PriorityBadge({ priority, lang }: { priority: MissionPriority; lang: AppLanguage }) {
   const cfg = {
-    high: { label: "Hoch", bg: "#FEF2F2", text: "#EF4444", dot: "#EF4444" },
-    medium: { label: "Mittel", bg: "#FFF7ED", text: "#F97316", dot: "#F97316" },
-    low: { label: "Niedrig", bg: "#F0FDF4", text: "#22C55E", dot: "#22C55E" },
+    high: { label: t("missions.high", lang), bg: "#FEF2F2", text: "#EF4444", dot: "#EF4444" },
+    medium: { label: t("missions.medium", lang), bg: "#FFF7ED", text: "#F97316", dot: "#F97316" },
+    low: { label: t("missions.low", lang), bg: "#F0FDF4", text: "#22C55E", dot: "#22C55E" },
   }[priority];
   return (
     <View style={[styles.priorityBadge, { backgroundColor: cfg.bg }]}>
@@ -41,13 +41,13 @@ function PriorityBadge({ priority }: { priority: MissionPriority }) {
   );
 }
 
-function StatusBadge({ status }: { status: MissionStatus }) {
+function StatusBadge({ status, lang }: { status: MissionStatus; lang: AppLanguage }) {
   const cfg = ({
-    pending: { label: "Ausstehend", bg: "#EFF6FF", text: "#3B82F6" },
-    accepted: { label: "Angenommen", bg: "#F0FDF4", text: "#22C55E" },
-    rejected: { label: "Abgelehnt", bg: "#FEF2F2", text: "#EF4444" },
-    completed: { label: "Abgeschlossen", bg: "#F3F4F6", text: "#6B7280" },
-    archived: { label: "Archiviert", bg: "#F3F4F6", text: "#9CA3AF" },
+    pending: { label: t("missions.pending", lang), bg: "#EFF6FF", text: "#3B82F6" },
+    accepted: { label: t("missions.accepted", lang), bg: "#F0FDF4", text: "#22C55E" },
+    rejected: { label: t("missions.rejected", lang), bg: "#FEF2F2", text: "#EF4444" },
+    completed: { label: t("missions.completed", lang), bg: "#F3F4F6", text: "#6B7280" },
+    archived: { label: t("activityLog.actions.dismissed", lang), bg: "#F3F4F6", text: "#9CA3AF" },
   } as Record<string, { label: string; bg: string; text: string }>)[status]
     ?? { label: status, bg: "#F3F4F6", text: "#9CA3AF" };
   return (
@@ -78,7 +78,7 @@ function MissionCard({ mission, onAccept, onReject, theme, lang }: MissionCardPr
   function doReject() {
     Alert.alert(
       t("missions.reject", lang),
-      lang === "en" ? "Dismiss this mission?" : "Diesen Einsatz wirklich ablehnen?",
+      t("missions.rejectConfirm", lang),
       [
         { text: t("common.cancel", lang), style: "cancel" },
         {
@@ -103,8 +103,8 @@ function MissionCard({ mission, onAccept, onReject, theme, lang }: MissionCardPr
     <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
       <View style={styles.cardHeader}>
         <View style={styles.badges}>
-          <PriorityBadge priority={mission.priority} />
-          <StatusBadge status={mission.status} />
+          <PriorityBadge priority={mission.priority} lang={lang} />
+          <StatusBadge status={mission.status} lang={lang} />
         </View>
         <View>
           <Text style={[styles.timeText, { color: theme.text }]}>{fmt(mission.requestedAt)}</Text>
@@ -432,8 +432,8 @@ export default function MissionsScreen() {
                 removeMission(item.id);
               } catch (err) {
                 console.error("Failed to dismiss mission:", err);
-                const message = err instanceof Error ? err.message : "Einsatz konnte nicht ausgeblendet werden.";
-                Alert.alert("Fehler", message);
+                const message = err instanceof Error ? err.message : t("missions.dismissError", lang);
+                Alert.alert(t("common.error", lang), message);
               }
             }}
             theme={theme}

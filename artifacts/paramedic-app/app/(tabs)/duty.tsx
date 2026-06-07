@@ -53,7 +53,7 @@ export default function DutyScreen() {
       .then(setOnDutyUsers)
       .catch((err) => {
         console.error("Failed to load on-duty users:", err);
-        Alert.alert("Fehler", "Dienststatus konnte nicht geladen werden.");
+        Alert.alert(t("common.error", lang), t("duty.updateFailed", lang));
       })
       .finally(() => setListLoading(false));
   }, []);
@@ -74,8 +74,8 @@ export default function DutyScreen() {
     } catch (err) {
       console.error("Failed to update duty status:", err);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      const message = err instanceof Error ? err.message : "Dienststatus konnte nicht aktualisiert werden.";
-      Alert.alert("Fehler", message);
+      const message = err instanceof Error ? err.message : t("duty.updateFailed", lang);
+      Alert.alert(t("common.error", lang), message);
     } finally {
       setDutyLoading(false);
     }
@@ -83,12 +83,12 @@ export default function DutyScreen() {
 
   function roleLabelShort(role: User["role"]) {
     return {
-      cto: lang === "de" ? "Eigentümer" : "Owner",
+      cto: t("roles.cto", lang),
       student_paramedic: "San.",
       sanitaeter_leitung: "Ltg.",
       sanitaeter_leitung_admin: "Ltg.",
       admin: "Admin",
-      teacher: "Lehrer",
+      teacher: t("roles.teacher", lang),
     }[role] ?? role;
   }
 

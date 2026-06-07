@@ -47,7 +47,7 @@ export default function ActivityLogScreen() {
 
       const grouped: Record<string, MissionActivityLog[]> = {};
       activitiesList.forEach((activity) => {
-        const weekKey = activity.weekKey || "Unbekannt";
+        const weekKey = activity.weekKey || t("common.unknown", lang);
         if (!grouped[weekKey]) {
           grouped[weekKey] = [];
         }

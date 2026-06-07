@@ -95,7 +95,7 @@ export default function LoginScreen() {
             <MedicalCross size={64} color={theme.tint} animate />
             <Text style={[styles.appName, { color: theme.text }]}>{SCHOOL_NAME}</Text>
             <Text style={[styles.appSubtitle, { color: theme.textSecondary }]}>
-              Verwaltungssystem · {ISERV_DOMAIN}
+              {t("auth.adminSystem", lang)} · {ISERV_DOMAIN}
             </Text>
           </View>
 
@@ -128,7 +128,7 @@ export default function LoginScreen() {
                 <TextInput
                   value={username}
                   onChangeText={setUsername}
-                  placeholder="Benutzername"
+                  placeholder={t("auth.username", lang)}
                   placeholderTextColor={theme.textTertiary}
                   autoCapitalize="none"
                   autoCorrect={false}
