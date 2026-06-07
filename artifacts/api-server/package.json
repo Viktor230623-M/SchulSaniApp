@@ -16,6 +16,7 @@
     "cors": "^2",
     "drizzle-orm": "catalog:",
     "express": "^5",
+    "express-rate-limit": "^7.5.0",
     "jsonwebtoken": "^9.0.3",
     "pdfkit": "^0.15.2"
   },
