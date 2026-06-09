@@ -45,7 +45,7 @@ catalog:
   '@vitejs/plugin-react': ^5.0.4
   class-variance-authority: ^0.7.1
   clsx: ^2.1.1
-  drizzle-orm: ^0.45.1
+  drizzle-orm: ^0.45.2
   framer-motion: ^12.23.24
   lucide-react: ^0.545.0
   # Must be this exact version because expo requires it
@@ -150,6 +150,24 @@ overrides:
   # drizzle-kit uses esbuild internally on an older version that's vulnerable, this overrides it
   "@esbuild-kit/esm-loader": "npm:tsx@^4.21.0"
   esbuild: "0.27.3"
+  # Patched versions for vulnerable transitive deps of express (GHSA advisories: qs DoS, path-to-regexp ReDoS)
+  "qs@>=6.11.1 <6.15.2": "^6.15.2"
+  "path-to-regexp@>=8.0.0 <8.4.0": "^8.4.0"
+  # Patched versions for vulnerable transitive deps of the expo toolchain (all within-major bumps)
+  "shell-quote@<1.8.4": "^1.8.4"
+  "fast-uri@>=3 <3.1.2": "^3.1.2"
+  "node-forge@<1.4.0": "^1.4.0"
+  "picomatch@>=2 <2.3.2": "^2.3.2"
+  "picomatch@>=3 <3.0.2": "^3.0.2"
+  "picomatch@>=4 <4.0.4": "^4.0.4"
+  "@xmldom/xmldom@>=0.8.0 <0.8.13": "^0.8.13"
+  "brace-expansion@>=1 <1.1.13": "^1.1.13"
+  "brace-expansion@>=2 <2.0.3": "^2.0.3"
+  "brace-expansion@>=5 <5.0.6": "^5.0.6"
+  "postcss@>=8 <8.5.10": "^8.5.10"
+  "ws@>=8 <8.20.1": "^8.20.1"
+  "yaml@>=1 <1.10.3": "^1.10.3"
+  "yaml@>=2 <2.8.3": "^2.8.3"
 
 allowBuilds:
   esbuild: set this to true or false

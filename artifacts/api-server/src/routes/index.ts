@@ -8,7 +8,6 @@ import missionsRouter from "./missions";
 import statusRouter from "./status";
 import notificationsRouter from "./notifications";
 import activityRouter from "./activity";
-import incidentReportsRouter from "./incidentReports";
 
 const router: IRouter = Router();
 
@@ -21,6 +20,5 @@ router.use("/missions", missionsRouter);
 router.use("/status", statusRouter);
 router.use("/notifications", notificationsRouter);
 router.use("/activity", activityRouter);
-router.use("/incident-reports", incidentReportsRouter);
 
 export default router;

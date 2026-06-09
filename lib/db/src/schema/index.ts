@@ -110,48 +110,6 @@ export const missionDismissalsTable = pgTable("mission_dismissals", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => [uniqueIndex("mission_dismissals_user_mission_idx").on(t.userId, t.missionId)]);
 
-// Incident reports (Einsatzprotokoll)
-export const incidentReportsTable = pgTable("incident_reports", {
-  id: text("id").primaryKey(),
-  schoolId: text("school_id"),
-  missionId: text("mission_id"), // null = walk-in
-  authorId: text("author_id").notNull(),
-  status: text("status").notNull().default("draft"), // draft | submitted
-  // Patient (access-restricted)
-  patientType: text("patient_type"), // student | staff | visitor | other
-  patientFirstName: text("patient_first_name"),
-  patientLastName: text("patient_last_name"),
-  patientClass: text("patient_class"),
-  // Incident details
-  incidentAt: timestamp("incident_at"),
-  location: text("location"),
-  careStartedAt: timestamp("care_started_at"),
-  careEndedAt: timestamp("care_ended_at"),
-  category: text("category"),
-  description: text("description"),
-  // Treatment
-  measuresJson: json("measures_json"), // string[] of TreatmentMeasure keys
-  treatmentNotes: text("treatment_notes"),
-  // Vitals (all optional)
-  pulseBpm: integer("pulse_bpm"),
-  spo2: integer("spo2"),
-  respRate: integer("resp_rate"),
-  bloodPressure: text("blood_pressure"),
-  consciousnessAvpu: text("consciousness_avpu"), // A | V | P | U
-  painScore: integer("pain_score"), // 0-10
-  // Outcome
-  outcome: text("outcome"),
-  outcomeNotes: text("outcome_notes"),
-  // People
-  responderIdsJson: json("responder_ids_json"), // string[]
-  witnesses: text("witnesses"),
-  // Record-keeping
-  addendaJson: json("addenda_json"), // {authorId, authorName, text, createdAt}[]
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-  submittedAt: timestamp("submitted_at"),
-});
-
 // Device tokens for push notifications
 export const deviceTokensTable = pgTable("device_tokens", {
   id: text("id").primaryKey(),
@@ -178,5 +136,3 @@ export type DeviceToken = typeof deviceTokensTable.$inferSelect;
 export type NewDeviceToken = typeof deviceTokensTable.$inferInsert;
 export type MissionDismissal = typeof missionDismissalsTable.$inferSelect;
 export type NewMissionDismissal = typeof missionDismissalsTable.$inferInsert;
-export type IncidentReport = typeof incidentReportsTable.$inferSelect;
-export type NewIncidentReport = typeof incidentReportsTable.$inferInsert;
