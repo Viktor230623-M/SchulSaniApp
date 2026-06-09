@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { eq } from "drizzle-orm";
 import { db, usersTable } from "@workspace/db";
-import { requireAuth, requireRole, type AuthRequest } from "../middlewares/auth";
+import { requireAuth, requireRole, invalidateUserCache, type AuthRequest } from "../middlewares/auth";
 
 const VALID_ROLES = ["cto", "admin", "sanitaeter_leitung_admin", "sanitaeter_leitung", "teacher", "sanitaeter", "student_paramedic"] as const;
 
@@ -97,6 +97,7 @@ router.patch("/:id/approve", requireAuth, requireRole("admin", "cto"), async (re
     .set({ isApproved: true, approvedBy: req.user!.userId, role: newRole, updatedAt: new Date() })
     .where(eq(usersTable.id, id))
     .returning();
+  invalidateUserCache(id);
   res.json(safeUser(updated!));
 });
 
@@ -126,6 +127,7 @@ router.patch("/:id/role", requireAuth, requireRole("admin", "cto", "sanitaeter_l
     .where(eq(usersTable.id, id))
     .returning();
   if (!updated) { res.status(404).json({ error: "User not found" }); return; }
+  invalidateUserCache(id);
   res.json(safeUser(updated));
 });
 
@@ -139,6 +141,7 @@ router.delete("/:id", requireAuth, requireRole("admin", "cto"), async (req: Auth
   }
   const result = await db.delete(usersTable).where(eq(usersTable.id, id)).returning();
   if (result.length === 0) { res.status(404).json({ error: "User not found" }); return; }
+  invalidateUserCache(id);
   res.status(204).send();
 });
 

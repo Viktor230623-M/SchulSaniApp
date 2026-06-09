@@ -1,11 +1,17 @@
 import express, { type Express } from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
+import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import router from "./routes";
 
 const app: Express = express();
 app.disable("x-powered-by");
+// Behind nginx — trust exactly one proxy hop so req.ip is the real client
+// address; without this every client shares nginx's IP and the rate
+// limiters throttle all users as one.
+app.set("trust proxy", 1);
+app.use(helmet());
 
 const allowedOrigins = process.env["ALLOWED_ORIGINS"]?.split(",").map((o) => o.trim()) || ["https://sani.avo-network.com"];
 app.use(cors({
@@ -18,12 +24,6 @@ const generalLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
   max: 100, // 100 requests per minute
   message: { error: "Too many requests, please try again later." },
-});
-
-const authLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 5, // 5 login attempts per minute
-  message: { error: "Too many login attempts, please try again later." },
 });
 
 app.use(generalLimiter);
