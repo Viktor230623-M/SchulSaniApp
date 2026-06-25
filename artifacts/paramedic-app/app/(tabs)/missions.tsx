@@ -168,6 +168,27 @@ function MissionCard({ mission, onAccept, onReject, theme, lang, currentUserId, 
         </View>
       )}
 
+      {mission.status === "accepted" && (
+        (mission.assignedParamedicId === currentUserId || LEADERSHIP_ROLES.includes(currentUserRole ?? ""))
+      ) && (
+        <Pressable
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            router.push({
+              pathname: "/report/[id]",
+              params: {
+                id: "new",
+                missionId: mission.id,
+                location: mission.location,
+              },
+            });
+          }}
+          style={[styles.documentBtn, { backgroundColor: theme.tint + "15", borderColor: theme.tint + "40" }]}
+        >
+          <Ionicons name="document-text-outline" size={16} color={theme.tint} />
+          <Text style={[styles.documentBtnText, { color: theme.tint }]}>{t("report.documentAndComplete", lang)}</Text>
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -398,6 +419,18 @@ export default function MissionsScreen() {
               </View>
             </View>
             <View style={styles.headerActions}>
+              <Pressable
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  router.push("/report");
+                }}
+                style={({ pressed }) => [
+                  styles.iconBtn,
+                  { backgroundColor: theme.card, borderColor: theme.cardBorder, borderWidth: 1, opacity: pressed ? 0.7 : 1 },
+                ]}
+              >
+                <Ionicons name="document-text-outline" size={20} color={theme.tint} />
+              </Pressable>
               {canCreate && (
                 <Pressable
                   onPress={() => {
@@ -492,6 +525,17 @@ const styles = StyleSheet.create({
   acceptBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: "#fff" },
   rejectBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 11, borderRadius: 12, borderWidth: 1, backgroundColor: "transparent" },
   rejectBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  documentBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginTop: 4,
+  },
+  documentBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
   empty: { flex: 1, alignItems: "center", justifyContent: "center", paddingTop: 80, gap: 12 },
   emptyTitle: { fontSize: 18, fontFamily: "Inter_600SemiBold" },
   emptyDesc: { fontSize: 14, fontFamily: "Inter_400Regular", textAlign: "center", paddingHorizontal: 40 },
