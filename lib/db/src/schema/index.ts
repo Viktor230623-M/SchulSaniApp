@@ -118,19 +118,23 @@ export const incidentReportsTable = pgTable("incident_reports", {
   authorId: text("author_id").notNull(),
   status: text("status").notNull().default("draft"), // draft | submitted
   // Patient (access-restricted)
-  patientType: text("patient_type"), // student | staff | visitor | other
+  patientType: text("patient_type"), // student | teacher | visitor | other
   patientFirstName: text("patient_first_name"),
   patientLastName: text("patient_last_name"),
   patientClass: text("patient_class"),
+  patientAge: integer("patient_age"),
+  emergencyContactName: text("emergency_contact_name"),
+  emergencyContactPhone: text("emergency_contact_phone"),
   // Incident details
   incidentAt: timestamp("incident_at"),
   location: text("location"),
   careStartedAt: timestamp("care_started_at"),
   careEndedAt: timestamp("care_ended_at"),
-  category: text("category"),
+  category: text("category"), // free text, comma-separated
   description: text("description"),
+  injurySites: text("injury_sites"), // free text, comma-separated body regions
   // Treatment
-  measuresJson: json("measures_json"), // string[] of TreatmentMeasure keys
+  measures: text("measures"), // free text, comma-separated
   treatmentNotes: text("treatment_notes"),
   // Vitals (all optional)
   pulseBpm: integer("pulse_bpm"),
