@@ -87,6 +87,12 @@ router.patch("/:id/approve", requireAuth, requireRole("admin", "cto"), async (re
   const [existing] = await db.select().from(usersTable).where(eq(usersTable.id, id));
   if (!existing) { res.status(404).json({ error: "User not found" }); return; }
 
+  // Same gate as /role and DELETE: approving carries an optional role change, so
+  // without this an admin could "approve" a cto account and demote it on the way.
+  if (!canModifyTarget(req.user!.role, existing.role ?? "sanitaeter")) {
+    res.status(403).json({ error: "Insufficient permissions to modify this user" }); return;
+  }
+
   if (role && !allowedTargetRoles(req.user!.role).includes(role)) {
     res.status(403).json({ error: "Insufficient permissions to assign this role" }); return;
   }

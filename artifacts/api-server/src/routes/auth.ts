@@ -1,3 +1,4 @@
+import * as fs from "node:fs";
 import * as https from "https";
 import * as http from "http";
 import { Router } from "express";
