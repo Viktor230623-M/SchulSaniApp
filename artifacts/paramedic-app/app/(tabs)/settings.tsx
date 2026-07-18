@@ -107,6 +107,8 @@ export default function SettingsScreen() {
   const [loadingSaniActivity, setLoadingSaniActivity] = useState(false);
 
   const isAdmin = ["admin", "cto"].includes(user?.role ?? "");
+  // The database console is bound to one account, not to a role.
+  const isOwner = user?.id === "iserv-viktor.gnjatic";
   const canManageRoles = ["admin", "cto", "sanitaeter_leitung_admin"].includes(user?.role ?? "");
   const [showAdmin, setShowAdmin] = useState(false);
   const [pendingUsers, setPendingUsers] = useState<User[]>([]);
@@ -527,6 +529,22 @@ export default function SettingsScreen() {
       {canManageRoles && (
         <View style={[styles.section, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
           {/* ── Section Header (collapsible) ── */}
+          {isOwner && (
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push("/admin/database");
+              }}
+              style={styles.sectionHeaderRow}
+            >
+              <View style={styles.adminHeaderLeft}>
+                <Ionicons name="server-outline" size={13} color="#EF4444" />
+                <Text style={[styles.sectionTitle, { color: "#EF4444" }]}>Datenbank</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={theme.textTertiary} />
+            </Pressable>
+          )}
+
           <Pressable
             onPress={() => {
               setShowAdmin((v) => !v);
