@@ -110,15 +110,29 @@ export function guardStatement(raw: string): GuardResult {
     return { ok: false, error: `Anweisungen mit "${firstWord.toUpperCase()}" sind nicht erlaubt.` };
   }
 
+  // SELECT ... INTO creates a table without starting with CREATE, which would
+  // otherwise sail past the verb check and leave a permanent unredacted copy of
+  // whatever was selected. INSERT INTO is the legitimate use of the keyword, so
+  // remove those first and refuse anything that still contains INTO.
+  const withoutInsertInto = normalized.replace(/\binsert\s+into\b/gi, " ");
+  if (/\binto\b/i.test(withoutInsertInto)) {
+    return {
+      ok: false,
+      error: "\"SELECT ... INTO\" ist gesperrt — es würde eine neue Tabelle anlegen.",
+    };
+  }
+
   // A CTE can still perform a write; classify by what the statement actually does.
   const kind: StatementKind =
     isWrite || /\b(insert\s+into|update\s+\w+\s+set|delete\s+from)\b/i.test(normalized)
       ? "write"
       : "read";
 
+  // Flags any UPDATE/DELETE with no WHERE anywhere, including one wrapped in a
+  // CTE such as: WITH d AS (DELETE FROM missions RETURNING *) SELECT * FROM d
   const unbounded =
     kind === "write" &&
-    /^(update|delete)\b/i.test(normalized) &&
+    /\b(delete\s+from|update\s+\S+\s+set)\b/i.test(normalized) &&
     !/\bwhere\b/i.test(normalized);
 
   return { ok: true, kind, unbounded, normalized };
