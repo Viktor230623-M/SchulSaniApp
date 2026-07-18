@@ -238,8 +238,9 @@ const translations = {
     report: {
       title: "Einsatzprotokoll",
       newReport: "Neues Protokoll",
-      walkin: "Walk-in",
-      walkinTitle: "Walk-in Protokoll",
+      walkin: "Protokoll",
+      walkinTitle: "Protokoll ohne Einsatz",
+      noMission: "Ohne Einsatz",
       reports: "Protokolle",
       draft: "Entwurf",
       submitted: "Eingereicht",
@@ -605,8 +606,9 @@ const translations = {
     report: {
       title: "Incident Report",
       newReport: "New Report",
-      walkin: "Walk-in",
-      walkinTitle: "Walk-in Report",
+      walkin: "Report",
+      walkinTitle: "Report without Mission",
+      noMission: "No mission",
       reports: "Reports",
       draft: "Draft",
       submitted: "Submitted",

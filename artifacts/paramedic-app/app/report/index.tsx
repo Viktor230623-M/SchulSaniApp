@@ -188,7 +188,7 @@ export default function ReportsIndexScreen() {
                 {new Date(item.createdAt).toLocaleDateString(lang === "de" ? "de-DE" : "en-US", {
                   day: "2-digit", month: "2-digit", year: "numeric",
                 })}
-                {item.missionId ? (lang === "de" ? " · Einsatz" : " · Mission") : (lang === "de" ? " · Walk-in" : " · Walk-in")}
+                {item.missionId ? (lang === "de" ? " · Einsatz" : " · Mission") : ` · ${t("report.noMission", lang)}`}
               </Text>
             </Pressable>
           );
