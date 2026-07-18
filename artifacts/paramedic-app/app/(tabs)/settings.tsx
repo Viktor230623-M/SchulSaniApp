@@ -16,7 +16,6 @@ import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Image,
   Platform,
   Pressable,
@@ -30,6 +29,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { t } from "@/constants/i18n";
 import { getTheme, type ThemeColors } from "@/constants/theme";
 import type { AppLanguage, AppTheme, User, Mission, LOARequest } from "@/models";
+import { confirmAction, notify } from "@/lib/dialog";
 import ApiService from "@/services/ApiService";
 import { useAppStore } from "@/store/useAppStore";
 
@@ -200,7 +200,7 @@ export default function SettingsScreen() {
       setAllUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, ...updated } : u)));
       try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } catch {}
     } catch (err) {
-      Alert.alert(t("common.error", lang), err instanceof Error ? err.message : t("settings.approveFailed", lang));
+      notify(t("common.error", lang), err instanceof Error ? err.message : t("settings.approveFailed", lang));
     } finally {
       setAdminProcessing(null);
     }
@@ -212,40 +212,33 @@ export default function SettingsScreen() {
       setAllUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, ...updated } : u)));
       try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } catch {}
     } catch (err) {
-      Alert.alert(t("common.error", lang), err instanceof Error ? err.message : t("settings.roleChangeFailed", lang));
+      notify(t("common.error", lang), err instanceof Error ? err.message : t("settings.roleChangeFailed", lang));
     }
   }
 
-  function handleDeleteUser(userId: string, name: string) {
-    if (Platform.OS === "web") {
-      ApiService.deleteUser(userId)
-        .then(() => setAllUsers((prev) => prev.filter((u) => u.id !== userId)))
-        .catch((err) => Alert.alert(t("common.error", lang), err instanceof Error ? err.message : t("common.error", lang)));
-      return;
+  async function handleDeleteUser(userId: string, name: string) {
+    const confirmed = await confirmAction({
+      title: t("settings.deleteUserTitle", lang),
+      message: t("settings.deleteUserConfirm", lang).replace("{name}", name),
+      confirmLabel: t("common.delete", lang),
+      cancelLabel: t("common.cancel", lang),
+      destructive: true,
+    });
+    if (!confirmed) return;
+    try {
+      await ApiService.deleteUser(userId);
+      setAllUsers((prev) => prev.filter((u) => u.id !== userId));
+      try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning); } catch {}
+    } catch (err) {
+      await notify(t("common.error", lang), err instanceof Error ? err.message : t("common.error", lang));
     }
-    Alert.alert(t("settings.deleteUserTitle", lang), t("settings.deleteUserConfirm", lang).replace("{name}", name), [
-      { text: t("common.cancel", lang), style: "cancel" },
-      {
-        text: t("common.delete", lang),
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await ApiService.deleteUser(userId);
-            setAllUsers((prev) => prev.filter((u) => u.id !== userId));
-            try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning); } catch {}
-          } catch (err) {
-            Alert.alert(t("common.error", lang), err instanceof Error ? err.message : t("common.error", lang));
-          }
-        },
-      },
-    ]);
   }
 
   async function handlePickImage() {
     if (!user) return;
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== "granted") {
-      Alert.alert(t("settings.photoPermissionTitle", lang), t("settings.photoPermissionMessage", lang));
+      notify(t("settings.photoPermissionTitle", lang), t("settings.photoPermissionMessage", lang));
       return;
     }
      const result = await ImagePicker.launchImageLibraryAsync({
@@ -260,24 +253,18 @@ export default function SettingsScreen() {
      }
   }
 
-  function handleLogout() {
-    if (Platform.OS === "web") {
-      logout();
-      router.replace("/login");
-      return;
-    }
-    Alert.alert(t("settings.logout", lang), t("settings.logoutConfirm", lang), [
-      { text: t("common.cancel", lang), style: "cancel" },
-      {
-        text: t("settings.logout", lang),
-        style: "destructive",
-        onPress: () => {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-          logout();
-          router.replace("/login");
-        },
-      },
-    ]);
+  async function handleLogout() {
+    const confirmed = await confirmAction({
+      title: t("settings.logout", lang),
+      message: t("settings.logoutConfirm", lang),
+      confirmLabel: t("settings.logout", lang),
+      cancelLabel: t("common.cancel", lang),
+      destructive: true,
+    });
+    if (!confirmed) return;
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    logout();
+    router.replace("/login");
   }
 
   const baseThemes: { key: AppTheme; label: string; color: string; border: string }[] = [

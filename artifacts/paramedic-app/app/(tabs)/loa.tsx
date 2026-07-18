@@ -3,7 +3,6 @@ import * as Haptics from "expo-haptics";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Modal,
   Platform,
@@ -21,6 +20,7 @@ import { t } from "@/constants/i18n";
 import { getTheme } from "@/constants/theme";
 import { DatePickerField } from "@/components/DatePickerField";
 import type { LOARequest, LOAStatus } from "@/models";
+import { confirmAction, notify } from "@/lib/dialog";
 import ApiService from "@/services/ApiService";
 import { useAppStore } from "@/store/useAppStore";
 import { localized } from "@/utils/localize";
@@ -138,7 +138,7 @@ export default function LOAScreen() {
     } catch (err) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       const message = err instanceof Error ? err.message : t("loa.createError", lang);
-      Alert.alert(t("common.error", lang), message);
+      notify(t("common.error", lang), message);
     } finally {
       setSubmitting(false);
     }

@@ -3,7 +3,6 @@ import * as Haptics from "expo-haptics";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Modal,
   Platform,
@@ -20,6 +19,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { t } from "@/constants/i18n";
 import { getTheme, type ThemeColors } from "@/constants/theme";
 import type { AppLanguage, NewsItem, NewsStatus } from "@/models";
+import { confirmAction, notify } from "@/lib/dialog";
 import ApiService from "@/services/ApiService";
 import { useAppStore } from "@/store/useAppStore";
 import { localized } from "@/utils/localize";
@@ -70,19 +70,15 @@ function NewsCard({
   const cat = categoryConfig(item.category, theme.tint, lang);
   const canDelete = isOwner || canModerate;
 
-  function handleDelete() {
-    if (Platform.OS === "web") {
-      onDelete(item.id);
-      return;
-    }
-    Alert.alert(
-      t("news.deleteConfirm", lang),
-      t("news.deleteDesc", lang),
-      [
-        { text: t("common.cancel", lang), style: "cancel" },
-        { text: t("common.delete", lang), style: "destructive", onPress: () => onDelete(item.id) },
-      ]
-    );
+  async function handleDelete() {
+    const confirmed = await confirmAction({
+      title: t("news.deleteConfirm", lang),
+      message: t("news.deleteDesc", lang),
+      confirmLabel: t("common.delete", lang),
+      cancelLabel: t("common.cancel", lang),
+      destructive: true,
+    });
+    if (confirmed) onDelete(item.id);
   }
 
   return (
@@ -258,7 +254,7 @@ export default function NewsScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Nachricht konnte nicht abgelehnt werden.";
-      Alert.alert(t("common.error", lang), message);
+      notify(t("common.error", lang), message);
     } finally {
       setRejectNewsId(null);
       setRejectNewsReason("");

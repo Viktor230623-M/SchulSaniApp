@@ -4,7 +4,6 @@ import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   KeyboardAvoidingView,
   Modal,
@@ -22,6 +21,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { t } from "@/constants/i18n";
 import { getTheme, type ThemeColors } from "@/constants/theme";
 import type { AppLanguage, Mission, MissionPriority, MissionStatus } from "@/models";
+import { confirmAction, notify } from "@/lib/dialog";
 import ApiService from "@/services/ApiService";
 import { useAppStore } from "@/store/useAppStore";
 import { localized } from "@/utils/localize";
@@ -80,24 +80,19 @@ function MissionCard({ mission, onAccept, onReject, theme, lang, currentUserId, 
     setLoading(false);
   }
 
-  function doReject() {
-    Alert.alert(
-      t("missions.reject", lang),
-      t("missions.rejectConfirm", lang),
-      [
-        { text: t("common.cancel", lang), style: "cancel" },
-        {
-          text: t("missions.reject", lang),
-          style: "destructive",
-          onPress: async () => {
-            setLoading(true);
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            await onReject();
-            setLoading(false);
-          },
-        },
-      ]
-    );
+  async function doReject() {
+    const confirmed = await confirmAction({
+      title: t("missions.reject", lang),
+      message: t("missions.rejectConfirm", lang),
+      confirmLabel: t("missions.reject", lang),
+      cancelLabel: t("common.cancel", lang),
+      destructive: true,
+    });
+    if (!confirmed) return;
+    setLoading(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    await onReject();
+    setLoading(false);
   }
 
   function fmt(iso: string) {
@@ -223,7 +218,7 @@ function CreateMissionModal({
 
   async function submit() {
     if (!title.trim() || !location.trim()) {
-      Alert.alert(t("common.error", lang), t("missions.requiredFieldsError", lang));
+      notify(t("common.error", lang), t("missions.requiredFieldsError", lang));
       return;
     }
     setSubmitting(true);
@@ -242,7 +237,7 @@ function CreateMissionModal({
     } catch (e) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       const message = e instanceof Error ? e.message : t("missions.createError", lang);
-      Alert.alert(t("common.error", lang), message);
+      notify(t("common.error", lang), message);
     } finally {
       setSubmitting(false);
     }
@@ -474,7 +469,7 @@ export default function MissionsScreen() {
               } catch (err) {
                 console.error("Failed to dismiss mission:", err);
                 const message = err instanceof Error ? err.message : t("missions.dismissError", lang);
-                Alert.alert(t("common.error", lang), message);
+                notify(t("common.error", lang), message);
               }
             }}
             theme={theme}

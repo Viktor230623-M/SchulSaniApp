@@ -4,7 +4,6 @@ import { router } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Platform,
   Pressable,
   ScrollView,
@@ -17,6 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { getTheme } from "@/constants/theme";
 import type { DbConsoleResult, SqlPreset } from "@/models";
+import { confirmAction, notify } from "@/lib/dialog";
 import ApiService from "@/services/ApiService";
 import { useAppStore } from "@/store/useAppStore";
 
@@ -71,10 +71,7 @@ export default function DatabaseConsoleScreen() {
   async function run(confirm: boolean) {
     if (!statement.trim()) return;
     if (openPlaceholders.length > 0) {
-      Alert.alert(
-        "Platzhalter offen",
-        `Bitte noch ersetzen: ${openPlaceholders.join(", ")}`
-      );
+      await notify("Platzhalter offen", `Bitte noch ersetzen: ${openPlaceholders.join(", ")}`);
       return;
     }
     setRunning(true);
@@ -88,16 +85,15 @@ export default function DatabaseConsoleScreen() {
       });
       setResult(res);
       if (res.preview && res.rowsAffected > 0) {
-        Alert.alert(
-          res.unbounded ? "Achtung: keine Bedingung" : "Vorschau",
-          `${res.rowsAffected} Zeile(n) würden geändert.${
+        const go = await confirmAction({
+          title: res.unbounded ? "Achtung: keine Bedingung" : "Vorschau",
+          message: `${res.rowsAffected} Zeile(n) würden geändert.${
             res.unbounded ? "\n\nDiese Anweisung hat kein WHERE und trifft die ganze Tabelle." : ""
           }\n\nJetzt wirklich ausführen?`,
-          [
-            { text: "Abbrechen", style: "cancel" },
-            { text: "Ausführen", style: "destructive", onPress: () => run(true) },
-          ]
-        );
+          confirmLabel: "Ausführen",
+          destructive: true,
+        });
+        if (go) await run(true);
       } else if (res.committed) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
