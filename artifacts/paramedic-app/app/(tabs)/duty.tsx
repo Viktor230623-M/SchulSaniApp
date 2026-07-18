@@ -3,7 +3,6 @@ import * as Haptics from "expo-haptics";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Platform,
   Pressable,
   ScrollView,
@@ -22,6 +21,7 @@ import { MedicalCross } from "@/components/MedicalCross";
 import { t } from "@/constants/i18n";
 import { getTheme } from "@/constants/theme";
 import type { User } from "@/models";
+import { confirmAction, notify } from "@/lib/dialog";
 import ApiService from "@/services/ApiService";
 import { useAppStore } from "@/store/useAppStore";
 
@@ -53,7 +53,7 @@ export default function DutyScreen() {
       .then(setOnDutyUsers)
       .catch((err) => {
         console.error("Failed to load on-duty users:", err);
-        Alert.alert(t("common.error", lang), t("duty.updateFailed", lang));
+        notify(t("common.error", lang), t("duty.updateFailed", lang));
       })
       .finally(() => setListLoading(false));
   }, []);
@@ -75,7 +75,7 @@ export default function DutyScreen() {
       console.error("Failed to update duty status:", err);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       const message = err instanceof Error ? err.message : t("duty.updateFailed", lang);
-      Alert.alert(t("common.error", lang), message);
+      notify(t("common.error", lang), message);
     } finally {
       setDutyLoading(false);
     }

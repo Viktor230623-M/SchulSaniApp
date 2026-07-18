@@ -5,7 +5,6 @@ import * as Sharing from "expo-sharing";
 import * as FileSystem from "expo-file-system";
 import React, { useEffect, useRef, useState } from "react";
 import {
-  Alert,
   Platform,
   Pressable,
   ScrollView,
@@ -29,6 +28,7 @@ import type {
 import { CATEGORY_SUGGESTIONS, MEASURE_SUGGESTIONS } from "@/models";
 import ChipTextField from "@/components/ChipTextField";
 import BodyMap, { BODY_REGION_KEYS } from "@/components/BodyMap";
+import { confirmAction, notify } from "@/lib/dialog";
 import ApiService from "@/services/ApiService";
 import { useAppStore } from "@/store/useAppStore";
 
@@ -134,7 +134,7 @@ export default function ReportScreen() {
         setVitalsExpanded(true);
       }
     } catch (e) {
-      Alert.alert(t("common.error", lang), String(e));
+      notify(t("common.error", lang), String(e));
     } finally {
       setLoading(false);
     }
@@ -176,51 +176,56 @@ export default function ReportScreen() {
       if (isNew) {
         const r = await ApiService.createIncidentReport(payload);
         setReport(r);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         router.replace(`/report/${r.id}`);
       } else {
         const r = await ApiService.updateIncidentReport(id, payload);
         setReport(r);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
+      // Saving used to succeed without any visible feedback, which read as failure.
+      await notify(t("report.draftSaved", lang));
     } catch (e) {
-      Alert.alert(t("common.error", lang), String(e));
+      notify(t("common.error", lang), String(e));
     } finally {
       setSaving(false);
     }
   }
 
   async function handleSubmit() {
-    if (!category.trim()) { Alert.alert(t("common.error", lang), t("report.categoryRequired", lang)); return; }
-    if (!outcome) { Alert.alert(t("common.error", lang), t("report.outcomeRequired", lang)); return; }
+    if (!category.trim()) { notify(t("common.error", lang), t("report.categoryRequired", lang)); return; }
+    if (!outcome) { notify(t("common.error", lang), t("report.outcomeRequired", lang)); return; }
 
-    Alert.alert(t("report.submitConfirm", lang), t("report.submitConfirmDesc", lang), [
-      { text: t("common.cancel", lang), style: "cancel" },
-      {
-        text: t("report.submit", lang),
-        style: "destructive",
-        onPress: async () => {
-          setSubmitting(true);
-          try {
-            // Save current state first, then submit
-            let reportId = id;
-            if (isNew) {
-              const r = await ApiService.createIncidentReport(buildPayload());
-              reportId = r.id;
-            } else {
-              await ApiService.updateIncidentReport(id, buildPayload());
-            }
-            const r = await ApiService.submitIncidentReport(reportId);
-            setReport(r);
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            if (!isNew) loadReport();
-            else router.replace(`/report/${reportId}`);
-          } catch (e) {
-            Alert.alert(t("common.error", lang), String(e));
-          } finally {
-            setSubmitting(false);
-          }
-        },
-      },
-    ]);
+    const confirmed = await confirmAction({
+      title: t("report.submitConfirm", lang),
+      message: t("report.submitConfirmDesc", lang),
+      confirmLabel: t("report.submit", lang),
+      cancelLabel: t("common.cancel", lang),
+      destructive: true,
+    });
+    if (!confirmed) return;
+
+    setSubmitting(true);
+    try {
+      // Save current state first, then submit
+      let reportId = id;
+      if (isNew) {
+        const r = await ApiService.createIncidentReport(buildPayload());
+        reportId = r.id;
+      } else {
+        await ApiService.updateIncidentReport(id, buildPayload());
+      }
+      const r = await ApiService.submitIncidentReport(reportId);
+      setReport(r);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      await notify(t("report.submitSuccess", lang));
+      if (!isNew) loadReport();
+      else router.replace(`/report/${reportId}`);
+    } catch (e) {
+      await notify(t("common.error", lang), String(e));
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   async function handleSharePdf() {
@@ -236,7 +241,7 @@ export default function ReportScreen() {
         await Sharing.shareAsync(uri, { mimeType: "application/pdf" });
       }
     } catch (e) {
-      Alert.alert(t("common.error", lang), String(e));
+      notify(t("common.error", lang), String(e));
     }
   }
 
@@ -250,7 +255,7 @@ export default function ReportScreen() {
       setShowAddendum(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
-      Alert.alert(t("common.error", lang), String(e));
+      notify(t("common.error", lang), String(e));
     } finally {
       setAddingAddendum(false);
     }
