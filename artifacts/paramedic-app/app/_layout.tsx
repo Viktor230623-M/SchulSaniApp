@@ -49,6 +49,9 @@ function RootLayoutNav() {
     <Stack screenOptions={{ headerBackTitle: "Zurück" }}>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="login" options={{ headerShown: false }} />
+      {/* Report screens draw their own header row */}
+      <Stack.Screen name="report/index" options={{ headerShown: false }} />
+      <Stack.Screen name="report/[id]" options={{ headerShown: false }} />
     </Stack>
   );
 }
