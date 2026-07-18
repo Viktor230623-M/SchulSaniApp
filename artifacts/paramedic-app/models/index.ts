@@ -247,3 +247,26 @@ export interface IncidentReport {
   updatedAt: string;
   submittedAt?: string | null;
 }
+
+// --- Owner-only database console ---
+
+export interface SqlPreset {
+  key: string;
+  group: string;
+  label: string;
+  description: string;
+  sql: string;
+  destructive: boolean;
+}
+
+export interface DbConsoleResult {
+  kind: "read" | "write";
+  unbounded: boolean;
+  committed: boolean;
+  /** True when a write ran but was rolled back, so the count is a forecast. */
+  preview: boolean;
+  rowsAffected: number;
+  fields: string[];
+  rows: Record<string, unknown>[];
+  truncated: boolean;
+}

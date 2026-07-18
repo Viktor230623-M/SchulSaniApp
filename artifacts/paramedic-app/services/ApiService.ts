@@ -11,6 +11,8 @@ import type {
   NewsItem,
   NotificationItem,
   User,
+  SqlPreset,
+  DbConsoleResult,
 } from "@/models";
 
 const API_BASE = `https://${process.env["EXPO_PUBLIC_DOMAIN"]}/api`;
@@ -457,6 +459,34 @@ const ApiService = {
 
   getReportPdfUrl(id: string, lang: "de" | "en" = "de"): string {
     return `${API_BASE}/incident-reports/${id}/pdf?lang=${lang}&token=${authToken ?? ""}`;
+  },
+  // --- Owner-only database console ---
+
+  async getDbPresets(): Promise<{ presets: SqlPreset[] }> {
+    const resp = await apiFetch(`${API_BASE}/db-console/presets`, { headers: headers() });
+    if (!resp.ok) throw new Error("Presets konnten nicht geladen werden");
+    return resp.json();
+  },
+
+  async getDbTables(): Promise<{ tables: { table: string; approx_rows: number }[] }> {
+    const resp = await apiFetch(`${API_BASE}/db-console/tables`, { headers: headers() });
+    if (!resp.ok) throw new Error("Tabellen konnten nicht geladen werden");
+    return resp.json();
+  },
+
+  async runDbStatement(input: {
+    statement: string;
+    presetKey?: string | null;
+    confirm?: boolean;
+  }): Promise<DbConsoleResult> {
+    const resp = await apiFetch(`${API_BASE}/db-console/execute`, {
+      method: "POST",
+      headers: { ...headers(), "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error ?? "Ausführung fehlgeschlagen");
+    return data;
   },
 };
 

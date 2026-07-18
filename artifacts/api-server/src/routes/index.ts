@@ -9,6 +9,7 @@ import statusRouter from "./status";
 import notificationsRouter from "./notifications";
 import activityRouter from "./activity";
 import incidentReportsRouter from "./incidentReports";
+import dbConsoleRouter from "./dbConsole";
 
 const router: IRouter = Router();
 
@@ -22,5 +23,6 @@ router.use("/status", statusRouter);
 router.use("/notifications", notificationsRouter);
 router.use("/activity", activityRouter);
 router.use("/incident-reports", incidentReportsRouter);
+router.use("/db-console", dbConsoleRouter);
 
 export default router;

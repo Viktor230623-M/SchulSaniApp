@@ -52,6 +52,7 @@ function RootLayoutNav() {
       {/* Report screens draw their own header row */}
       <Stack.Screen name="report/index" options={{ headerShown: false }} />
       <Stack.Screen name="report/[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="admin/database" options={{ headerShown: false }} />
     </Stack>
   );
 }

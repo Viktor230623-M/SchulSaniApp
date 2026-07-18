@@ -167,6 +167,20 @@ export const deviceTokensTable = pgTable("device_tokens", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Audit trail for the owner-only SQL console. Every statement lands here,
+// successful or not, and rows are never deleted by the console itself.
+export const dbConsoleLogTable = pgTable("db_console_log", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  userName: text("user_name"),
+  statement: text("statement").notNull(),
+  presetKey: text("preset_key"),
+  committed: boolean("committed").notNull().default(false),
+  rowsAffected: integer("rows_affected"),
+  error: text("error"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Export types
 export type User = typeof usersTable.$inferSelect;
 export type NewUser = typeof usersTable.$inferInsert;
@@ -184,3 +198,5 @@ export type MissionDismissal = typeof missionDismissalsTable.$inferSelect;
 export type NewMissionDismissal = typeof missionDismissalsTable.$inferInsert;
 export type IncidentReport = typeof incidentReportsTable.$inferSelect;
 export type NewIncidentReport = typeof incidentReportsTable.$inferInsert;
+export type DbConsoleLog = typeof dbConsoleLogTable.$inferSelect;
+export type NewDbConsoleLog = typeof dbConsoleLogTable.$inferInsert;
