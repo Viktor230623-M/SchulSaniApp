@@ -9,25 +9,12 @@ import PDFDocument from "pdfkit";
 
 type Addendum = { authorId: string; authorName: string; text: string; createdAt: string };
 
-const VALID_CATEGORIES = [
-  "injury_sport", "fall", "cut_wound", "bruise", "nosebleed", "head_injury",
-  "faint", "dizziness", "nausea_vomiting", "headache", "abdominal_pain",
-  "allergic_reaction", "asthma", "seizure", "insect_sting", "burn",
-  "dental", "psychological", "circulatory", "other",
-] as const;
-
 const VALID_OUTCOMES = [
   "back_to_class", "rest_then_return", "sent_home", "picked_up_by_parents",
   "family_doctor", "ambulance_112", "hospital", "other",
 ] as const;
 
-const VALID_MEASURES = [
-  "wound_cleaning", "plaster", "bandage", "cooling", "elevation",
-  "recovery_position", "rest", "fluids", "reassurance", "immobilization",
-  "cpr", "aed", "epipen", "inhaler", "other",
-] as const;
-
-const VALID_PATIENT_TYPES = ["student", "staff", "visitor", "other"] as const;
+const VALID_PATIENT_TYPES = ["student", "teacher", "visitor", "other"] as const;
 const VALID_AVPU = ["A", "V", "P", "U"] as const;
 
 function canAccessReport(
@@ -47,6 +34,9 @@ function stripPatient(report: typeof incidentReportsTable.$inferSelect) {
     patientLastName: undefined,
     patientClass: undefined,
     patientType: undefined,
+    patientAge: undefined,
+    emergencyContactName: undefined,
+    emergencyContactPhone: undefined,
   };
 }
 
@@ -132,15 +122,17 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
     patientFirstName: typeof body["patientFirstName"] === "string" ? body["patientFirstName"].slice(0, 100) : null,
     patientLastName: typeof body["patientLastName"] === "string" ? body["patientLastName"].slice(0, 100) : null,
     patientClass: typeof body["patientClass"] === "string" ? body["patientClass"].slice(0, 50) : null,
+    patientAge: typeof body["patientAge"] === "number" ? Math.min(120, Math.max(0, Math.trunc(body["patientAge"]))) : null,
+    emergencyContactName: typeof body["emergencyContactName"] === "string" ? body["emergencyContactName"].slice(0, 100) : null,
+    emergencyContactPhone: typeof body["emergencyContactPhone"] === "string" ? body["emergencyContactPhone"].slice(0, 40) : null,
     incidentAt: body["incidentAt"] ? new Date(body["incidentAt"] as string) : now,
     location: typeof body["location"] === "string" ? body["location"].slice(0, 200) : null,
     careStartedAt: body["careStartedAt"] ? new Date(body["careStartedAt"] as string) : null,
     careEndedAt: body["careEndedAt"] ? new Date(body["careEndedAt"] as string) : null,
-    category: VALID_CATEGORIES.includes(body["category"] as any) ? body["category"] as string : null,
+    category: typeof body["category"] === "string" ? body["category"].slice(0, 300) : null,
     description: typeof body["description"] === "string" ? body["description"].slice(0, 3000) : null,
-    measuresJson: Array.isArray(body["measures"])
-      ? (body["measures"] as string[]).filter((m) => VALID_MEASURES.includes(m as any))
-      : null,
+    injurySites: typeof body["injurySites"] === "string" ? body["injurySites"].slice(0, 500) : null,
+    measures: typeof body["measures"] === "string" ? body["measures"].slice(0, 500) : null,
     treatmentNotes: typeof body["treatmentNotes"] === "string" ? body["treatmentNotes"].slice(0, 2000) : null,
     pulseBpm: typeof body["pulseBpm"] === "number" ? body["pulseBpm"] : null,
     spo2: typeof body["spo2"] === "number" ? body["spo2"] : null,
@@ -186,13 +178,17 @@ router.put("/:id", requireAuth, async (req: AuthRequest, res) => {
   if (body["patientFirstName"] !== undefined) updates.patientFirstName = typeof body["patientFirstName"] === "string" ? body["patientFirstName"].slice(0, 100) : null;
   if (body["patientLastName"] !== undefined) updates.patientLastName = typeof body["patientLastName"] === "string" ? body["patientLastName"].slice(0, 100) : null;
   if (body["patientClass"] !== undefined) updates.patientClass = typeof body["patientClass"] === "string" ? body["patientClass"].slice(0, 50) : null;
+  if (body["patientAge"] !== undefined) updates.patientAge = typeof body["patientAge"] === "number" ? Math.min(120, Math.max(0, Math.trunc(body["patientAge"]))) : null;
+  if (body["emergencyContactName"] !== undefined) updates.emergencyContactName = typeof body["emergencyContactName"] === "string" ? body["emergencyContactName"].slice(0, 100) : null;
+  if (body["emergencyContactPhone"] !== undefined) updates.emergencyContactPhone = typeof body["emergencyContactPhone"] === "string" ? body["emergencyContactPhone"].slice(0, 40) : null;
   if (body["incidentAt"] !== undefined) updates.incidentAt = new Date(body["incidentAt"] as string);
   if (body["location"] !== undefined) updates.location = typeof body["location"] === "string" ? body["location"].slice(0, 200) : null;
   if (body["careStartedAt"] !== undefined) updates.careStartedAt = body["careStartedAt"] ? new Date(body["careStartedAt"] as string) : null;
   if (body["careEndedAt"] !== undefined) updates.careEndedAt = body["careEndedAt"] ? new Date(body["careEndedAt"] as string) : null;
-  if (body["category"] !== undefined) updates.category = VALID_CATEGORIES.includes(body["category"] as any) ? body["category"] as string : null;
+  if (body["category"] !== undefined) updates.category = typeof body["category"] === "string" ? body["category"].slice(0, 300) : null;
   if (body["description"] !== undefined) updates.description = typeof body["description"] === "string" ? body["description"].slice(0, 3000) : null;
-  if (body["measures"] !== undefined) updates.measuresJson = Array.isArray(body["measures"]) ? (body["measures"] as string[]).filter((m) => VALID_MEASURES.includes(m as any)) : null;
+  if (body["injurySites"] !== undefined) updates.injurySites = typeof body["injurySites"] === "string" ? body["injurySites"].slice(0, 500) : null;
+  if (body["measures"] !== undefined) updates.measures = typeof body["measures"] === "string" ? body["measures"].slice(0, 500) : null;
   if (body["treatmentNotes"] !== undefined) updates.treatmentNotes = typeof body["treatmentNotes"] === "string" ? body["treatmentNotes"].slice(0, 2000) : null;
   if (body["pulseBpm"] !== undefined) updates.pulseBpm = typeof body["pulseBpm"] === "number" ? body["pulseBpm"] : null;
   if (body["spo2"] !== undefined) updates.spo2 = typeof body["spo2"] === "number" ? body["spo2"] : null;
@@ -313,9 +309,7 @@ router.get("/:id/pdf", requireAuth, async (req: AuthRequest, res) => {
     ((report.responderIdsJson as string[] | null) ?? []).includes(userId);
 
   const labels = LABELS[lang];
-  const categoryLabel = (k: string) => labels.categories[k as keyof typeof labels.categories] ?? k;
   const outcomeLabel = (k: string) => labels.outcomes[k as keyof typeof labels.outcomes] ?? k;
-  const measureLabel = (k: string) => labels.measures[k as keyof typeof labels.measures] ?? k;
 
   const doc = new PDFDocument({ size: "A4", margin: 50 });
 
@@ -357,11 +351,12 @@ router.get("/:id/pdf", requireAuth, async (req: AuthRequest, res) => {
     const end = new Date(report.careEndedAt).toLocaleTimeString(lang === "de" ? "de-DE" : "en-US", { hour: "2-digit", minute: "2-digit" });
     row(labels.careTime, `${start} – ${end}`);
   }
-  row(labels.category, report.category ? categoryLabel(report.category) : null);
+  row(labels.category, report.category);
   if (report.description) {
     doc.text(`${labels.description}:`);
     doc.text(report.description, { indent: 10 });
   }
+  row(labels.injurySites, report.injurySites);
 
   // Patient section
   if (showPatient) {
@@ -371,6 +366,13 @@ router.get("/:id/pdf", requireAuth, async (req: AuthRequest, res) => {
       row(labels.patientName, `${report.patientFirstName ?? ""} ${report.patientLastName ?? ""}`.trim());
     }
     row(labels.patientClass, report.patientClass);
+    row(labels.patientAge, report.patientAge !== null ? String(report.patientAge) : null);
+    if (report.emergencyContactName || report.emergencyContactPhone) {
+      row(
+        labels.emergencyContact,
+        [report.emergencyContactName, report.emergencyContactPhone].filter(Boolean).join(" · ")
+      );
+    }
   }
 
   // Vitals section (only if any recorded)
@@ -387,10 +389,7 @@ router.get("/:id/pdf", requireAuth, async (req: AuthRequest, res) => {
 
   // Treatment section
   section(labels.treatment);
-  const measures = (report.measuresJson as string[] | null) ?? [];
-  if (measures.length > 0) {
-    doc.text(`${labels.measures_label}: ${measures.map(measureLabel).join(", ")}`);
-  }
+  row(labels.measures_label, report.measures);
   row(labels.treatmentNotes, report.treatmentNotes);
 
   // Outcome section
@@ -452,7 +451,10 @@ const LABELS = {
     patientType: "Typ",
     patientName: "Name",
     patientClass: "Klasse",
-    patientTypes: { student: "Schüler/in", staff: "Personal", visitor: "Besucher/in", other: "Sonstige" },
+    patientAge: "Alter",
+    emergencyContact: "Notfallkontakt",
+    injurySites: "Verletzungsstellen",
+    patientTypes: { student: "Schüler/in", teacher: "Lehrkraft", visitor: "Besucher/in", other: "Sonstige" },
     vitals: "Vitalzeichen",
     respRate: "Atemfrequenz",
     bloodPressure: "Blutdruck",
@@ -468,24 +470,10 @@ const LABELS = {
     addenda: "Nachträge",
     generated: "Erstellt",
     confidential: "Vertraulich – nur für den Schulbetrieb",
-    categories: {
-      injury_sport: "Sportverletzung", fall: "Sturz", cut_wound: "Schnittwunde", bruise: "Prellung",
-      nosebleed: "Nasenbluten", head_injury: "Kopfverletzung", faint: "Ohnmacht", dizziness: "Schwindel",
-      nausea_vomiting: "Übelkeit / Erbrechen", headache: "Kopfschmerzen", abdominal_pain: "Bauchschmerzen",
-      allergic_reaction: "Allergische Reaktion", asthma: "Asthma", seizure: "Krampfanfall",
-      insect_sting: "Insektenstich", burn: "Verbrennung", dental: "Zahnsache", psychological: "Psychisch",
-      circulatory: "Kreislaufproblem", other: "Sonstiges",
-    },
     outcomes: {
       back_to_class: "Zurück in den Unterricht", rest_then_return: "Ausruhen, dann zurück",
       sent_home: "Nach Hause geschickt", picked_up_by_parents: "Von Eltern abgeholt",
       family_doctor: "Zum Arzt", ambulance_112: "Rettungsdienst (112)", hospital: "Krankenhaus", other: "Sonstiges",
-    },
-    measures: {
-      wound_cleaning: "Wundreinigung", plaster: "Pflaster", bandage: "Verband", cooling: "Kühlung",
-      elevation: "Hochlagerung", recovery_position: "Stabile Seitenlage", rest: "Ruhe", fluids: "Flüssigkeit",
-      reassurance: "Beruhigung", immobilization: "Ruhigstellung", cpr: "HLW", aed: "AED",
-      epipen: "Epipen", inhaler: "Inhalator", other: "Sonstiges",
     },
   },
   en: {
@@ -503,7 +491,10 @@ const LABELS = {
     patientType: "Type",
     patientName: "Name",
     patientClass: "Class",
-    patientTypes: { student: "Student", staff: "Staff", visitor: "Visitor", other: "Other" },
+    patientAge: "Age",
+    emergencyContact: "Emergency contact",
+    injurySites: "Injury sites",
+    patientTypes: { student: "Student", teacher: "Teacher", visitor: "Visitor", other: "Other" },
     vitals: "Vital Signs",
     respRate: "Resp. rate",
     bloodPressure: "Blood pressure",
@@ -519,24 +510,10 @@ const LABELS = {
     addenda: "Addenda",
     generated: "Generated",
     confidential: "Confidential – internal school use only",
-    categories: {
-      injury_sport: "Sports injury", fall: "Fall", cut_wound: "Cut/wound", bruise: "Bruise",
-      nosebleed: "Nosebleed", head_injury: "Head injury", faint: "Fainting", dizziness: "Dizziness",
-      nausea_vomiting: "Nausea/vomiting", headache: "Headache", abdominal_pain: "Abdominal pain",
-      allergic_reaction: "Allergic reaction", asthma: "Asthma", seizure: "Seizure",
-      insect_sting: "Insect sting", burn: "Burn", dental: "Dental", psychological: "Psychological",
-      circulatory: "Circulatory", other: "Other",
-    },
     outcomes: {
       back_to_class: "Back to class", rest_then_return: "Rest then return",
       sent_home: "Sent home", picked_up_by_parents: "Picked up by parents",
       family_doctor: "Family doctor", ambulance_112: "Ambulance (112/999)", hospital: "Hospital", other: "Other",
-    },
-    measures: {
-      wound_cleaning: "Wound cleaning", plaster: "Plaster", bandage: "Bandage", cooling: "Cooling",
-      elevation: "Elevation", recovery_position: "Recovery position", rest: "Rest", fluids: "Fluids",
-      reassurance: "Reassurance", immobilization: "Immobilization", cpr: "CPR", aed: "AED",
-      epipen: "EpiPen", inhaler: "Inhaler", other: "Other",
     },
   },
 };

@@ -160,22 +160,39 @@ export interface ActivitySummary {
 export type AppTheme = "light" | "dark" | "red" | "teal" | "crimson" | "midnight" | "sunset" | "amethyst";
 export type AppLanguage = "de" | "en";
 
-export type IncidentCategory =
-  | "injury_sport" | "fall" | "cut_wound" | "bruise" | "nosebleed" | "head_injury"
-  | "faint" | "dizziness" | "nausea_vomiting" | "headache" | "abdominal_pain"
-  | "allergic_reaction" | "asthma" | "seizure" | "insect_sting" | "burn"
-  | "dental" | "psychological" | "circulatory" | "other";
+// Category, measures and injury sites are free text. These lists only drive the
+// suggestion chips — they never restrict what can be stored.
+export const CATEGORY_SUGGESTIONS = [
+  "injury_sport", "fall", "cut_wound", "bruise", "nosebleed", "head_injury",
+  "faint", "dizziness", "nausea_vomiting", "headache", "abdominal_pain",
+  "allergic_reaction", "asthma", "seizure", "insect_sting", "burn",
+  "dental", "psychological", "circulatory",
+] as const;
+
+export const MEASURE_SUGGESTIONS = [
+  "wound_cleaning", "plaster", "bandage", "cooling", "elevation",
+  "recovery_position", "rest", "fluids", "reassurance", "immobilization",
+  "cpr", "aed", "epipen", "inhaler",
+] as const;
+
+export const BODY_REGIONS_FRONT = [
+  "head", "face", "neck", "shoulder_l", "shoulder_r", "chest",
+  "upper_arm_l", "upper_arm_r", "abdomen", "forearm_l", "forearm_r",
+  "hand_l", "hand_r", "pelvis", "thigh_l", "thigh_r",
+  "knee_l", "knee_r", "shin_l", "shin_r", "foot_l", "foot_r",
+] as const;
+
+export const BODY_REGIONS_BACK = [
+  "back_head", "nape", "shoulder_blade_l", "shoulder_blade_r", "upper_back",
+  "lower_back", "elbow_l", "elbow_r", "buttocks", "hamstring_l", "hamstring_r",
+  "calf_l", "calf_r", "heel_l", "heel_r",
+] as const;
 
 export type IncidentOutcome =
   | "back_to_class" | "rest_then_return" | "sent_home" | "picked_up_by_parents"
   | "family_doctor" | "ambulance_112" | "hospital" | "other";
 
-export type TreatmentMeasure =
-  | "wound_cleaning" | "plaster" | "bandage" | "cooling" | "elevation"
-  | "recovery_position" | "rest" | "fluids" | "reassurance" | "immobilization"
-  | "cpr" | "aed" | "epipen" | "inhaler" | "other";
-
-export type PatientType = "student" | "staff" | "visitor" | "other";
+export type PatientType = "student" | "teacher" | "visitor" | "other";
 export type AvpuScore = "A" | "V" | "P" | "U";
 export type ReportStatus = "draft" | "submitted";
 
@@ -197,15 +214,19 @@ export interface IncidentReport {
   patientFirstName?: string | null;
   patientLastName?: string | null;
   patientClass?: string | null;
+  patientAge?: number | null;
+  emergencyContactName?: string | null;
+  emergencyContactPhone?: string | null;
   // Incident
   incidentAt?: string | null;
   location?: string | null;
   careStartedAt?: string | null;
   careEndedAt?: string | null;
-  category?: IncidentCategory | null;
+  category?: string | null;
   description?: string | null;
+  injurySites?: string | null;
   // Treatment
-  measures?: TreatmentMeasure[] | null;
+  measures?: string | null;
   treatmentNotes?: string | null;
   // Vitals
   pulseBpm?: number | null;

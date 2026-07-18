@@ -14,6 +14,7 @@ import {
   TextInput,
   View,
   ActivityIndicator,
+  Linking,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -21,34 +22,26 @@ import { t } from "@/constants/i18n";
 import { getTheme } from "@/constants/theme";
 import type {
   AvpuScore,
-  IncidentCategory,
   IncidentOutcome,
   IncidentReport,
   PatientType,
-  TreatmentMeasure,
 } from "@/models";
+import { CATEGORY_SUGGESTIONS, MEASURE_SUGGESTIONS } from "@/models";
+import ChipTextField from "@/components/ChipTextField";
+import BodyMap, { BODY_REGION_KEYS } from "@/components/BodyMap";
 import ApiService from "@/services/ApiService";
 import { useAppStore } from "@/store/useAppStore";
 
-const CATEGORIES: IncidentCategory[] = [
-  "injury_sport", "fall", "cut_wound", "bruise", "nosebleed", "head_injury",
-  "faint", "dizziness", "nausea_vomiting", "headache", "abdominal_pain",
-  "allergic_reaction", "asthma", "seizure", "insect_sting", "burn",
-  "dental", "psychological", "circulatory", "other",
-];
+
 
 const OUTCOMES: IncidentOutcome[] = [
   "back_to_class", "rest_then_return", "sent_home", "picked_up_by_parents",
   "family_doctor", "ambulance_112", "hospital", "other",
 ];
 
-const MEASURES: TreatmentMeasure[] = [
-  "wound_cleaning", "plaster", "bandage", "cooling", "elevation",
-  "recovery_position", "rest", "fluids", "reassurance", "immobilization",
-  "cpr", "aed", "epipen", "inhaler", "other",
-];
 
-const PATIENT_TYPES: PatientType[] = ["student", "staff", "visitor", "other"];
+
+const PATIENT_TYPES: PatientType[] = ["student", "teacher", "visitor", "other"];
 const AVPU: AvpuScore[] = ["A", "V", "P", "U"];
 
 const LEADERSHIP_ROLES = ["admin", "cto", "sanitaeter_leitung", "sanitaeter_leitung_admin"];
@@ -83,10 +76,14 @@ export default function ReportScreen() {
   const [patientFirstName, setPatientFirstName] = useState("");
   const [patientLastName, setPatientLastName] = useState("");
   const [patientClass, setPatientClass] = useState("");
+  const [patientAge, setPatientAge] = useState("");
+  const [emergencyContactName, setEmergencyContactName] = useState("");
+  const [emergencyContactPhone, setEmergencyContactPhone] = useState("");
   const [location, setLocation] = useState(paramLocation ?? "");
-  const [category, setCategory] = useState<IncidentCategory | null>(null);
+  const [category, setCategory] = useState("");
   const [description, setDescription] = useState("");
-  const [measures, setMeasures] = useState<TreatmentMeasure[]>([]);
+  const [injurySites, setInjurySites] = useState("");
+  const [measures, setMeasures] = useState("");
   const [treatmentNotes, setTreatmentNotes] = useState("");
   const [pulseBpm, setPulseBpm] = useState("");
   const [spo2, setSpo2] = useState("");
@@ -115,10 +112,14 @@ export default function ReportScreen() {
       setPatientFirstName(r.patientFirstName ?? "");
       setPatientLastName(r.patientLastName ?? "");
       setPatientClass(r.patientClass ?? "");
+      setPatientAge(r.patientAge ? String(r.patientAge) : "");
+      setEmergencyContactName(r.emergencyContactName ?? "");
+      setEmergencyContactPhone(r.emergencyContactPhone ?? "");
       setLocation(r.location ?? "");
-      setCategory(r.category ?? null);
+      setCategory(r.category ?? "");
       setDescription(r.description ?? "");
-      setMeasures((r.measures as TreatmentMeasure[]) ?? []);
+      setInjurySites(r.injurySites ?? "");
+      setMeasures(r.measures ?? "");
       setTreatmentNotes(r.treatmentNotes ?? "");
       setPulseBpm(r.pulseBpm ? String(r.pulseBpm) : "");
       setSpo2(r.spo2 ? String(r.spo2) : "");
@@ -146,10 +147,14 @@ export default function ReportScreen() {
       patientFirstName: patientFirstName.trim() || undefined,
       patientLastName: patientLastName.trim() || undefined,
       patientClass: patientClass.trim() || undefined,
+      patientAge: patientAge ? parseInt(patientAge, 10) : undefined,
+      emergencyContactName: emergencyContactName.trim() || undefined,
+      emergencyContactPhone: emergencyContactPhone.trim() || undefined,
       location: location.trim() || undefined,
-      category: category ?? undefined,
+      category: category.trim() || undefined,
       description: description.trim() || undefined,
-      measures: measures.length ? measures : undefined,
+      injurySites: injurySites.trim() || undefined,
+      measures: measures.trim() || undefined,
       treatmentNotes: treatmentNotes.trim() || undefined,
       pulseBpm: pulseBpm ? parseInt(pulseBpm, 10) : undefined,
       spo2: spo2 ? parseInt(spo2, 10) : undefined,
@@ -184,7 +189,7 @@ export default function ReportScreen() {
   }
 
   async function handleSubmit() {
-    if (!category) { Alert.alert(t("common.error", lang), t("report.categoryRequired", lang)); return; }
+    if (!category.trim()) { Alert.alert(t("common.error", lang), t("report.categoryRequired", lang)); return; }
     if (!outcome) { Alert.alert(t("common.error", lang), t("report.outcomeRequired", lang)); return; }
 
     Alert.alert(t("report.submitConfirm", lang), t("report.submitConfirmDesc", lang), [
@@ -251,12 +256,6 @@ export default function ReportScreen() {
     }
   }
 
-  function toggleMeasure(m: TreatmentMeasure) {
-    setMeasures((prev) =>
-      prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m]
-    );
-  }
-
   const topPad = Platform.OS === "web" ? 67 : insets.top;
 
   if (loading) {
@@ -308,7 +307,7 @@ export default function ReportScreen() {
   };
 
   const field = (label: string, value: string, onChange: (v: string) => void, opts?: {
-    placeholder?: string; keyboardType?: "numeric" | "default"; multiline?: boolean;
+    placeholder?: string; keyboardType?: "numeric" | "default" | "phone-pad"; multiline?: boolean;
   }) => (
     <View style={styles.fieldWrap}>
       <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>{label}</Text>
@@ -338,14 +337,22 @@ export default function ReportScreen() {
     return val;
   };
 
-  const getCategoryLabel = (c: IncidentCategory) => {
-    const key = `report.categories.${c}`;
-    return t(key, lang);
-  };
-
   const getOutcomeLabel = (o: IncidentOutcome) => t(`report.outcomes.${o}`, lang);
-  const getMeasureLabel = (m: TreatmentMeasure) => t(`report.measureLabels.${m}`, lang);
   const getPatientTypeLabel = (p: PatientType) => t(`report.patientTypes.${p}`, lang);
+  const getBodyRegionLabel = (key: string) => t(`report.bodyRegions.${key}`, lang);
+
+  const categoryChips = CATEGORY_SUGGESTIONS.map((k) => ({
+    key: k,
+    label: t(`report.categories.${k}`, lang),
+  }));
+  const measureChips = MEASURE_SUGGESTIONS.map((k) => ({
+    key: k,
+    label: t(`report.measureLabels.${k}`, lang),
+  }));
+  const bodyRegionChips = BODY_REGION_KEYS.map((k) => ({
+    key: k,
+    label: getBodyRegionLabel(k),
+  }));
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -447,22 +454,70 @@ export default function ReportScreen() {
             {field(tReport("patientFirstName"), patientFirstName, setPatientFirstName)}
             {field(tReport("patientLastName"), patientLastName, setPatientLastName)}
             {field(tReport("patientClass"), patientClass, setPatientClass, { placeholder: "z.B. 10a / e.g. 10a" })}
+            {field(tReport("patientAge"), patientAge, setPatientAge, { keyboardType: "numeric", placeholder: "z.B. 14" })}
+            <Text style={[styles.fieldLabel, { color: theme.textSecondary, marginTop: 8 }]}>
+              {patientType === "student" ? tReport("emergencyContactParents") : tReport("emergencyContact")}
+            </Text>
+            {field(tReport("emergencyContactName"), emergencyContactName, setEmergencyContactName, {
+              placeholder: tReport("emergencyContactNamePlaceholder"),
+            })}
+            {field(tReport("emergencyContactPhone"), emergencyContactPhone, setEmergencyContactPhone, {
+              keyboardType: "phone-pad",
+              placeholder: "0171 1234567",
+            })}
+            {emergencyContactPhone.trim().length > 0 && (
+              <Pressable
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  Linking.openURL(`tel:${emergencyContactPhone.replace(/[^+\d]/g, "")}`);
+                }}
+                style={[styles.callBtn, { borderColor: theme.tint }]}
+              >
+                <Ionicons name="call" size={16} color={theme.tint} />
+                <Text style={[styles.callBtnText, { color: theme.tint }]}>{emergencyContactPhone.trim()}</Text>
+              </Pressable>
+            )}
           </View>
         )}
 
         {/* Section: Incident */}
         <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
           {sectionLabel(tReport("sectionIncident"))}
-          {field(tReport("category") + " *", "", () => {}, { placeholder: "" })}
-          {/* Category chips replace the field above */}
-          <View style={{ marginTop: -8 }}>
-            {chipRow(CATEGORIES, category, (c) => setCategory(category === c ? null : c), getCategoryLabel)}
-          </View>
+          <ChipTextField
+            label={tReport("category") + " *"}
+            value={category}
+            onChange={setCategory}
+            suggestions={categoryChips}
+            placeholder={tReport("categoryPlaceholder")}
+            editable={canEdit}
+          />
           {field(tReport("description"), description, setDescription, {
             placeholder: tReport("descriptionPlaceholder"),
             multiline: true,
           })}
           {field(t("common.location", lang), location, setLocation, { placeholder: "z.B. Sporthalle / Gym" })}
+        </View>
+
+        {/* Section: Injury sites */}
+        <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
+          {sectionLabel(tReport("sectionInjury"))}
+          <BodyMap
+            value={injurySites}
+            onChange={setInjurySites}
+            labelFor={getBodyRegionLabel}
+            frontLabel={tReport("bodyFront")}
+            backLabel={tReport("bodyBack")}
+            editable={canEdit}
+          />
+          <ChipTextField
+            label={tReport("injurySites")}
+            value={injurySites}
+            onChange={setInjurySites}
+            suggestions={bodyRegionChips}
+            placeholder={tReport("injurySitesPlaceholder")}
+            multiline
+            editable={canEdit}
+          />
         </View>
 
         {/* Section: Vitals (collapsible) */}
@@ -509,8 +564,14 @@ export default function ReportScreen() {
         {/* Section: Treatment */}
         <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
           {sectionLabel(tReport("sectionTreatment"))}
-          <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>{tReport("measures")}</Text>
-          {chipRow(MEASURES, measures, toggleMeasure, getMeasureLabel, true)}
+          <ChipTextField
+            label={tReport("measures")}
+            value={measures}
+            onChange={setMeasures}
+            suggestions={measureChips}
+            placeholder={tReport("measuresPlaceholder")}
+            editable={canEdit}
+          />
           {field(tReport("treatmentNotes"), treatmentNotes, setTreatmentNotes, {
             placeholder: tReport("treatmentNotesPlaceholder"),
             multiline: true,
@@ -575,6 +636,19 @@ export default function ReportScreen() {
 }
 
 const styles = StyleSheet.create({
+  callBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    alignSelf: "flex-start",
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  callBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
   container: { flex: 1 },
   headerRow: {
     flexDirection: "row",
