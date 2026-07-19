@@ -1,0 +1,7 @@
+[Unit]
+Description=Verschluesselte Sicherung der SchulSani-Datenbank
+After=postgresql.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/schulsani-backup.sh
