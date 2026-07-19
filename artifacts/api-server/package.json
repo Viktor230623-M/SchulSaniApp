@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "NODE_ENV=development tsx ./src/index.ts",
     "build": "tsx ./build.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@workspace/api-zod": "workspace:*",
@@ -30,6 +31,7 @@
     "@types/node": "catalog:",
     "@types/pdfkit": "^0.13.9",
     "esbuild": "^0.27.3",
-    "tsx": "catalog:"
+    "tsx": "catalog:",
+    "vitest": "^1.0.0"
   }
 }
