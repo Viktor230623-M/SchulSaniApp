@@ -5,6 +5,7 @@ import { db, incidentReportsTable, missionsTable, usersTable } from "@workspace/
 import { requireAuth, type AuthRequest } from "../middlewares/auth";
 import { notifyUser } from "../services/notifications";
 import { canSeePatientInfo, canReadAllReports } from "../lib/access";
+import { logReportAccess } from "../lib/reportAccessLog";
 import PDFDocument from "pdfkit";
 
 type Addendum = { authorId: string; authorName: string; text: string; createdAt: string };
@@ -75,6 +76,13 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
     return showPatient || isAuthorOrResponder ? r : stripPatient(r);
   });
 
+  logReportAccess({
+    userId,
+    action: "list",
+    patientVisible: showPatient,
+    count: result.length,
+  });
+
   res.json(result);
 });
 
@@ -92,6 +100,13 @@ router.get("/:id", requireAuth, async (req: AuthRequest, res) => {
   const showPatient = canSeePatientInfo(role) ||
     report.authorId === userId ||
     ((report.responderIdsJson as string[] | null) ?? []).includes(userId);
+
+  logReportAccess({
+    userId,
+    reportId: report.id,
+    action: "detail",
+    patientVisible: showPatient,
+  });
 
   res.json(showPatient ? report : stripPatient(report));
 });
@@ -307,6 +322,13 @@ router.get("/:id/pdf", requireAuth, async (req: AuthRequest, res) => {
   const showPatient = canSeePatientInfo(role) ||
     report.authorId === userId ||
     ((report.responderIdsJson as string[] | null) ?? []).includes(userId);
+
+  logReportAccess({
+    userId: req.user!.userId,
+    reportId: report.id,
+    action: "pdf",
+    patientVisible: true,
+  });
 
   const labels = LABELS[lang];
   const outcomeLabel = (k: string) => labels.outcomes[k as keyof typeof labels.outcomes] ?? k;
