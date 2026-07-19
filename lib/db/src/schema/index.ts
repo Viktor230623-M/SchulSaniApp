@@ -181,6 +181,19 @@ export const dbConsoleLogTable = pgTable("db_console_log", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Wer hat wann welches Einsatzprotokoll gelesen. Erforderlich fuer den
+// Rechenschaftsnachweis nach Art. 5 Abs. 2 DSGVO. Aufbewahrung 12 Monate.
+export const reportAccessLogTable = pgTable("report_access_log", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  userName: text("user_name"),
+  reportId: text("report_id"),
+  action: text("action").notNull(), // list | detail | pdf
+  patientVisible: boolean("patient_visible").notNull().default(false),
+  resultCount: integer("result_count"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Export types
 export type User = typeof usersTable.$inferSelect;
 export type NewUser = typeof usersTable.$inferInsert;
@@ -200,3 +213,5 @@ export type IncidentReport = typeof incidentReportsTable.$inferSelect;
 export type NewIncidentReport = typeof incidentReportsTable.$inferInsert;
 export type DbConsoleLog = typeof dbConsoleLogTable.$inferSelect;
 export type NewDbConsoleLog = typeof dbConsoleLogTable.$inferInsert;
+export type ReportAccessLog = typeof reportAccessLogTable.$inferSelect;
+export type NewReportAccessLog = typeof reportAccessLogTable.$inferInsert;
