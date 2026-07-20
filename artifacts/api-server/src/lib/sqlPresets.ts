@@ -23,7 +23,7 @@ export const SQL_PRESETS: SqlPreset[] = [
     description: "Wie viele Datensätze stecken aktuell in jeder Tabelle?",
     destructive: false,
     sql: `SELECT 'missions' AS tabelle, count(*) FROM missions
-UNION ALL SELECT 'incident_reports', count(*) FROM incident_reports
+UNION ALL SELECT 'incident_reports', count(*) FROM incident_reports_admin
 UNION ALL SELECT 'loa', count(*) FROM loa
 UNION ALL SELECT 'news', count(*) FROM news
 UNION ALL SELECT 'notifications', count(*) FROM notifications
@@ -41,7 +41,7 @@ ORDER BY 1`,
     description: "Die 20 jüngsten Einträge quer über Einsätze, Protokolle und LOA.",
     destructive: false,
     sql: `SELECT 'Einsatz' AS typ, id, title AS info, requested_at AS zeitpunkt FROM missions
-UNION ALL SELECT 'Protokoll', id, coalesce(category, '—'), created_at FROM incident_reports
+UNION ALL SELECT 'Protokoll', id, coalesce(status, '—'), created_at FROM incident_reports_admin
 UNION ALL SELECT 'LOA', id, user_name, created_at FROM loa
 ORDER BY zeitpunkt DESC NULLS LAST
 LIMIT 20`,
@@ -102,8 +102,8 @@ ORDER BY requested_at DESC NULLS LAST`,
     label: "Alle Protokolle",
     description: "Ohne Patientendaten — nur Kategorie, Status und Zeit.",
     destructive: false,
-    sql: `SELECT id, status, category, outcome, created_at, submitted_at
-FROM incident_reports
+    sql: `SELECT id, status, patient_type, location, incident_at, created_at, submitted_at
+FROM incident_reports_admin
 ORDER BY created_at DESC
 LIMIT 100`,
   },
@@ -113,8 +113,8 @@ LIMIT 100`,
     label: "Nur Entwürfe",
     description: "Protokolle, die nie eingereicht wurden.",
     destructive: false,
-    sql: `SELECT id, category, created_at
-FROM incident_reports
+    sql: `SELECT id, author_id, created_at, updated_at
+FROM incident_reports_admin
 WHERE status = 'draft'
 ORDER BY created_at DESC`,
   },
