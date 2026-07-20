@@ -18,6 +18,8 @@
  *      copy — stripping a comment out of a text value would silently corrupt it.
  */
 
+import { ADMIN_VIEW, PATIENT_COLUMNS, PROTECTED_TABLE } from "./patientColumns";
+
 export type StatementKind = "read" | "write";
 
 export interface GuardResult {
@@ -185,5 +187,67 @@ export function guardStatement(raw: string): GuardResult {
   const touchesExistingRows = /\b(delete|update)\b/i.test(inspectBody);
   const unbounded = kind === "write" && touchesExistingRows && !/\bwhere\b/i.test(inspectBody);
 
+  const patient = guardPatientData(inspectBody, kind);
+  if (patient) return patient;
+
   return { ok: true, kind, unbounded, normalized };
+}
+
+/**
+ * Keeps patient and health data out of the administrative console.
+ *
+ * The console owner is a pupil at the same school as the people whose health data
+ * this table holds, so "they could look it up if they wanted" is not an acceptable
+ * resting state. Anlage 1 zum AV-Vertrag promises the exclusion; this enforces it.
+ *
+ * Three rules, in the order they are checked:
+ *   1. No statement may name a patient column — not in SELECT, not in WHERE.
+ *      Filtering on `patient_last_name` would leak by inference even from a DELETE.
+ *   2. Reads of the base table are refused and redirected to the redacted view.
+ *      Administration needs row counts and timestamps, not injuries.
+ *   3. Writes on the base table stay allowed (deleting a report must remain
+ *      possible) but may not use RETURNING, which would hand back the deleted row.
+ *
+ * Deliberately NOT claimed: that this makes the data technically unreachable. Anyone
+ * with shell access to the server can still run psql. This closes the console path
+ * and logs every attempt; the rest is covered organisationally (Anlage 1, Ziffer 5.2).
+ */
+function guardPatientData(inspectBody: string, kind: StatementKind): GuardResult | null {
+  for (const column of PATIENT_COLUMNS) {
+    if (new RegExp(`\\b${column}\\b`, "i").test(inspectBody)) {
+      return {
+        ok: false,
+        error:
+          `"${column}" ist ein Patientenfeld und über die Konsole gesperrt ` +
+          `(Anlage 1 zum AV-Vertrag, Ziffer 1.3). Für Auswertungen ohne Patientenbezug: ${ADMIN_VIEW}.`,
+      };
+    }
+  }
+
+  // The view's own name contains the table name, so exclude it before matching.
+  const withoutView = inspectBody.replace(new RegExp(`\\b${ADMIN_VIEW}\\b`, "gi"), " ");
+  const touchesTable = new RegExp(`\\b${PROTECTED_TABLE}\\b`, "i").test(withoutView);
+  if (!touchesTable) return null;
+
+  if (kind === "read") {
+    return {
+      ok: false,
+      error:
+        `Lesender Zugriff auf "${PROTECTED_TABLE}" ist über die Konsole gesperrt ` +
+        `(Anlage 1 zum AV-Vertrag, Ziffer 1.3). Stattdessen: ${ADMIN_VIEW} — ` +
+        `gleiche Zeilen, ohne Patienten- und Gesundheitsfelder.`,
+    };
+  }
+
+  if (/\breturning\b/i.test(withoutView)) {
+    return {
+      ok: false,
+      error:
+        `"RETURNING" ist bei "${PROTECTED_TABLE}" gesperrt — es würde die ` +
+        `betroffenen Zeilen samt Patientendaten zurückgeben. Die Anweisung ohne ` +
+        `RETURNING ausführen; die Zahl der betroffenen Zeilen wird ohnehin gemeldet.`,
+    };
+  }
+
+  return null;
 }
