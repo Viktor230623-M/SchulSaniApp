@@ -25,6 +25,8 @@ export interface RetentionCutoffs {
   consoleLog: Date;
   /** Zugriffsprotokolle der Anwendung: 12 Monate. */
   accessLog: Date;
+  /** Sitzungen: 30 Tage nach Widerruf. */
+  sessionsRevoked: Date;
 }
 
 function minusDays(now: Date, days: number): Date {
@@ -55,5 +57,6 @@ export function computeCutoffs(now: Date): RetentionCutoffs {
     activityLogAnonymize: minusMonths(now, 24),
     consoleLog: minusMonths(now, 12),
     accessLog: minusMonths(now, 12),
+    sessionsRevoked: minusDays(now, 30),
   };
 }

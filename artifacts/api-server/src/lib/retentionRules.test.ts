@@ -30,4 +30,8 @@ describe("computeCutoffs", () => {
     expect(cutoffs.loa.toISOString()).toBe("2024-07-19T10:00:00.000Z");
     expect(cutoffs.activityLogAnonymize.toISOString()).toBe("2024-07-19T10:00:00.000Z");
   });
+
+  it("loescht widerrufene Sitzungen nach 30 Tagen", () => {
+    expect(cutoffs.sessionsRevoked.toISOString()).toBe("2026-06-19T10:00:00.000Z");
+  });
 });
