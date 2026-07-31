@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { useTopPad } from "@/hooks/useTopPad";
 import { t } from "@/constants/i18n";
 import { getTheme } from "@/constants/theme";
 import type { ActivitySummary, User } from "@/models";
@@ -139,7 +140,7 @@ export default function SaniActivityScreen() {
     });
   };
 
-  const topPad = Platform.OS === "web" ? 67 : insets.top;
+  const topPad = useTopPad();
 
   if (!canView) {
     return (

@@ -17,6 +17,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { useTopPad } from "@/hooks/useTopPad";
 import { MedicalCross } from "@/components/MedicalCross";
 import { t } from "@/constants/i18n";
 import { getTheme } from "@/constants/theme";
@@ -92,7 +93,7 @@ export default function DutyScreen() {
     }[role] ?? role;
   }
 
-  const topPad = Platform.OS === "web" ? 67 : insets.top;
+  const topPad = useTopPad();
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>

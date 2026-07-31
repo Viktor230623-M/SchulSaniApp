@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { useTopPad } from "@/hooks/useTopPad";
 import { getTheme } from "@/constants/theme";
 import type { DbConsoleResult, SqlPreset } from "@/models";
 import { confirmAction, notify } from "@/lib/dialog";
@@ -105,7 +106,7 @@ export default function DatabaseConsoleScreen() {
     }
   }
 
-  const topPad = Platform.OS === "web" ? 67 : insets.top;
+  const topPad = useTopPad();
 
   if (!isOwner) {
     return (

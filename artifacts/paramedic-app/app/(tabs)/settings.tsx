@@ -26,6 +26,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { useTopPad } from "@/hooks/useTopPad";
 import { t } from "@/constants/i18n";
 import { getTheme, type ThemeColors } from "@/constants/theme";
 import type { AppLanguage, AppTheme, User, Mission, LOARequest } from "@/models";
@@ -288,7 +289,7 @@ export default function SettingsScreen() {
     { key: "en", label: "English", flag: "🇬🇧" },
   ];
 
-  const topPad = Platform.OS === "web" ? 67 : insets.top;
+  const topPad = useTopPad();
 
   return (
     <ScrollView

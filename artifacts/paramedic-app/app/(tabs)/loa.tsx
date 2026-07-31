@@ -16,6 +16,7 @@ import {
 } from "react-native";
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTopPad } from "@/hooks/useTopPad";
 import { t } from "@/constants/i18n";
 import { getTheme } from "@/constants/theme";
 import { DatePickerField } from "@/components/DatePickerField";
@@ -177,7 +178,7 @@ export default function LOAScreen() {
     : othersRequests;
   const showModerationActions = canModerate && tab === "all";
 
-  const topPad = Platform.OS === "web" ? 67 : insets.top;
+  const topPad = useTopPad();
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>

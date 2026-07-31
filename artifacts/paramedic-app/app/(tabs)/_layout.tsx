@@ -32,7 +32,10 @@ export default function TabLayout() {
           borderTopColor: theme.tabBarBorder,
           elevation: 0,
           paddingBottom: insets.bottom,
-          ...(isWeb ? { height: 84 } : {}),
+          // Im Standalone-Modus liegt unter der Leiste der Home-Indikator; die
+          // feste Hoehe von 84 stammt aus dem Browser und wuerde die Leiste
+          // darunter schieben. Der Inset traegt den Unterschied.
+          ...(isWeb ? { height: 84 + insets.bottom } : {}),
         },
         tabBarLabelStyle: {
           fontSize: 11,

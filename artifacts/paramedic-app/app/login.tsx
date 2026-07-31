@@ -16,6 +16,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { MedicalCross } from "@/components/MedicalCross";
+import { useTopPad } from "@/hooks/useTopPad";
 import { ISERV_DOMAIN, SCHOOL_NAME } from "@/constants/appConfig";
 import { t } from "@/constants/i18n";
 import { getTheme } from "@/constants/theme";
@@ -75,7 +76,7 @@ export default function LoginScreen() {
     }
   }
 
-  const topPad = Platform.OS === "web" ? 67 : insets.top;
+  const topPad = useTopPad();
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>

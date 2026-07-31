@@ -16,6 +16,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { useTopPad } from "@/hooks/useTopPad";
 import { t } from "@/constants/i18n";
 import { getTheme, type ThemeColors } from "@/constants/theme";
 import type { AppLanguage, NewsItem, NewsStatus } from "@/models";
@@ -318,7 +319,7 @@ export default function NewsScreen() {
   });
 
   const unread = news.filter((n) => n.status === "approved" && !n.isRead).length;
-  const topPad = Platform.OS === "web" ? 67 : insets.top;
+  const topPad = useTopPad();
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
