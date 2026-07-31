@@ -30,7 +30,16 @@
       ]
     },
     "web": {
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/favicon.png",
+      "bundler": "metro",
+      "output": "static",
+      "name": "SchulSani",
+      "shortName": "SchulSani",
+      "lang": "de",
+      "themeColor": "#22C55E",
+      "backgroundColor": "#FFFFFF",
+      "display": "standalone",
+      "startUrl": "/"
     },
     "plugins": [
       [
