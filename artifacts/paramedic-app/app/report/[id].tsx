@@ -240,6 +240,10 @@ export default function ReportScreen() {
         // ein neuer Tab mit blob:-URL dort haeufig blockiert wird.
         const blob = await ApiService.fetchReportPdfBlob(report!.id, lang);
         const objectUrl = URL.createObjectURL(blob);
+        // Der Timer wird sofort nach dem Erzeugen der Object-URL gesetzt, nicht
+        // erst nach Anhaengen/Klick/Entfernen. Wirft eine dieser Zeilen, ist das
+        // Aufraeumen trotzdem eingeplant und die URL leckt nicht.
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
         const anchor = document.createElement("a");
         anchor.href = objectUrl;
         anchor.download = filename;
@@ -247,7 +251,6 @@ export default function ReportScreen() {
         document.body.appendChild(anchor);
         anchor.click();
         document.body.removeChild(anchor);
-        setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
         return;
       }
 

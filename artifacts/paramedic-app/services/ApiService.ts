@@ -64,11 +64,17 @@ const ApiService = {
    * keinen Abmeldevorgang anstossen.
    */
   async restoreSession(): Promise<{ user: User; isTealUnlocked: boolean; token: string } | null> {
+    // Zeitlimit von 8 Sekunden: nicht gegen ein langsames Netz, sondern gegen
+    // einen Aufruf, der weder antwortet noch scheitert. Ohne Limit bleibt
+    // authStatus in _layout.tsx auf "loading" haengen und die App dauerhaft weiss.
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8_000);
     try {
       const resp = await fetch(`${API_BASE}/auth/session`, {
         method: "GET",
         headers: { "ngrok-skip-browser-warning": "true" },
         credentials: "include",
+        signal: controller.signal,
       });
       if (!resp.ok) return null;
       const data = await resp.json();
@@ -76,8 +82,11 @@ const ApiService = {
       setAuthToken(data.token);
       return { user: data.user as User, isTealUnlocked: data.isTealUnlocked, token: data.token };
     } catch {
-      // Netzwerkfehler beim Start: als "nicht angemeldet" behandeln, nicht als Absturz.
+      // Netzwerkfehler oder Abbruch durch das Zeitlimit: als "nicht angemeldet"
+      // behandeln, nicht als Absturz.
       return null;
+    } finally {
+      clearTimeout(timeout);
     }
   },
 

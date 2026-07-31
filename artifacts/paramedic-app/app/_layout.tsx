@@ -57,7 +57,11 @@ function RootLayoutNav() {
     }
   }, [authStatus]);
 
-  // Solange geprueft wird, nichts rendern — der Splash-Screen bleibt stehen.
+  // Solange geprueft wird, nichts rendern. Der Splash-Screen ist zu diesem
+  // Zeitpunkt in aller Regel schon ausgeblendet (das haengt in RootLayout allein
+  // an fontsLoaded/fontError, nicht an authStatus) — es erscheint also kurz eine
+  // leere Flaeche. Bewusst so: ein angemeldeter Nutzer soll dabei nicht kurz den
+  // Login-Screen sehen.
   if (authStatus === "loading") return null;
 
   // Stack.Protected statt eines Redirect: Routen ausserhalb des aktiven Guards

@@ -191,6 +191,16 @@ async function iServAuth(username: string, password: string): Promise<{ firstNam
   return { firstName, lastName, email, phone };
 }
 
+// Baut die Nutzerprojektion, wie sie sowohl Login als auch Sitzungswiederherstellung
+// in der Antwort zurueckgeben. Die Rolle wird hier nicht vorbelegt — das bleibt
+// Sache der Aufrufer, da Login und Session unterschiedliche Standardwerte nutzen.
+function buildUserResponse(user: { id: string; firstName: string | null; lastName: string | null; email: string | null; role: string }) {
+  return {
+    user: { id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email, role: user.role },
+    isTealUnlocked: user.role === "cto",
+  };
+}
+
 router.post("/login", authLimiter, async (req, res) => {
   const { username, password, rememberMe } = req.body as { username: string; password: string; rememberMe?: boolean };
   if (!username?.trim() || !password?.trim()) {
@@ -275,7 +285,7 @@ router.post("/login", authLimiter, async (req, res) => {
     }
 
     const { role: userRole, id: userId2 } = userValues;
-    res.json({ token, user: { id: userId2, firstName, lastName, email, role: userRole }, isTealUnlocked: userRole === "cto" });
+    res.json({ token, ...buildUserResponse({ id: userId2, firstName, lastName, email, role: userRole }) });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Anmeldung fehlgeschlagen";
     console.error("Login error");
@@ -336,14 +346,7 @@ router.get("/session", sessionLimiter, async (req, res) => {
 
   res.json({
     token,
-    user: {
-      id: user.id,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      email: user.email,
-      role,
-    },
-    isTealUnlocked: role === "cto",
+    ...buildUserResponse({ id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email, role }),
   });
 });
 

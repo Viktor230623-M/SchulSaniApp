@@ -48,6 +48,16 @@ describe("sessionRules — Gueltigkeit", () => {
     const s = { ...base, revokedAt: new Date(NOW.getTime() - days(1)) };
     expect(isSessionValid(s, NOW)).toBe(false);
   });
+
+  it("lehnt ab, wenn expiresAt exakt now ist", () => {
+    const s = { ...base, expiresAt: new Date(NOW.getTime()) };
+    expect(isSessionValid(s, NOW)).toBe(false);
+  });
+
+  it("lehnt ab, wenn absoluteExpiresAt exakt now ist", () => {
+    const s = { ...base, absoluteExpiresAt: new Date(NOW.getTime()) };
+    expect(isSessionValid(s, NOW)).toBe(false);
+  });
 });
 
 describe("sessionRules — gleitende Verlaengerung", () => {
