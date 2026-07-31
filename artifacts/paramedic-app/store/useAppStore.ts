@@ -13,9 +13,17 @@ import type {
   User,
 } from "@/models";
 
+/**
+ * Beim Start laeuft die Sitzungswiederherstellung asynchron. Mit einem blossen
+ * Booleschen Wert waere der Zustand waehrenddessen "nicht angemeldet", der
+ * Login-Screen blitzte kurz auf und wuerde dann durch die Tabs ersetzt.
+ */
+export type AuthStatus = "loading" | "authed" | "anon";
+
 interface AppState {
   user: User | null;
-  isAuthenticated: boolean;
+  authStatus: AuthStatus;
+  setAuthStatus: (status: AuthStatus) => void;
   token: string | null;
   login: (user: User) => void;
   logout: () => void;
@@ -68,13 +76,14 @@ export const useAppStore = create<AppState>()(
   persist(
     (set) => ({
       user: null,
-      isAuthenticated: false,
+      authStatus: "loading",
+      setAuthStatus: (authStatus) => set({ authStatus }),
       token: null,
-      login: (user) => set({ user, isAuthenticated: true }),
+      login: (user) => set({ user, authStatus: "authed" }),
       logout: () =>
         set((s) => ({
           user: null,
-          isAuthenticated: false,
+          authStatus: "anon",
           token: null,
           theme: s.theme === "teal" ? "light" : s.theme,
           dutyStatus: "off_duty",

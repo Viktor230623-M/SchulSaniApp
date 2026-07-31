@@ -1,4 +1,4 @@
-import { and, eq, lt, sql } from "drizzle-orm";
+import { and, eq, lt, or, sql } from "drizzle-orm";
 import {
   db,
   dbConsoleLogTable,
@@ -8,6 +8,7 @@ import {
   missionsTable,
   notificationsTable,
   reportAccessLogTable,
+  sessionsTable,
 } from "@workspace/db";
 import { computeCutoffs } from "../lib/retentionRules";
 
@@ -91,6 +92,19 @@ export async function runRetention(now: Date = new Date()): Promise<RetentionRes
     ))
     .returning({ id: missionActivityLogTable.id });
   results.push({ table: "mission_activity_log", action: "anonymized", count: anonymized.length });
+
+  // Sitzungen sind reine Betriebsdaten ohne Aufbewahrungspflicht. Entfernt werden
+  // sie, sobald sie endgueltig nicht mehr gelten koennen: nach der absoluten
+  // Obergrenze, oder 30 Tage nach einem Widerruf. Die Nachlauffrist beim Widerruf
+  // laesst Raum, einem gemeldeten Missbrauch nachzugehen.
+  const sessions = await db
+    .delete(sessionsTable)
+    .where(or(
+      lt(sessionsTable.absoluteExpiresAt, now),
+      lt(sessionsTable.revokedAt, cutoffs.sessionsRevoked),
+    ))
+    .returning({ id: sessionsTable.id });
+  results.push({ table: "sessions", action: "deleted", count: sessions.length });
 
   return results;
 }

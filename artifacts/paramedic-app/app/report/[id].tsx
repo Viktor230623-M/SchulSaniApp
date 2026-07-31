@@ -231,12 +231,33 @@ export default function ReportScreen() {
   async function handleSharePdf() {
     try {
       const url = ApiService.getReportPdfUrl(report!.id, lang);
+      const filename = `Einsatzprotokoll-${report!.id.slice(0, 8)}.pdf`;
+
       if (Platform.OS === "web") {
-        (window as any).open(url, "_blank");
+        // Ueber einen Blob statt window.open: Der Abruf braucht den
+        // Authorization-Header, den ein blosser Fensteraufruf nicht mitschickt.
+        // Das `download`-Attribut oeffnet auf iOS das Teilen-Menue, waehrend
+        // ein neuer Tab mit blob:-URL dort haeufig blockiert wird.
+        const blob = await ApiService.fetchReportPdfBlob(report!.id, lang);
+        const objectUrl = URL.createObjectURL(blob);
+        // Der Timer wird sofort nach dem Erzeugen der Object-URL gesetzt, nicht
+        // erst nach Anhaengen/Klick/Entfernen. Wirft eine dieser Zeilen, ist das
+        // Aufraeumen trotzdem eingeplant und die URL leckt nicht.
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+        const anchor = document.createElement("a");
+        anchor.href = objectUrl;
+        anchor.download = filename;
+        anchor.rel = "noopener";
+        document.body.appendChild(anchor);
+        anchor.click();
+        document.body.removeChild(anchor);
         return;
       }
-      const dest = `${FileSystem.cacheDirectory}report-${report!.id.slice(0, 8)}.pdf`;
-      const { uri } = await FileSystem.downloadAsync(url, dest);
+
+      const dest = `${FileSystem.cacheDirectory}${filename}`;
+      const { uri } = await FileSystem.downloadAsync(url, dest, {
+        headers: ApiService.getAuthHeaders(),
+      });
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(uri, { mimeType: "application/pdf" });
       }

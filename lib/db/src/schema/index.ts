@@ -194,6 +194,23 @@ export const reportAccessLogTable = pgTable("report_access_log", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Anmeldesitzungen fuer die Wiederherstellung nach einem Reload.
+//
+// Gespeichert wird ausschliesslich der SHA-256-Hash des Sitzungstokens, nie das
+// Token selbst — ein Datenbankleck gibt damit keine gueltigen Sitzungen preis.
+// Bewusst nicht erfasst: IP-Adresse und User-Agent. Beides ist personenbezogen
+// und fuer die Funktion entbehrlich.
+export const sessionsTable = pgTable("sessions", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  tokenHash: text("token_hash").notNull().unique(),
+  createdAt: timestamp("created_at").defaultNow(),
+  lastUsedAt: timestamp("last_used_at").defaultNow(),
+  expiresAt: timestamp("expires_at").notNull(),
+  absoluteExpiresAt: timestamp("absolute_expires_at").notNull(),
+  revokedAt: timestamp("revoked_at"),
+});
+
 // Export types
 export type User = typeof usersTable.$inferSelect;
 export type NewUser = typeof usersTable.$inferInsert;
@@ -215,3 +232,5 @@ export type DbConsoleLog = typeof dbConsoleLogTable.$inferSelect;
 export type NewDbConsoleLog = typeof dbConsoleLogTable.$inferInsert;
 export type ReportAccessLog = typeof reportAccessLogTable.$inferSelect;
 export type NewReportAccessLog = typeof reportAccessLogTable.$inferInsert;
+export type Session = typeof sessionsTable.$inferSelect;
+export type NewSession = typeof sessionsTable.$inferInsert;
