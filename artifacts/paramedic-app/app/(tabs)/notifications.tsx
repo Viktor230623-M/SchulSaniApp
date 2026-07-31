@@ -5,7 +5,6 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import {
   ActivityIndicator,
   FlatList,
-  Platform,
   Pressable,
   RefreshControl,
   StyleSheet,
