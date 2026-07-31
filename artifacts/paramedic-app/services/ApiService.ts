@@ -24,7 +24,10 @@ export function setAuthToken(token: string | null) {
 }
 
 async function apiFetch(url: string, init?: RequestInit): Promise<Response> {
-  const resp = await fetch(url, init);
+  // App und API liegen beide auf sani.avo-network.com, weshalb fetch das Cookie
+  // schon im Standardmodus "same-origin" mitschickt. Explizit gesetzt, damit ein
+  // spaeterer Umzug der API auf eine andere Domain nicht still die Sitzung bricht.
+  const resp = await fetch(url, { ...init, credentials: "include" });
   if (resp.status === 401) {
     const { useAppStore } = await import("@/store/useAppStore");
     useAppStore.getState().logout();
@@ -53,7 +56,43 @@ const ApiService = {
     return { user: data.user as User, isTealUnlocked: data.isTealUnlocked, token: data.token };
   },
 
+  /**
+   * Holt aus dem httpOnly-Sitzungscookie ein frisches Bearer-Token.
+   *
+   * Bewusst `fetch` statt `apiFetch`: Letzteres loest bei 401 ein `logout()` aus.
+   * Beim Start ist ein 401 aber der Normalfall (niemand angemeldet) und darf
+   * keinen Abmeldevorgang anstossen.
+   */
+  async restoreSession(): Promise<{ user: User; isTealUnlocked: boolean; token: string } | null> {
+    try {
+      const resp = await fetch(`${API_BASE}/auth/session`, {
+        method: "GET",
+        headers: { "ngrok-skip-browser-warning": "true" },
+        credentials: "include",
+      });
+      if (!resp.ok) return null;
+      const data = await resp.json();
+      if (!data.token) return null;
+      setAuthToken(data.token);
+      return { user: data.user as User, isTealUnlocked: data.isTealUnlocked, token: data.token };
+    } catch {
+      // Netzwerkfehler beim Start: als "nicht angemeldet" behandeln, nicht als Absturz.
+      return null;
+    }
+  },
+
   async logout(): Promise<void> {
+    // Serverseitig widerrufen, damit ein kopiertes Cookie nach dem Abmelden
+    // wertlos ist. Fehler werden geschluckt: lokal abmelden muss immer gelingen.
+    try {
+      await fetch(`${API_BASE}/auth/logout`, {
+        method: "POST",
+        headers: headers(),
+        credentials: "include",
+      });
+    } catch {
+      // absichtlich ignoriert
+    }
     setAuthToken(null);
   },
 
