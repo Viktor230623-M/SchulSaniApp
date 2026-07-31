@@ -457,8 +457,29 @@ const ApiService = {
     return resp.json();
   },
 
+  /**
+   * URL des PDF-Exports. Bewusst ohne Token: Der Endpunkt hat den
+   * Query-Parameter nie ausgewertet, und ein Token in der URL landet in
+   * Server-Logs und im Verlauf des Browsers.
+   */
   getReportPdfUrl(id: string, lang: "de" | "en" = "de"): string {
-    return `${API_BASE}/incident-reports/${id}/pdf?lang=${lang}&token=${authToken ?? ""}`;
+    return `${API_BASE}/incident-reports/${id}/pdf?lang=${lang}`;
+  },
+
+  /** Kopfzeilen fuer Abrufe ausserhalb von `headers()`, das faelschlich JSON deklariert. */
+  getAuthHeaders(): Record<string, string> {
+    return {
+      "ngrok-skip-browser-warning": "true",
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+    };
+  },
+
+  async fetchReportPdfBlob(id: string, lang: "de" | "en" = "de"): Promise<Blob> {
+    const resp = await apiFetch(this.getReportPdfUrl(id, lang), {
+      headers: this.getAuthHeaders(),
+    });
+    if (!resp.ok) throw new Error("PDF konnte nicht geladen werden");
+    return resp.blob();
   },
   // --- Owner-only database console ---
 
