@@ -7,6 +7,7 @@ import rateLimit from "express-rate-limit";
 import { eq } from "drizzle-orm";
 import { db, usersTable } from "@workspace/db";
 import { requireAuth, type AuthRequest } from "../middlewares/auth";
+import { createSession, resolveSession, revokeSession } from "../lib/sessions";
 
 const router = Router();
 
@@ -15,6 +16,29 @@ const authLimiter = rateLimit({
   max: 5,
   message: { error: "Too many login attempts, please try again later." },
 });
+
+// Bewusst lockerer als authLimiter: Die Wiederherstellung laeuft bei jedem
+// Seitenstart, mit mehreren Tabs auch mehrfach. Fuenf pro Minute wuerden
+// legitime Nutzer aussperren. Das Raten eines Tokens mit 256 Bit Entropie
+// verhindert nicht der Limiter, sondern die Entropie.
+const sessionLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  message: { error: "Zu viele Anfragen, bitte kurz warten." },
+});
+
+const SESSION_COOKIE = "sani-session";
+const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
+function sessionCookieOptions() {
+  return {
+    httpOnly: true,
+    secure: process.env["NODE_ENV"] === "production",
+    sameSite: "lax" as const,
+    path: "/",
+    maxAge: SESSION_MAX_AGE_MS,
+  };
+}
 
 const JWT_SECRET = process.env["JWT_SECRET"];
 if (!JWT_SECRET) {
@@ -240,14 +264,14 @@ router.post("/login", authLimiter, async (req, res) => {
 
     const token = jwt.sign({ userId, role }, JWT_SECRET, { expiresIn: "2h" });
 
+    // Das alte Cookie trug ein Bearer-Token direkt und wird nicht mehr
+    // ausgewertet. Aktiv loeschen, damit kein toter Wert im Browser zurueckbleibt.
+    res.clearCookie("sani-token");
+
     const isWeb = req.headers["user-agent"]?.includes("Mozilla") || req.headers["sec-fetch-dest"] === "document";
     if (rememberMe && isWeb) {
-      res.cookie("sani-token", token, {
-        httpOnly: true,
-        secure: process.env["NODE_ENV"] === "production",
-        sameSite: "lax",
-        maxAge: 2 * 60 * 60 * 1000,
-      });
+      const sessionToken = await createSession(userId);
+      res.cookie(SESSION_COOKIE, sessionToken, sessionCookieOptions());
     }
 
     const { role: userRole, id: userId2 } = userValues;
@@ -259,13 +283,68 @@ router.post("/login", authLimiter, async (req, res) => {
   }
 });
 
-router.post("/logout", requireAuth, (req, res) => {
+router.post("/logout", requireAuth, async (req, res) => {
+  const rawToken = req.cookies?.[SESSION_COOKIE];
+  if (rawToken) await revokeSession(rawToken);
+  res.clearCookie(SESSION_COOKIE, { path: "/" });
   res.clearCookie("sani-token");
   res.json({ message: "Logged out" });
 });
 
 router.get("/me", requireAuth, (req: AuthRequest, res) => {
   res.json({ userId: req.user!.userId, role: req.user!.role });
+});
+
+/**
+ * Stellt eine Sitzung aus dem httpOnly-Cookie wieder her.
+ *
+ * Einziger Endpunkt, der das Sitzungscookie auswertet. Er tauscht es gegen ein
+ * frisches, kurzlebiges Bearer-Token; alle Datenrouten akzeptieren ausschliesslich
+ * dieses Token. Der Nutzerzustand wird dabei neu geladen, damit eine entzogene
+ * Freischaltung sofort wirkt und nicht erst nach Ablauf des Bearer-Tokens.
+ */
+router.get("/session", sessionLimiter, async (req, res) => {
+  const rawToken = req.cookies?.[SESSION_COOKIE];
+  if (!rawToken) {
+    res.status(401).json({ error: "Keine Sitzung" });
+    return;
+  }
+
+  const resolved = await resolveSession(rawToken);
+  if (!resolved) {
+    res.clearCookie(SESSION_COOKIE, { path: "/" });
+    res.status(401).json({ error: "Sitzung abgelaufen" });
+    return;
+  }
+
+  const rows = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.id, resolved.userId))
+    .limit(1);
+
+  const user = rows[0];
+  if (!user || !user.isApproved) {
+    await revokeSession(rawToken);
+    res.clearCookie(SESSION_COOKIE, { path: "/" });
+    res.status(401).json({ error: "Sitzung abgelaufen" });
+    return;
+  }
+
+  const role = user.role ?? "student_paramedic";
+  const token = jwt.sign({ userId: user.id, role }, JWT_SECRET, { expiresIn: "2h" });
+
+  res.json({
+    token,
+    user: {
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      role,
+    },
+    isTealUnlocked: role === "cto",
+  });
 });
 
 export default router;
