@@ -5,7 +5,6 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import {
   ActivityIndicator,
   FlatList,
-  Platform,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -14,6 +13,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { useTopPad } from "@/hooks/useTopPad";
 import { t } from "@/constants/i18n";
 import { getTheme, type ThemeColors } from "@/constants/theme";
 import type { AppLanguage, NotificationItem, NotificationType } from "@/models";
@@ -136,7 +136,7 @@ export default function NotificationsScreen() {
   const highPriority = safeNotifications.filter((n) => n.priority === "high" && !n.isRead);
   const normal = safeNotifications.filter((n) => n.priority !== "high");
   const unread = safeNotifications.filter((n) => !n.isRead && n.userId === user?.id).length;
-  const topPad = Platform.OS === "web" ? 67 : insets.top;
+  const topPad = useTopPad();
 
   return (
     <ErrorBoundary>
