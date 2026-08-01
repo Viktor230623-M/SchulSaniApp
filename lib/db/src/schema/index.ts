@@ -1,4 +1,4 @@
-import { pgTable, pgEnum, text, timestamp, json, boolean, integer, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, pgEnum, index, unique, text, timestamp, json, boolean, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 
 // Aufzaehlungstypen. Die Wertereihenfolge ist Teil der Typdefinition und
@@ -24,7 +24,7 @@ export const usersTable = pgTable("users", {
   iservUsername: text("iserv_username").unique(),
   firstName: text("first_name"),
   lastName: text("last_name"),
-  email: text("email"),
+  email: text("email").unique(),
   phone: text("phone").default(""),
   role: userRoleEnum("role").default("sanitaeter").notNull(),
   schoolId: text("school_id"),
@@ -117,7 +117,10 @@ export const missionActivityLogTable = pgTable("mission_activity_log", {
   dayKey: text("day_key"), // YYYY-MM-DD
   createdAt: timestamp("created_at").defaultNow(),
   metadata: json("metadata"),
-});
+}, (t) => [
+  index("idx_mission_activity_user_created").on(t.userId, t.createdAt),
+  index("idx_mission_activity_user_week").on(t.userId, t.weekKey),
+]);
 
 // Mission dismissals (replaces dismissed-missions.json)
 export const missionDismissalsTable = pgTable("mission_dismissals", {
@@ -125,7 +128,7 @@ export const missionDismissalsTable = pgTable("mission_dismissals", {
   userId: text("user_id").notNull(),
   missionId: text("mission_id").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-}, (t) => [uniqueIndex("mission_dismissals_user_mission_idx").on(t.userId, t.missionId)]);
+}, (t) => [unique("mission_dismissals_user_id_mission_id_key").on(t.userId, t.missionId)]);
 
 // Incident reports (Einsatzprotokoll)
 export const incidentReportsTable = pgTable("incident_reports", {
@@ -182,7 +185,7 @@ export const deviceTokensTable = pgTable("device_tokens", {
   deviceId: text("device_id"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (t) => [index("device_tokens_user_id_idx").on(t.userId)]);
 
 // Audit trail for the owner-only SQL console. Every statement lands here,
 // successful or not, and rows are never deleted by the console itself.
@@ -209,7 +212,7 @@ export const reportAccessLogTable = pgTable("report_access_log", {
   patientVisible: boolean("patient_visible").notNull().default(false),
   resultCount: integer("result_count"),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (t) => [index("report_access_log_created_idx").on(t.createdAt)]);
 
 // Anmeldesitzungen fuer die Wiederherstellung nach einem Reload.
 //
@@ -226,7 +229,7 @@ export const sessionsTable = pgTable("sessions", {
   expiresAt: timestamp("expires_at").notNull(),
   absoluteExpiresAt: timestamp("absolute_expires_at").notNull(),
   revokedAt: timestamp("revoked_at"),
-});
+}, (t) => [index("sessions_user_id_idx").on(t.userId)]);
 
 // Export types
 export type UserRole = (typeof userRoleEnum.enumValues)[number];
