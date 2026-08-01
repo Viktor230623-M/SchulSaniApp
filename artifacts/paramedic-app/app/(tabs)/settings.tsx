@@ -31,6 +31,7 @@ import { getTheme, type ThemeColors } from "@/constants/theme";
 import type { AppLanguage, AppTheme, User, Mission, LOARequest } from "@/models";
 import { confirmAction, notify } from "@/lib/dialog";
 import ApiService from "@/services/ApiService";
+import { enableWebPush, webPushState } from "@/services/WebPushService";
 import { useAppStore } from "@/store/useAppStore";
 
 const ROLE_CONFIG: Record<User["role"], { label: string; bg: string; text: string; icon: string }> = {
@@ -93,6 +94,10 @@ export default function SettingsScreen() {
 
   const avatarUri = user ? (avatarUriMap[user.id] ?? null) : null;
 
+  const [pushState, setPushState] = useState<
+    "unsupported" | "needs-install" | "denied" | "granted" | "default"
+  >("unsupported");
+
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [showUsers, setShowUsers] = useState(false);
@@ -115,6 +120,15 @@ export default function SettingsScreen() {
   const [loadingPending, setLoadingPending] = useState(false);
   const [pendingRoles, setPendingRoles] = useState<Record<string, string>>({});
   const [adminProcessing, setAdminProcessing] = useState<string | null>(null);
+
+  useEffect(() => {
+    webPushState().then(setPushState);
+  }, []);
+
+  async function handleEnableWebPush() {
+    const result = await enableWebPush();
+    setPushState(result === "denied" ? "denied" : result === "granted" ? "granted" : pushState);
+  }
 
   useEffect(() => {
     if (canSeeAllUsers && user) {
@@ -427,6 +441,41 @@ export default function SettingsScreen() {
           </Pressable>
         ))}
       </View>
+
+      {pushState !== "unsupported" && (
+        <View style={[styles.section, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
+          <Text style={[styles.sectionTitle, { color: theme.textTertiary }]}>
+            {t("settings.notifications", lang)}
+          </Text>
+          {pushState === "needs-install" && (
+            <Text style={[styles.emptyText, { color: theme.textTertiary }]}>
+              {t("settings.notificationsNeedsInstall", lang)}
+            </Text>
+          )}
+          {pushState === "denied" && (
+            <Text style={[styles.emptyText, { color: theme.textTertiary }]}>
+              {t("settings.notificationsDenied", lang)}
+            </Text>
+          )}
+          {pushState === "granted" && (
+            <Text style={[styles.emptyText, { color: theme.textTertiary }]}>
+              {t("settings.notificationsActive", lang)}
+            </Text>
+          )}
+          {pushState === "default" && (
+            <Pressable
+              onPress={handleEnableWebPush}
+              style={({ pressed }) => [
+                styles.approveBtn,
+                { backgroundColor: theme.tint, opacity: pressed ? 0.7 : 1 },
+              ]}
+            >
+              <Ionicons name="notifications-outline" size={16} color="#fff" />
+              <Text style={styles.approveBtnText}>{t("settings.notificationsEnable", lang)}</Text>
+            </Pressable>
+          )}
+        </View>
+      )}
 
       {canSeeAllUsers && (
         <View style={[styles.section, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
