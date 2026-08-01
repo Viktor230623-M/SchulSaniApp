@@ -131,7 +131,7 @@ CREATE TABLE "news" (
 	"summary" text NOT NULL,
 	"content" text NOT NULL,
 	"category" "news_category" DEFAULT 'announcement' NOT NULL,
-	"status" "news_status" NOT NULL,
+	"status" "news_status" DEFAULT 'pending' NOT NULL,
 	"published_at" timestamp DEFAULT now() NOT NULL,
 	"author" text NOT NULL,
 	"author_id" text NOT NULL,

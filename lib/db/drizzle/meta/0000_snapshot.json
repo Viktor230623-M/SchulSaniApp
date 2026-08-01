@@ -1,5 +1,5 @@
 {
-  "id": "f49faadd-782a-4972-becc-2b0c98432635",
+  "id": "efaed8e0-2080-423d-8be5-0d7c96347cb8",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -802,7 +802,8 @@
           "type": "news_status",
           "typeSchema": "public",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "default": "'pending'"
         },
         "published_at": {
           "name": "published_at",
