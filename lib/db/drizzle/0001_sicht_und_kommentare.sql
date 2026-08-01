@@ -42,3 +42,6 @@ FROM incident_reports;
 
 COMMENT ON VIEW incident_reports_admin IS
   'Einsatzprotokolle ohne Patienten- und Gesundheitsfelder. Zugang fuer die administrative Konsole; der Rohzugriff auf incident_reports ist dort gesperrt (Anlage 1 zum AV-Vertrag, Ziffer 1.3).';
+--> statement-breakpoint
+COMMENT ON TABLE sessions IS
+  'Anmeldesitzungen. Enthaelt nur Hashes, keine Klartexttoken, keine IP, keinen User-Agent.';
