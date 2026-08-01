@@ -7,14 +7,17 @@ import { db, pool, usersTable, dbConsoleLogTable } from "@workspace/db";
 import { requireAuth, type AuthRequest } from "../middlewares/auth";
 import { guardStatement } from "../lib/sqlGuard";
 import { SQL_PRESETS } from "../lib/sqlPresets";
+import { config } from "../config";
 
 const router: IRouter = Router();
 
 /**
  * The console is bound to one specific account, not to a role — a second admin
- * or cto account must not inherit it. Override via env when handing it over.
+ * or cto account must not inherit it. Set OWNER_USER_ID per instance; without
+ * it the console stays closed to everyone rather than falling back to some
+ * other instance's account.
  */
-const OWNER_USER_ID = process.env["OWNER_USER_ID"] ?? "iserv-viktor.gnjatic";
+const OWNER_USER_ID = config.ownerUserId;
 
 const MAX_ROWS = 200;
 const MAX_STATEMENT_LENGTH = 4000;
@@ -24,7 +27,7 @@ const STATEMENT_TIMEOUT_MS = 5000;
 const consoleLimiter = rateLimit({ windowMs: 60 * 1000, max: 30 });
 
 function requireOwner(req: AuthRequest, res: Response, next: () => void) {
-  if (req.user?.userId !== OWNER_USER_ID) {
+  if (!OWNER_USER_ID || req.user?.userId !== OWNER_USER_ID) {
     // Deliberately vague: a non-owner should not learn that this route exists.
     res.status(404).json({ error: "Not found" });
     return;
