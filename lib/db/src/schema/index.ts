@@ -1,5 +1,22 @@
-import { pgTable, text, timestamp, json, boolean, integer, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, pgEnum, text, timestamp, json, boolean, integer, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
+
+// Aufzaehlungstypen. Die Wertereihenfolge ist Teil der Typdefinition und
+// entspricht dem Stand der Produktionsdatenbank.
+export const dutyStatusEnum = pgEnum("duty_status", ["on_duty", "off_duty"]);
+export const loaStatusEnum = pgEnum("loa_status", ["pending", "approved", "rejected", "appealed"]);
+export const missionPriorityEnum = pgEnum("mission_priority", ["high", "medium", "low"]);
+export const missionStatusEnum = pgEnum("mission_status", ["pending", "accepted", "rejected", "completed", "archived"]);
+export const newsCategoryEnum = pgEnum("news_category", ["announcement", "training", "update", "alert"]);
+export const newsStatusEnum = pgEnum("news_status", ["pending", "approved", "rejected"]);
+export const notificationTypeEnum = pgEnum("notification_type", [
+  "mission_assigned", "mission_cancelled", "status_changed", "news", "loa_update",
+  "reminder", "high_priority_alert", "mission_completed", "mission_created",
+]);
+export const userRoleEnum = pgEnum("user_role", [
+  "cto", "student_paramedic", "sanitaeter_leitung", "admin", "teacher",
+  "sanitaeter_leitung_admin", "sanitaeter", "owner",
+]);
 
 // Users table
 export const usersTable = pgTable("users", {
@@ -9,7 +26,7 @@ export const usersTable = pgTable("users", {
   lastName: text("last_name"),
   email: text("email"),
   phone: text("phone").default(""),
-  role: text("role").default("student_paramedic"),
+  role: userRoleEnum("role"),
   schoolId: text("school_id"),
   passwordHash: text("password_hash").default(""),
   isApproved: boolean("is_approved").default(false).notNull(),
@@ -24,8 +41,8 @@ export const newsTable = pgTable("news", {
   title: text("title").notNull(),
   summary: text("summary"),
   content: text("content").notNull(),
-  category: text("category").default("announcement"),
-  status: text("status").notNull(), // pending, approved, rejected
+  category: newsCategoryEnum("category").default("announcement"),
+  status: newsStatusEnum("status").notNull(),
   publishedAt: timestamp("published_at").defaultNow(),
   author: text("author"),
   authorId: text("author_id"),
@@ -40,8 +57,8 @@ export const missionsTable = pgTable("missions", {
   title: text("title").notNull(),
   description: text("description"),
   location: text("location").notNull(),
-  priority: text("priority").default("medium"), // low, medium, high
-  status: text("status").notNull().default("pending"), // pending, accepted, completed, rejected
+  priority: missionPriorityEnum("priority").default("medium"),
+  status: missionStatusEnum("status").notNull().default("pending"),
   requestedAt: timestamp("requested_at").defaultNow(),
   requestedBy: text("requested_by"),
   scheduledFor: timestamp("scheduled_for"),
@@ -55,7 +72,7 @@ export const missionsTable = pgTable("missions", {
 export const notificationsTable = pgTable("notifications", {
   id: text("id").primaryKey(),
   userId: text("user_id").notNull(),
-  type: text("type").notNull(), // status_changed, mission_assigned, news
+  type: notificationTypeEnum("type").notNull(),
   title: text("title"),
   body: text("body").notNull(),
   relatedId: text("related_id"),
@@ -67,7 +84,7 @@ export const notificationsTable = pgTable("notifications", {
 // Duty status table
 export const dutyTable = pgTable("duty", {
   userId: text("user_id").notNull().primaryKey(),
-  status: text("status").notNull().default("off_duty"),
+  status: dutyStatusEnum("status").notNull().default("off_duty"),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
@@ -79,7 +96,7 @@ export const loaTable = pgTable("loa", {
   fromDate: text("from_date").notNull(),
   toDate: text("to_date").notNull(),
   reason: text("reason").notNull(),
-  status: text("status").notNull().default("pending"),
+  status: loaStatusEnum("status").notNull().default("pending"),
   createdAt: timestamp("created_at").defaultNow(),
   adminNote: text("admin_note"),
   appealNote: text("appeal_note"),
@@ -212,6 +229,7 @@ export const sessionsTable = pgTable("sessions", {
 });
 
 // Export types
+export type UserRole = (typeof userRoleEnum.enumValues)[number];
 export type User = typeof usersTable.$inferSelect;
 export type NewUser = typeof usersTable.$inferInsert;
 export type News = typeof newsTable.$inferSelect;

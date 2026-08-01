@@ -1,9 +1,13 @@
 import { Router } from "express";
 import { eq } from "drizzle-orm";
-import { db, usersTable } from "@workspace/db";
+import { db, usersTable, type UserRole } from "@workspace/db";
 import { requireAuth, requireRole, invalidateUserCache, type AuthRequest } from "../middlewares/auth";
 
-const VALID_ROLES = ["cto", "admin", "sanitaeter_leitung_admin", "sanitaeter_leitung", "teacher", "sanitaeter", "student_paramedic"] as const;
+const VALID_ROLES = ["cto", "admin", "sanitaeter_leitung_admin", "sanitaeter_leitung", "teacher", "sanitaeter", "student_paramedic"] as const satisfies readonly UserRole[];
+
+function isValidRole(value: string): value is (typeof VALID_ROLES)[number] {
+  return (VALID_ROLES as readonly string[]).includes(value);
+}
 
 const router = Router();
 
@@ -97,7 +101,7 @@ router.patch("/:id/approve", requireAuth, requireRole("admin", "cto"), async (re
     res.status(403).json({ error: "Insufficient permissions to assign this role" }); return;
   }
 
-  const newRole = role && (VALID_ROLES as readonly string[]).includes(role) ? role : existing.role ?? "sanitaeter";
+  const newRole: UserRole = role && isValidRole(role) ? role : existing.role ?? "sanitaeter";
   const [updated] = await db
     .update(usersTable)
     .set({ isApproved: true, approvedBy: req.user!.userId, role: newRole, updatedAt: new Date() })
@@ -112,7 +116,7 @@ router.patch("/:id/role", requireAuth, requireRole("admin", "cto", "sanitaeter_l
   const { role } = req.body as { role: string };
   const requestorRole = req.user!.role;
 
-  if (!role || !(VALID_ROLES as readonly string[]).includes(role)) {
+  if (!role || !isValidRole(role)) {
     res.status(400).json({ error: "Invalid role" }); return;
   }
   if (req.user!.userId === id) {
