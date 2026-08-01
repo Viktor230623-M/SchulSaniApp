@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import { eq, and, or } from "drizzle-orm";
-import { db, notificationsTable, deviceTokensTable, usersTable, type Notification, type NewNotification, type DeviceToken } from "@workspace/db";
+import { db, notificationsTable, deviceTokensTable, usersTable, dutyTable, type Notification, type NewNotification, type DeviceToken } from "@workspace/db";
 import { sendWebPush } from "../lib/webPush";
 
 export type NotificationType =
@@ -85,15 +85,39 @@ export async function notifySanitaeters(data: {
     .from(usersTable)
     .where(
       or(
+        eq(usersTable.role, "sanitaeter"),
+        eq(usersTable.role, "student_paramedic"),
         eq(usersTable.role, "sanitaeter_leitung"),
-        eq(usersTable.role, "sanitaeter_leitung_admin"),
-        eq(usersTable.role, "student_paramedic")
+        eq(usersTable.role, "sanitaeter_leitung_admin")
       )
     );
 
   const userIds = sanitaeters.map((u) => u.id);
-  
+
   if (userIds.length === 0) {
+    return { notifications: [], recipientCount: 0 };
+  }
+
+  const notifications = await createNotificationForMultipleUsers(userIds, data);
+  return { notifications, recipientCount: userIds.length };
+}
+
+export async function notifyOnDutyUsers(data: {
+  type: NotificationType;
+  title: string;
+  body: string;
+  priority?: "normal" | "high";
+  relatedId?: string;
+}): Promise<{ notifications: Notification[]; recipientCount: number }> {
+  const onDuty = await db
+    .select({ id: dutyTable.userId })
+    .from(dutyTable)
+    .where(eq(dutyTable.status, "on_duty"));
+
+  const userIds = onDuty.map((u) => u.id);
+
+  if (userIds.length === 0) {
+    console.log("[push] niemand im Dienst, keine Benachrichtigung verschickt");
     return { notifications: [], recipientCount: 0 };
   }
 

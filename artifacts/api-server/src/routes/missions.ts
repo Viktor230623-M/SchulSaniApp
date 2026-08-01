@@ -4,7 +4,7 @@ import { desc, eq, inArray, lt, sql } from "drizzle-orm";
 import { db, missionsTable, missionActivityLogTable, usersTable } from "@workspace/db";
 import { requireAuth, requireRole, type AuthRequest } from "../middlewares/auth";
 import { addDismissal, getDismissedFor, removeDismissal } from "../data/dismissals";
-import { notifySanitaeters, notifyUser } from "../services/notifications";
+import { notifyOnDutyUsers, notifyUser } from "../services/notifications";
 import { translateToLanguages } from "../services/translator";
 import { canSeePatientInfo } from "../lib/access";
 
@@ -94,7 +94,7 @@ router.post("/", requireAuth, requireRole("admin", "sanitaeter_leitung", "sanita
     m.translationsJson = JSON.stringify(t);
   }
 
-  notifySanitaeters({
+  notifyOnDutyUsers({
     type: "mission_created",
     title: "Neue Mission",
     body: `${title} - ${location}`,
