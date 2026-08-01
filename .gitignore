@@ -49,3 +49,6 @@ Thumbs.db
 .local/
 artifacts/api-server/.env
 CLAUDE.md
+
+# Interne Notizen und Planungsunterlagen
+docs/superpowers/
