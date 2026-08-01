@@ -16,6 +16,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.schulsani.app",
+      "buildNumber": "0",
       "infoPlist": {
         "UIBackgroundModes": ["remote-notification"]
       }
@@ -23,6 +24,7 @@
     "android": {
       "softwareKeyboardLayoutMode": "pan",
       "package": "com.schulsani.app",
+      "versionCode": 0,
       "permissions": [
         "RECEIVE_BOOT_COMPLETED",
         "VIBRATE",
