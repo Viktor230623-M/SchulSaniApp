@@ -234,6 +234,11 @@ const translations = {
       noSaniActivities: "Keine Sani-Aktivitäten",
       photoPermissionTitle: "Berechtigung",
       photoPermissionMessage: "Fotobibliothek-Zugriff wird benötigt.",
+      notifications: "Benachrichtigungen",
+      notificationsEnable: "Benachrichtigungen aktivieren",
+      notificationsActive: "Benachrichtigungen sind aktiv",
+      notificationsNeedsInstall: "Erst über Teilen → Zum Home-Bildschirm hinzufügen, danach sind Benachrichtigungen möglich.",
+      notificationsDenied: "Die Erlaubnis wurde in den iOS-Einstellungen unter Safari zurückgenommen.",
     },
     report: {
       title: "Einsatzprotokoll",
@@ -652,6 +657,11 @@ const translations = {
       noSaniActivities: "No paramedic activities",
       photoPermissionTitle: "Permission",
       photoPermissionMessage: "Photo library access is required.",
+      notifications: "Notifications",
+      notificationsEnable: "Enable Notifications",
+      notificationsActive: "Notifications are active",
+      notificationsNeedsInstall: "First use Share → Add to Home Screen, then notifications are possible.",
+      notificationsDenied: "Permission was revoked in iOS Settings under Safari.",
     },
     report: {
       title: "Incident Report",

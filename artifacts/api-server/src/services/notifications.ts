@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import { eq, and, or } from "drizzle-orm";
 import { db, notificationsTable, deviceTokensTable, usersTable, type Notification, type NewNotification, type DeviceToken } from "@workspace/db";
+import { sendWebPush } from "../lib/webPush";
 
 export type NotificationType =
   | "mission_assigned"
@@ -130,7 +131,26 @@ async function sendPushNotification(notification: Notification): Promise<void> {
       return;
     }
 
-    const messages = tokens.map((token) => ({
+    // Web-Subscriptions sind JSON-Objekte mit eigenem Endpunkt und gehen nicht
+    // ueber exp.host. Getrennt behandeln, sonst verwirft Expo den ganzen Stapel.
+    const webTokens = tokens.filter((t) => t.platform === "web");
+    const nativeTokens = tokens.filter((t) => t.platform !== "web");
+
+    for (const row of webTokens) {
+      const result = await sendWebPush(row.token, {
+        title: notification.title ?? getDefaultTitle(notification.type),
+        body: notification.body,
+        url: "/",
+        notificationId: notification.id,
+      });
+      if (result === "gone") {
+        await db.delete(deviceTokensTable).where(eq(deviceTokensTable.id, row.id));
+      }
+    }
+
+    if (nativeTokens.length === 0) return;
+
+    const messages = nativeTokens.map((token) => ({
       to: token.token,
       title: notification.title ?? getDefaultTitle(notification.type),
       body: notification.body,
