@@ -54,12 +54,15 @@ export async function webPushState(): Promise<
 export async function enableWebPush(): Promise<"granted" | "denied" | "unsupported"> {
   if (!webPushSupported() || !VAPID_PUBLIC_KEY) return "unsupported";
 
-  const registration = await navigator.serviceWorker.register("/sw.js");
-  await navigator.serviceWorker.ready;
-
-  // Muss aus einer Nutzeraktion heraus laufen — Safari lehnt sonst stumm ab.
+  // Muss die erste Anweisung nach der Nutzeraktion sein: Jeder Event-Loop-Turn
+  // davor (etwa das Registrieren des Service Workers) kann auf iOS/Safari die
+  // transiente Nutzeraktivierung verbrauchen — die Abfrage wuerde dann stumm
+  // abgelehnt, ohne dass ueberhaupt ein Dialog erscheint.
   const permission = await Notification.requestPermission();
   if (permission !== "granted") return "denied";
+
+  const registration = await navigator.serviceWorker.register("/sw.js");
+  await navigator.serviceWorker.ready;
 
   const existing = await registration.pushManager.getSubscription();
   const subscription =
