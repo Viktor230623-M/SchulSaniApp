@@ -458,9 +458,14 @@ export default function SettingsScreen() {
             </Text>
           )}
           {pushState === "granted" && (
-            <Text style={[styles.emptyText, { color: theme.textTertiary }]}>
-              {t("settings.notificationsActive", lang)}
-            </Text>
+            <>
+              <Text style={[styles.emptyText, { color: theme.textTertiary }]}>
+                {t("settings.notificationsActive", lang)}
+              </Text>
+              <Text style={[styles.emptyText, { color: theme.textTertiary }]}>
+                {t("settings.notificationsFocusHint", lang)}
+              </Text>
+            </>
           )}
           {pushState === "default" && (
             <Pressable

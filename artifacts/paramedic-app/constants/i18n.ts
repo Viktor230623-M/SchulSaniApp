@@ -239,6 +239,7 @@ const translations = {
       notificationsActive: "Benachrichtigungen sind aktiv",
       notificationsNeedsInstall: "Erst über Teilen → Zum Home-Bildschirm hinzufügen, danach sind Benachrichtigungen möglich.",
       notificationsDenied: "Die Erlaubnis wurde in den iOS-Einstellungen unter Safari zurückgenommen.",
+      notificationsFocusHint: "Damit Einsatzalarme auch bei aktiviertem Fokus oder „Nicht stören\" ankommen: Einstellungen → Fokus → Nicht stören → Benachrichtigungen erlauben → SchulSani hinzufügen.",
     },
     report: {
       title: "Einsatzprotokoll",
@@ -662,6 +663,7 @@ const translations = {
       notificationsActive: "Notifications are active",
       notificationsNeedsInstall: "First use Share → Add to Home Screen, then notifications are possible.",
       notificationsDenied: "Permission was revoked in iOS Settings under Safari.",
+      notificationsFocusHint: "So mission alerts get through even with Focus or Do Not Disturb on: Settings → Focus → Do Not Disturb → Allowed Notifications → Apps → add SchulSani.",
     },
     report: {
       title: "Incident Report",

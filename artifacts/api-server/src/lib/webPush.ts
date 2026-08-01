@@ -46,7 +46,13 @@ export async function sendWebPush(
 
   try {
     const subscription = JSON.parse(subscriptionJson);
-    await webpush.sendNotification(subscription, JSON.stringify(payload));
+    // urgency "high" stammt aus RFC 8030 und bittet den Push-Dienst, sofort
+    // zuzustellen statt zu buendeln oder auf einen guenstigen Zeitpunkt zu
+    // warten. Das durchbricht keinen Fokus/DND — das kann auf iOS nur eine
+    // native App mit dem Time-Sensitive-Entitlement.
+    await webpush.sendNotification(subscription, JSON.stringify(payload), {
+      urgency: "high",
+    });
     return "ok";
   } catch (err: any) {
     // 404 und 410 bedeuten: diese Subscription existiert nicht mehr.
