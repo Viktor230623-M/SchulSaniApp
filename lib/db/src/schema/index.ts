@@ -42,7 +42,7 @@ export const newsTable = pgTable("news", {
   summary: text("summary").notNull(),
   content: text("content").notNull(),
   category: newsCategoryEnum("category").default("announcement").notNull(),
-  status: newsStatusEnum("status").notNull(),
+  status: newsStatusEnum("status").default("pending").notNull(),
   publishedAt: timestamp("published_at").defaultNow().notNull(),
   author: text("author").notNull(),
   authorId: text("author_id").notNull(),
