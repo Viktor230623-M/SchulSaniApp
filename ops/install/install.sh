@@ -9,7 +9,8 @@ set -euo pipefail
 LOG_FILE="/var/log/schulsani-install.log"
 DRY_RUN=0
 MIN_FREE_DISK_MB=2048
-NODE_MAJOR_VERSION="22"
+NODE_MAJOR_VERSION="24"
+POSTGRES_MIN_MAJOR_VERSION="17"
 DB_NAME="schulSani"
 DB_ROLE="saniapp"
 
@@ -286,16 +287,43 @@ step_install_pnpm() {
   step_ok "pnpm ueber Corepack aktiviert."
 }
 
+postgres_major_version() {
+  # Ermittelt die Hauptversion des installierten Server-Pakets, nicht der
+  # Client-Bibliothek — beide koennen auseinanderlaufen.
+  psql --version 2>/dev/null | grep -oE '[0-9]+' | head -1
+}
+
+check_postgres_min_version() {
+  local installed_major
+  installed_major="$(postgres_major_version)"
+  if [[ -z "$installed_major" ]]; then
+    fail_with "PostgreSQL-Version konnte nicht ermittelt werden."
+  fi
+  if [[ "$installed_major" -lt "$POSTGRES_MIN_MAJOR_VERSION" ]]; then
+    fail_with "PostgreSQL ${installed_major} ist installiert, mindestens ${POSTGRES_MIN_MAJOR_VERSION} wird erwartet (Bestandsserver laeuft mit ${POSTGRES_MIN_MAJOR_VERSION})." \
+      "Distributionspaket ist zu alt — PGDG-Apt-Repository einrichten (https://www.postgresql.org/download/linux/debian/) und erneut ausfuehren."
+  fi
+  echo "$installed_major"
+}
+
 step_install_postgres() {
   step_start "PostgreSQL besorgen"
   if command -v psql >/dev/null 2>&1 && dpkg -s postgresql >/dev/null 2>&1; then
-    step_ok "PostgreSQL bereits installiert ($(psql --version))."
+    local installed_major
+    installed_major="$(check_postgres_min_version)"
+    step_ok "PostgreSQL bereits installiert ($(psql --version)), Hauptversion ${installed_major} erfuellt Mindestanforderung ${POSTGRES_MIN_MAJOR_VERSION}."
     return 0
   fi
   apt_update_once
   run apt-get install -y postgresql postgresql-contrib
   run systemctl enable --now postgresql
-  step_ok "PostgreSQL installiert und gestartet."
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    step_ok "PostgreSQL installiert und gestartet (Trockenlauf — Versionspruefung uebersprungen)."
+    return 0
+  fi
+  local installed_major
+  installed_major="$(check_postgres_min_version)"
+  step_ok "PostgreSQL installiert und gestartet, Hauptversion ${installed_major}."
 }
 
 step_install_nginx() {

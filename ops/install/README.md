@@ -34,9 +34,13 @@ sudo ops/install/install.sh --dry-run
 1. Prueft Root-Rechte und erkennt das Betriebssystem.
 2. Prueft freien Speicherplatz, Ports 80/443, bereits laufendes
    nginx/PostgreSQL.
-3. Installiert Node.js (NodeSource-Repository), aktiviert `pnpm` ueber
+3. Installiert Node.js 24.x (NodeSource-Repository), aktiviert `pnpm` ueber
    Corepack, installiert PostgreSQL, nginx, certbot und PM2 — jeweils mit
-   Pruefung, ob eine passende Version bereits vorhanden ist.
+   Pruefung, ob eine passende Version bereits vorhanden ist. Fuer PostgreSQL
+   gilt eine Mindest-Hauptversion 17 (passend zum Bestandsserver); liefert
+   die Distribution per Paketmanager eine aeltere Version, bricht das
+   Skript mit einem Hinweis auf das PGDG-Apt-Repository ab, statt still mit
+   einer zu alten Version weiterzumachen.
 4. Legt Datenbankrolle und Datenbank an (`schulSani`, Rolle `saniapp`),
    erzeugt ein zufaelliges Passwort. Bei bereits vorhandener Rolle/Datenbank
    wird nichts ueberschrieben.
