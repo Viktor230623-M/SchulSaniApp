@@ -1,14 +1,12 @@
 # Installer SchulSani
 
-Bringt einen frischen Debian/Ubuntu-Server in einen betriebsbereiten
-Zustand fuer SchulSaniApp. `install.sh` erledigt als `root` den Systemteil
-(Voraussetzungspruefung, Paketbeschaffung, Datenbank, Vorlagen fuer PM2 und
-nginx) und startet danach den Einrichtungsassistenten
-(`ops/install/assistant/`) — eine kleine, lokal ausgelieferte Weboberflaeche,
-ueber die Konfiguration eingegeben, Geheimnisse erzeugt und das erste
-Administrator-Konto angelegt werden. Migrationslauf, Web-Export,
-TLS-Beschaffung und Selbstpruefung sind noch nicht angebunden — folgt in
-einer spaeteren Ausbaustufe (siehe "Offene Punkte" unten).
+Bringt einen frischen Debian/Ubuntu-Server in eine laufende, per TLS
+erreichbare SchulSaniApp-Instanz. `install.sh` erledigt als `root` den
+Systemteil (Voraussetzungspruefung, Paketbeschaffung, Datenbank, Vorlagen
+fuer PM2 und nginx), startet danach den Einrichtungsassistenten
+(`ops/install/assistant/`) fuer Konfiguration/Geheimnisse/Eigentuemer-Konto
+und schliesst mit Migrationen, Web-Export, TLS-Beschaffung und
+Selbstpruefung ab.
 
 ## Voraussetzungen
 
@@ -18,8 +16,13 @@ einer spaeteren Ausbaustufe (siehe "Offene Punkte" unten).
 - Mindestens 2 GB freier Speicherplatz auf `/`.
 - Ports 80 und 443 frei (kein anderer nginx/Reverse-Proxy aktiv).
 - Netzwerkzugriff nach aussen (apt-Repositories, NodeSource, npm-Registry).
+- DNS-Eintrag der vorgesehenen Domain zeigt bereits auf diesen Server, bevor
+  Schritt 11 (TLS) erreicht wird — sonst bricht certbot mit einer
+  verstaendlichen Meldung ab.
 
 ## Aufruf
+
+Erstinstallation:
 
 ```sh
 sudo ops/install/install.sh
@@ -29,6 +32,14 @@ Trockenlauf — zeigt nur, was das Skript taete, veraendert nichts am System:
 
 ```sh
 sudo ops/install/install.sh --dry-run
+```
+
+Aktualisierung einer bereits eingerichteten Instanz (z. B. nach neuen
+Migrationen oder einem neuen Web-Export) — ueberspringt Systemteil und
+Einrichtungsassistenten, liest die vorhandenen `.env`-Dateien:
+
+```sh
+sudo ops/install/install.sh --update
 ```
 
 ## Was das Skript tut
@@ -41,14 +52,11 @@ sudo ops/install/install.sh --dry-run
    Pruefung, ob eine passende Version bereits vorhanden ist. Fuer PostgreSQL
    gilt eine Mindest-Hauptversion 17 (passend zum Bestandsserver); liefert
    die Distribution per Paketmanager eine aeltere Version, bricht das
-   Skript mit einem Hinweis auf das PGDG-Apt-Repository ab, statt still mit
-   einer zu alten Version weiterzumachen.
+   Skript mit einem Hinweis auf das PGDG-Apt-Repository ab.
 4. Legt Datenbankrolle und Datenbank an (`schulSani`, Rolle `saniapp`),
    erzeugt ein zufaelliges Passwort und hinterlegt es unter
-   `/root/.schulsani-db-password` (`chmod 600`) — damit ein erneuter Lauf
-   dieselbe `DATABASE_URL` zusammenbauen kann, ohne dass Postgres das
-   Passwort im Klartext herausgeben muesste. Bei bereits vorhandener
-   Rolle/Datenbank wird nichts ueberschrieben.
+   `/root/.schulsani-db-password` (`chmod 600`) fuer einen erneuten Lauf.
+   Bei bereits vorhandener Rolle/Datenbank wird nichts ueberschrieben.
 5. Kopiert `ecosystem.config.js` (PM2-Vorlage) nach `/etc/schulsani/` und
    `nginx.conf.template` (nginx-Vorlage) nach `/etc/nginx/schulsani/` —
    beide mit Platzhaltern, noch ohne konkrete Werte.
@@ -60,14 +68,26 @@ sudo ops/install/install.sh --dry-run
    Anwendungsname, Themefarbe, Bundle-Kennung und optionale Werte ab,
    erzeugt `JWT_SECRET` und das VAPID-Schluesselpaar, schreibt
    `artifacts/api-server/.env` und `artifacts/paramedic-app/.env`
-   (`chmod 600`) und legt die IServ-Kennung des ersten Administrators mit
-   Rolle `cto` und Vorabfreigabe an — vorausgesetzt, die Datenbanktabellen
-   existieren bereits (Migrationslauf ist noch nicht Teil dieses Skripts,
-   siehe "Offene Punkte").
+   (`chmod 600`) und fragt in einem eigenen, klar beschrifteten Schritt
+   ("Wer wird Eigentuemer dieser Instanz?"), welches IServ-Konto die Rolle
+   `owner` erhaelt — mit Vorabfreigabe, damit die erste Anmeldung nicht auf
+   eine nicht existierende zweite Person zum Freigeben wartet.
+7. Spielt Migrationen ein (`pnpm --filter @workspace/db migrate`).
+8. Raeumt `/tmp/metro-cache` auf (dort lagen auf dem Bestandsserver einmal
+   Reste eines fremden Laufs, die falsche Instanzwerte in `dist/` getragen
+   haben) und baut den Web-Export (`npx expo export --platform web`).
+9. Rendert `nginx.conf.template` mit der echten Domain und dem `dist/`-Pfad,
+   aktiviert die Site, prueft den DNS-Eintrag und bezieht ein
+   TLS-Zertifikat mit `certbot --nginx`.
+10. Rendert `ecosystem.config.js` mit dem echten Installationspfad, startet
+    (oder startet neu) den PM2-Prozess `sani-backend`, prueft danach
+    HTTP-Status, PM2-Status und Datenbankverbindung.
 
 Jeder Schritt ist idempotent: ein erneuter Lauf auf einem bereits
 teilweise eingerichteten System ueberspringt Erledigtes, statt es erneut
-auszufuehren oder zu ueberschreiben.
+auszufuehren oder zu ueberschreiben. `--update` deckt den haeufigsten
+Wiederholungsfall (nur Migrationen/Web-Export/Neustart) gezielt ab, ohne
+erneut nach Konfiguration zu fragen.
 
 Ausgabe im Terminal ist mit Farben versehen, wenn das Terminal sie
 unterstuetzt (`tput`-Pruefung), sonst schlichter Text. Jeder Schritt zeigt
@@ -77,38 +97,31 @@ Haken (✔), Punkt (·, uebersprungen) oder Kreuz (✘, Fehler).
 
 Alle Schritte werden nach `/var/log/schulsani-install.log` protokolliert
 (auch im Trockenlauf, dort mit Kennzeichnung `[TROCKENLAUF]`). Erzeugte
-Geheimnisse (Datenbank-Passwort) werden nicht im Klartext protokolliert.
+Geheimnisse (Datenbank-Passwort, `JWT_SECRET`, VAPID-Paar) werden nicht im
+Klartext protokolliert.
 
 ## Was danach von Hand zu pruefen ist
 
 - `psql -U saniapp -d schulSani -c '\conninfo'` — Datenbankverbindung
   funktioniert mit der erzeugten Rolle.
-- `/etc/schulsani/ecosystem.config.js` und
-  `/etc/nginx/schulsani/nginx.conf.template` enthalten noch Platzhalter
-  (`<APP_ROOT>`, `<DOMAIN>`, `<DIST_PATH>`) — werden erst in einer
-  spaeteren Ausbaustufe des Assistenten mit echten Werten gerendert und
-  aktiviert.
 - `artifacts/api-server/.env` und `artifacts/paramedic-app/.env` enthalten
   die vom Assistenten geschriebenen Werte — stichprobenartig gegen die
   Eingabe pruefen, Dateirechte muessen `600` sein.
-- `/etc/schulsani/role-map.json` enthaelt die IServ-Kennung des ersten
-  Administrators mit Rolle `cto`.
-- DNS-Eintrag der vorgesehenen Domain muss auf diesen Server zeigen, bevor
-  spaeter eine TLS-Beschaffung (certbot) versucht wird.
+- `/etc/schulsani/role-map.json` enthaelt die IServ-Kennung des
+  Eigentuemer-Kontos mit Rolle `owner`.
+- `pm2 status sani-backend` — Prozess laeuft, `pm2 logs sani-backend` bei
+  Auffaelligkeiten.
 - `systemctl status postgresql nginx` — beide Dienste laufen.
+- `curl -I https://<domain>/` — TLS greift, Antwort 200.
 
 ## Offene Punkte
 
-- Migrationslauf, Web-Export, TLS-Beschaffung und Selbstpruefung sind noch
-  nicht Teil des Assistenten — sie haengen an R1/R2-Ergebnissen und kommen
-  in einer spaeteren Ausbaustufe. Das Administrator-Konto kann der
-  Assistent erst anlegen, wenn die `users`-Tabelle bereits existiert
-  (Migrationen vorher von Hand ausfuehren, falls dieser Schritt noch
-  fehlschlaegt).
 - Kein automatisches Firewall-Handling (ufw) — falls eine Firewall aktiv
   ist, muessen Ports von Hand freigegeben werden, inklusive des
   zufaelligen Assistent-Ports waehrend der Einrichtung.
-- Kein Testlauf auf einer echten Debian/Ubuntu-VM durchgefuehrt (siehe
-  Roadmap-Schritt 15) — bisher nur `bash -n`, `shellcheck`, `node -c` und
-  ein lokaler Trockenlauf des Assistenten mit einer Testdatenbank-Attrappe
-  geprueft.
+- Kein Testlauf auf einer echten Debian/Ubuntu-VM (Roadmap-Schritt 15
+  entfaellt mangels Testsystem) — Nachweis bislang nur `bash -n`,
+  `shellcheck` und `node -c`.
+- `pnpm --filter @workspace/db migrate` setzt einen entsprechenden
+  Migrationsbefehl in `lib/db/package.json` voraus (R1); ist er noch nicht
+  vorhanden, bricht Schritt 7 mit einer erklaerenden Meldung ab.
