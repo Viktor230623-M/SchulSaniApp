@@ -324,12 +324,16 @@
     </section>
 
     <section data-page="4" class="card">
-      <h2>Erster Administrator</h2>
-      <p class="hint">Dieses Konto wird sofort freigegeben, sobald es sich zum ersten Mal ueber IServ anmeldet.</p>
+      <h2>Wer wird Eigentuemer dieser Instanz?</h2>
+      <p class="hint">Die Rolle "owner" ist die hoechste Rolle innerhalb der Schule — sie darf alle
+        anderen Rollen vergeben und alle Nutzer verwalten. Genau eine Person sollte sie zuerst
+        erhalten. Dieses Konto wird sofort freigegeben, sobald es sich zum ersten Mal ueber IServ
+        anmeldet.</p>
 
       <div class="field" data-field="iservUsername">
-        <label for="iservUsername">IServ-Benutzerkennung</label>
+        <label for="iservUsername">IServ-Benutzerkennung der zukuenftigen Eigentuemerin/des zukuenftigen Eigentuemers</label>
         <input type="text" id="iservUsername" name="iservUsername" autocomplete="off" placeholder="vorname.nachname">
+        <div class="helper">Erhaelt die Rolle "owner" (frueher: cto).</div>
         <div class="error"><span>—</span></div>
       </div>
 
@@ -349,7 +353,7 @@
       <div class="steplog" id="steplog">
         <div class="row pending" data-log="config"><span class="icon">1</span><span>Konfiguration speichern</span></div>
         <div class="row pending" data-log="secrets"><span class="icon">2</span><span>Geheimnisse erzeugen</span></div>
-        <div class="row pending" data-log="admin"><span class="icon">3</span><span>Administrator-Konto anlegen</span></div>
+        <div class="row pending" data-log="admin"><span class="icon">3</span><span>Eigentuemer-Konto anlegen</span></div>
       </div>
 
       <div class="actions">
@@ -496,7 +500,7 @@
       ["Bundle-Kennung", cfg.bundleId],
       ["Schul-Kennung", cfg.schoolId || "(nicht gesetzt)"],
       ["Eigentuemer-Kennung", cfg.ownerUserId || "(nicht gesetzt)"],
-      ["Administrator", el("iservUsername").value || "(nicht gesetzt)"]
+      ["Eigentuemer", el("iservUsername").value || "(nicht gesetzt)"]
     ];
     var dl = el("summaryList");
     dl.innerHTML = "";
@@ -568,17 +572,17 @@
         return Promise.reject(new Error("secrets"));
       }
       setLogState("secrets", "ok", "Geheimnisse erzeugt");
-      setLogState("admin", "pending", "Administrator-Konto anlegen");
+      setLogState("admin", "pending", "Eigentuemer-Konto anlegen");
       return postJson("/api/admin", admin);
     }).then(function (r) {
       if (!r || r.status !== 200) {
-        setLogState("admin", "fail", "Administrator-Konto konnte nicht angelegt werden");
+        setLogState("admin", "fail", "Eigentuemer-Konto konnte nicht angelegt werden");
         applyFieldErrorsFromServer(r && r.data && r.data.errors);
-        showBanner((r && r.data && r.data.error) || "Unbekannter Fehler beim Administrator-Konto.");
+        showBanner((r && r.data && r.data.error) || "Unbekannter Fehler beim Eigentuemer-Konto.");
         btn.disabled = false;
         return Promise.reject(new Error("admin"));
       }
-      setLogState("admin", "ok", "Administrator-Konto angelegt");
+      setLogState("admin", "ok", "Eigentuemer-Konto angelegt");
       return postJson("/api/finish", {});
     }).then(function (r) {
       if (!r || r.status !== 200) {

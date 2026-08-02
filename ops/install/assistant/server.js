@@ -2,7 +2,7 @@
 "use strict";
 
 // Einrichtungsassistent fuer SchulSani — Schritte 5 (Konfiguration) und 6
-// (Geheimnisse) der Roadmap, plus Anlegen des ersten Administrator-Kontos.
+// (Geheimnisse) der Roadmap, plus Anlegen des ersten Eigentuemer-Kontos (Rolle "owner").
 // Wird von ops/install/install.sh am Ende des Systemteils gestartet, laeuft
 // nur so lange, wie die Einrichtung dauert, und beendet sich danach selbst.
 //
@@ -269,13 +269,16 @@ function usersTableExists() {
   return result !== "" && result.toLowerCase() !== "null" && result.toLowerCase() !== "(null)";
 }
 
-function upsertAdmin(iservUsername, schoolId) {
+// Rolle "owner" ist die schulische Hoechstrolle (vormals "cto", siehe R5
+// Schritt 1 — der Enum-Wert "cto" bleibt in der Datenbank bestehen, wird
+// hier aber nicht mehr vergeben).
+function upsertOwner(iservUsername, schoolId) {
   const id = crypto.randomUUID();
   const schoolIdSql = schoolId ? sqlQuote(schoolId) : "NULL";
   const sql =
     `INSERT INTO users (id, iserv_username, role, school_id, is_approved, approved_by, created_at, updated_at) ` +
-    `VALUES (${sqlQuote(id)}, ${sqlQuote(iservUsername)}, 'cto', ${schoolIdSql}, true, 'installer', now(), now()) ` +
-    `ON CONFLICT (iserv_username) DO UPDATE SET role = 'cto', is_approved = true, approved_by = 'installer', updated_at = now();`;
+    `VALUES (${sqlQuote(id)}, ${sqlQuote(iservUsername)}, 'owner', ${schoolIdSql}, true, 'installer', now(), now()) ` +
+    `ON CONFLICT (iserv_username) DO UPDATE SET role = 'owner', is_approved = true, approved_by = 'installer', updated_at = now();`;
   execFileSync("psql", [DATABASE_URL, "-c", sql], { encoding: "utf-8", timeout: 15000 });
 }
 
@@ -286,7 +289,7 @@ function writeRoleMapEntry(iservUsername) {
   } catch {
     map = {};
   }
-  map[iservUsername] = "cto";
+  map[iservUsername] = "owner";
   writeSecretFile(ROLE_MAP_PATH, JSON.stringify(map, null, 2) + "\n");
 }
 
@@ -512,14 +515,14 @@ async function handleApi(req, res, pathname) {
             "Migrationen zuerst nachholen, dann diese Seite erneut aufrufen.",
         });
       }
-      upsertAdmin(out.iservUsername, state.config.schoolId);
+      upsertOwner(out.iservUsername, state.config.schoolId);
       writeRoleMapEntry(out.iservUsername);
       state.admin = { created: true, username: out.iservUsername };
       saveState(state);
-      logLine(`Administrator-Konto angelegt/aktualisiert (Kennung im Protokoll nicht ausgeschrieben).`);
+      logLine(`Eigentuemer-Konto angelegt/aktualisiert (Kennung im Protokoll nicht ausgeschrieben).`);
       return sendJson(res, 200, { ok: true });
     } catch (err) {
-      logLine(`Fehler beim Anlegen des Administrator-Kontos: ${err.message}`);
+      logLine(`Fehler beim Anlegen des Eigentuemer-Kontos: ${err.message}`);
       return sendJson(res, 502, {
         ok: false,
         error: "Datenbank nicht erreichbar oder Befehl fehlgeschlagen. Protokoll auf dem Server pruefen.",
