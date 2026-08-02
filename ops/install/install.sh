@@ -399,6 +399,29 @@ step_install_pm2_ecosystem() {
   step_ok "Vorlage nach ${target_file} kopiert (Platzhalter noch zu ersetzen)."
 }
 
+# --- nginx-Vorlage einrichten -----------------------------------------
+
+step_install_nginx_template() {
+  step_start "nginx-Vorlage bereitstellen"
+  local script_dir target_dir target_file
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  target_dir="/etc/nginx/schulsani"
+  target_file="${target_dir}/nginx.conf.template"
+
+  if [[ ! -f "${script_dir}/nginx.conf.template" ]]; then
+    fail_with "Vorlage ${script_dir}/nginx.conf.template fehlt im Repository."
+  fi
+
+  if [[ -f "$target_file" ]]; then
+    step_skip "nginx-Vorlage existiert bereits unter ${target_file}."
+    return 0
+  fi
+
+  run mkdir -p "$target_dir"
+  run install -m 644 "${script_dir}/nginx.conf.template" "$target_file"
+  step_ok "Vorlage nach ${target_file} kopiert — wird vom Einrichtungsassistenten mit Domain/Pfad gerendert und aktiviert."
+}
+
 # --- Ablauf ----------------------------------------------------------------
 
 main() {
@@ -421,10 +444,13 @@ main() {
   step_provision_database
 
   step_install_pm2_ecosystem
+  step_install_nginx_template
 
-  printf '\n%s✔ PM2-Ecosystem-Datei bereitgestellt.%s\n' "$COLOR_GREEN" "$COLOR_RESET"
+  printf '\n%s✔ Systemteil abgeschlossen.%s\n' "$COLOR_GREEN" "$COLOR_RESET"
+  printf 'Naechster Schritt: Einrichtungsassistent (Konfiguration, Geheimnisse,\n'
+  printf 'Migrationen, Web-Export, TLS) — folgt in einer spaeteren Ausbaustufe.\n'
   printf 'Protokoll: %s\n' "$LOG_FILE"
-  log_line "=== Lauf abgeschlossen ==="
+  log_line "=== Systemteil abgeschlossen ==="
 }
 
 main "$@"
