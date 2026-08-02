@@ -5,7 +5,7 @@ import { Router } from "express";
 import jwt from "jsonwebtoken";
 import rateLimit from "express-rate-limit";
 import { eq } from "drizzle-orm";
-import { db, usersTable } from "@workspace/db";
+import { db, usersTable, userRoleEnum, type UserRole } from "@workspace/db";
 import { requireAuth, type AuthRequest } from "../middlewares/auth";
 import { createSession, resolveSession, revokeSession } from "../lib/sessions";
 
@@ -72,8 +72,15 @@ function loadBootstrapRoleMap(): Record<string, string> {
 
 const BOOTSTRAP_ROLE_MAP = loadBootstrapRoleMap();
 
-function getRoleForUser(username: string): string {
-  return BOOTSTRAP_ROLE_MAP[username.toLowerCase().trim()] ?? "sanitaeter";
+function isUserRole(value: string): value is UserRole {
+  return (userRoleEnum.enumValues as readonly string[]).includes(value);
+}
+
+// Die Zuordnung kommt aus einer Datei ausserhalb der Anwendung und kann jeden
+// Wert enthalten. Was der Datenbanktyp nicht kennt, faellt auf sanitaeter zurueck.
+function getRoleForUser(username: string): UserRole {
+  const mapped = BOOTSTRAP_ROLE_MAP[username.toLowerCase().trim()];
+  return mapped !== undefined && isUserRole(mapped) ? mapped : "sanitaeter";
 }
 
 interface HttpResponse {
@@ -245,7 +252,7 @@ router.post("/login", authLimiter, async (req, res) => {
       .limit(1);
 
     const userId: string = existing[0]?.id ?? crypto.randomUUID();
-    const role: string = existing[0]?.role ?? getRoleForUser(cleanUsername);
+    const role: UserRole = existing[0]?.role ?? getRoleForUser(cleanUsername);
     const isApproved: boolean = existing[0]?.isApproved ?? false;
 
     const userValues = {
