@@ -16,13 +16,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useTopPad } from "@/hooks/useTopPad";
 import { getTheme } from "@/constants/theme";
+import { OWNER_USER_ID } from "@/constants/appConfig";
 import type { DbConsoleResult, SqlPreset } from "@/models";
 import { confirmAction, notify } from "@/lib/dialog";
 import ApiService from "@/services/ApiService";
 import { useAppStore } from "@/store/useAppStore";
 
 /** Mirrors the server-side gate; the API is the real guard, this only hides the UI. */
-const OWNER_USER_ID = "iserv-viktor.gnjatic";
 
 export default function DatabaseConsoleScreen() {
   const insets = useSafeAreaInsets();
