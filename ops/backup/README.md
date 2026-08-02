@@ -31,6 +31,13 @@ sudo -u postgres pg_restore --no-owner --clean --dbname schulSani /tmp/wiederher
 rm /tmp/wiederherstellung.dump
 ```
 
+## Abweichender Datenbankname
+
+Beide Skripte gehen von der Datenbank `schulSani` aus, lesen den Namen aber
+aus `SCHULSANI_DB_NAME`, falls gesetzt. Bei einer Instanz mit anderem
+Datenbanknamen die Variable vor dem Aufruf setzen bzw. im systemd-Unit
+eintragen (siehe `schulsani-backup.service`).
+
 ## Regelmaessige Pruefung
 
 `schulsani-restore-test.sh` vierteljaehrlich ausfuehren und das Ergebnis notieren.
