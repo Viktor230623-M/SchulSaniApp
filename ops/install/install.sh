@@ -362,6 +362,10 @@ step_install_pm2() {
 # --- Datenbank-Provisionierung --------------------------------------------
 
 DB_PASSWORD=""
+# Nur root lesbar. Haelt das erzeugte Passwort fest, damit ein erneuter Lauf
+# (Wiederaufnahmefall) dieselbe DATABASE_URL zusammenbauen kann, ohne das
+# Passwort zu kennen, das Postgres selbst nicht im Klartext herausgibt.
+DB_PASSWORD_FILE="/root/.schulsani-db-password"
 
 psql_as_postgres() {
   sudo -u postgres psql -tAc "$1"
@@ -378,11 +382,19 @@ step_provision_database() {
   local role_exists
   role_exists="$(psql_as_postgres "SELECT 1 FROM pg_roles WHERE rolname='${DB_ROLE}'" || true)"
   if [[ "$role_exists" == "1" ]]; then
-    step_skip "Rolle '${DB_ROLE}' existiert bereits — Passwort bleibt unveraendert."
+    if [[ -r "$DB_PASSWORD_FILE" ]]; then
+      DB_PASSWORD="$(cat "$DB_PASSWORD_FILE")"
+      step_skip "Rolle '${DB_ROLE}' existiert bereits — hinterlegtes Passwort wiederverwendet."
+    else
+      fail_with "Rolle '${DB_ROLE}' existiert bereits, aber ${DB_PASSWORD_FILE} fehlt." \
+        "Passwort ist unbekannt und kann nicht wiederhergestellt werden. Entweder von Hand setzen mit: sudo -u postgres psql -c \"ALTER ROLE ${DB_ROLE} WITH PASSWORD '...';\" und den Wert nach ${DB_PASSWORD_FILE} schreiben (chmod 600), oder Rolle loeschen und diesen Lauf wiederholen."
+    fi
   else
     DB_PASSWORD="$(openssl rand -hex 24)"
     psql_as_postgres "CREATE ROLE ${DB_ROLE} WITH LOGIN PASSWORD '${DB_PASSWORD}';" >/dev/null
-    step_ok "Rolle '${DB_ROLE}' angelegt."
+    printf '%s' "$DB_PASSWORD" >"$DB_PASSWORD_FILE"
+    chmod 600 "$DB_PASSWORD_FILE"
+    step_ok "Rolle '${DB_ROLE}' angelegt, Passwort in ${DB_PASSWORD_FILE} hinterlegt (chmod 600)."
   fi
 
   local db_exists
@@ -394,14 +406,9 @@ step_provision_database() {
     step_ok "Datenbank '${DB_NAME}' angelegt, Eigentuemer '${DB_ROLE}'."
   fi
 
-  if [[ -n "$DB_PASSWORD" ]]; then
-    printf '\n  %sNeues Datenbank-Passwort erzeugt.%s Wird an den Einrichtungsassistenten\n' "$COLOR_YELLOW" "$COLOR_RESET"
-    printf '  uebergeben und in artifacts/api-server/.env eingetragen — hier nicht\n'
-    printf '  angezeigt und nicht protokolliert.\n'
-    log_line "Datenbank-Passwort fuer Rolle ${DB_ROLE} erzeugt (Wert nicht protokolliert)."
-  else
-    printf '\n  Bestehende Rolle wird weiterverwendet, kein neues Passwort erzeugt.\n'
-  fi
+  printf '\n  Datenbank-Passwort liegt in %s (chmod 600) — hier nicht angezeigt\n' "$DB_PASSWORD_FILE"
+  printf '  und nicht protokolliert. Wird an den Einrichtungsassistenten uebergeben.\n'
+  log_line "Datenbank-Passwort fuer Rolle ${DB_ROLE} bereitgestellt (Wert nicht protokolliert)."
 }
 
 # --- PM2-Ecosystem-Datei bereitstellen -------------------------------------
@@ -450,6 +457,77 @@ step_install_nginx_template() {
   step_ok "Vorlage nach ${target_file} kopiert — wird vom Einrichtungsassistenten mit Domain/Pfad gerendert und aktiviert."
 }
 
+# --- Einrichtungsassistent starten ----------------------------------------
+
+STATE_DIR="/var/lib/schulsani-install"
+STATE_FILE="${STATE_DIR}/state.json"
+ROLE_MAP_PATH="/etc/schulsani/role-map.json"
+
+server_ip_hint() {
+  local ip
+  ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+  if [[ -z "$ip" ]]; then
+    ip="<server-ip>"
+  fi
+  echo "$ip"
+}
+
+step_start_assistant() {
+  step_start "Einrichtungsassistenten starten"
+
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    step_skip "Trockenlauf — Einrichtungsassistent wird nicht gestartet."
+    return 0
+  fi
+
+  local script_dir app_root assistant_script node_bin token port ip rc
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  app_root="$(cd "${script_dir}/../.." && pwd)"
+  assistant_script="${script_dir}/assistant/server.js"
+
+  if [[ ! -f "$assistant_script" ]]; then
+    fail_with "Einrichtungsassistent fehlt: ${assistant_script}."
+  fi
+  node_bin="$(command -v node || true)"
+  if [[ -z "$node_bin" ]]; then
+    fail_with "node ist nicht auffindbar." "Schritt 'Node.js besorgen' pruefen."
+  fi
+  if [[ ! -r "$DB_PASSWORD_FILE" ]]; then
+    fail_with "Datenbank-Passwort fehlt (${DB_PASSWORD_FILE})." "Schritt 'Datenbank und Rolle anlegen' erneut pruefen."
+  fi
+
+  run mkdir -p "$STATE_DIR"
+  run chmod 700 "$STATE_DIR"
+
+  token="$(openssl rand -hex 32)"
+  port=$(( (RANDOM % 10000) + 40000 ))
+  ip="$(server_ip_hint)"
+
+  printf '\n  Adresse fuer die Einrichtung (von einem Geraet im selben Netz aufrufen):\n'
+  printf '  %shttp://%s:%s/setup/%s%s\n\n' "$COLOR_BOLD" "$ip" "$port" "$token" "$COLOR_RESET"
+  printf '  Der Assistent beendet sich nach Abschluss der Einrichtung von selbst\n'
+  printf '  oder spaetestens nach 60 Minuten ohne Eingabe.\n'
+  log_line "Einrichtungsassistent wird gestartet auf Port ${port} (Token nicht protokolliert)."
+
+  set +e
+  SCHULSANI_TOKEN="$token" \
+  SCHULSANI_PORT="$port" \
+  SCHULSANI_STATE_FILE="$STATE_FILE" \
+  SCHULSANI_LOG_FILE="$LOG_FILE" \
+  SCHULSANI_APP_ROOT="$app_root" \
+  SCHULSANI_DATABASE_URL="postgres://${DB_ROLE}:${DB_PASSWORD}@localhost:5432/${DB_NAME}" \
+  SCHULSANI_ROLE_MAP_PATH="$ROLE_MAP_PATH" \
+  "$node_bin" "$assistant_script"
+  rc=$?
+  set -e
+
+  if [[ "$rc" -ne 0 ]]; then
+    fail_with "Einrichtungsassistent wurde mit Fehler beendet (Code ${rc})." \
+      "Protokoll pruefen: ${LOG_FILE}. Fortschritt bleibt in ${STATE_FILE} erhalten — install.sh danach erneut ausfuehren."
+  fi
+  step_ok "Einrichtung im Assistenten abgeschlossen."
+}
+
 # --- Ablauf ----------------------------------------------------------------
 
 main() {
@@ -475,10 +553,15 @@ main() {
   step_install_nginx_template
 
   printf '\n%s✔ Systemteil abgeschlossen.%s\n' "$COLOR_GREEN" "$COLOR_RESET"
-  printf 'Naechster Schritt: Einrichtungsassistent (Konfiguration, Geheimnisse,\n'
-  printf 'Migrationen, Web-Export, TLS) — folgt in einer spaeteren Ausbaustufe.\n'
-  printf 'Protokoll: %s\n' "$LOG_FILE"
   log_line "=== Systemteil abgeschlossen ==="
+
+  step_start_assistant
+
+  printf '\n%s✔ Konfiguration, Geheimnisse und Administrator-Konto eingerichtet.%s\n' "$COLOR_GREEN" "$COLOR_RESET"
+  printf 'Noch offen: Migrationen, Web-Export, TLS-Beschaffung, Selbstpruefung —\n'
+  printf 'folgen in einer spaeteren Ausbaustufe.\n'
+  printf 'Protokoll: %s\n' "$LOG_FILE"
+  log_line "=== Lauf abgeschlossen ==="
 }
 
 main "$@"
