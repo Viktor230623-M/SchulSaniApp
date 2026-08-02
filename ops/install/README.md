@@ -1,12 +1,14 @@
 # Installer SchulSani
 
 Bringt einen frischen Debian/Ubuntu-Server in einen betriebsbereiten
-Zustand fuer SchulSaniApp. `install.sh` deckt aktuell nur den **Systemteil**
-ab (Voraussetzungspruefung, Paketbeschaffung, Datenbank, Vorlagen fuer PM2
-und nginx). Konfigurationsabfrage, Geheimniserzeugung, Migrationslauf,
-Web-Export und TLS-Beschaffung laufen kuenftig ueber einen
-Einrichtungsassistenten im Browser, den dieses Skript am Ende startet —
-folgt in einer spaeteren Ausbaustufe.
+Zustand fuer SchulSaniApp. `install.sh` erledigt als `root` den Systemteil
+(Voraussetzungspruefung, Paketbeschaffung, Datenbank, Vorlagen fuer PM2 und
+nginx) und startet danach den Einrichtungsassistenten
+(`ops/install/assistant/`) — eine kleine, lokal ausgelieferte Weboberflaeche,
+ueber die Konfiguration eingegeben, Geheimnisse erzeugt und das erste
+Administrator-Konto angelegt werden. Migrationslauf, Web-Export,
+TLS-Beschaffung und Selbstpruefung sind noch nicht angebunden — folgt in
+einer spaeteren Ausbaustufe (siehe "Offene Punkte" unten).
 
 ## Voraussetzungen
 
@@ -42,11 +44,26 @@ sudo ops/install/install.sh --dry-run
    Skript mit einem Hinweis auf das PGDG-Apt-Repository ab, statt still mit
    einer zu alten Version weiterzumachen.
 4. Legt Datenbankrolle und Datenbank an (`schulSani`, Rolle `saniapp`),
-   erzeugt ein zufaelliges Passwort. Bei bereits vorhandener Rolle/Datenbank
-   wird nichts ueberschrieben.
+   erzeugt ein zufaelliges Passwort und hinterlegt es unter
+   `/root/.schulsani-db-password` (`chmod 600`) — damit ein erneuter Lauf
+   dieselbe `DATABASE_URL` zusammenbauen kann, ohne dass Postgres das
+   Passwort im Klartext herausgeben muesste. Bei bereits vorhandener
+   Rolle/Datenbank wird nichts ueberschrieben.
 5. Kopiert `ecosystem.config.js` (PM2-Vorlage) nach `/etc/schulsani/` und
    `nginx.conf.template` (nginx-Vorlage) nach `/etc/nginx/schulsani/` —
    beide mit Platzhaltern, noch ohne konkrete Werte.
+6. Startet den Einrichtungsassistenten (`ops/install/assistant/server.js`)
+   auf einem zufaelligen Port (40000–49999), gibt eine Einmal-URL mit Token
+   im Terminal aus und wartet im Vordergrund, bis die Einrichtung im
+   Browser abgeschlossen ist oder 60 Minuten ohne Eingabe vergehen. Der
+   Assistent fragt Domain, Schulname, IServ-Domain, Mail-Domain,
+   Anwendungsname, Themefarbe, Bundle-Kennung und optionale Werte ab,
+   erzeugt `JWT_SECRET` und das VAPID-Schluesselpaar, schreibt
+   `artifacts/api-server/.env` und `artifacts/paramedic-app/.env`
+   (`chmod 600`) und legt die IServ-Kennung des ersten Administrators mit
+   Rolle `cto` und Vorabfreigabe an — vorausgesetzt, die Datenbanktabellen
+   existieren bereits (Migrationslauf ist noch nicht Teil dieses Skripts,
+   siehe "Offene Punkte").
 
 Jeder Schritt ist idempotent: ein erneuter Lauf auf einem bereits
 teilweise eingerichteten System ueberspringt Erledigtes, statt es erneut
@@ -68,21 +85,30 @@ Geheimnisse (Datenbank-Passwort) werden nicht im Klartext protokolliert.
   funktioniert mit der erzeugten Rolle.
 - `/etc/schulsani/ecosystem.config.js` und
   `/etc/nginx/schulsani/nginx.conf.template` enthalten noch Platzhalter
-  (`<APP_ROOT>`, `<DOMAIN>`, `<DIST_PATH>`) — werden erst vom
-  Einrichtungsassistenten (kuenftig) mit echten Werten gerendert und
+  (`<APP_ROOT>`, `<DOMAIN>`, `<DIST_PATH>`) — werden erst in einer
+  spaeteren Ausbaustufe des Assistenten mit echten Werten gerendert und
   aktiviert.
+- `artifacts/api-server/.env` und `artifacts/paramedic-app/.env` enthalten
+  die vom Assistenten geschriebenen Werte — stichprobenartig gegen die
+  Eingabe pruefen, Dateirechte muessen `600` sein.
+- `/etc/schulsani/role-map.json` enthaelt die IServ-Kennung des ersten
+  Administrators mit Rolle `cto`.
 - DNS-Eintrag der vorgesehenen Domain muss auf diesen Server zeigen, bevor
   spaeter eine TLS-Beschaffung (certbot) versucht wird.
 - `systemctl status postgresql nginx` — beide Dienste laufen.
 
 ## Offene Punkte
 
-- Konfigurationsabfrage, Geheimniserzeugung (`JWT_SECRET`, VAPID-Paar),
-  Migrationslauf, Web-Export, TLS-Beschaffung und Selbstpruefung sind noch
-  nicht Teil dieses Skripts — sie haengen an der Instanz-Konfiguration
-  (siehe `R2-instanz-konfiguration-entkoppeln.md`) und am geplanten
-  Einrichtungsassistenten.
+- Migrationslauf, Web-Export, TLS-Beschaffung und Selbstpruefung sind noch
+  nicht Teil des Assistenten — sie haengen an R1/R2-Ergebnissen und kommen
+  in einer spaeteren Ausbaustufe. Das Administrator-Konto kann der
+  Assistent erst anlegen, wenn die `users`-Tabelle bereits existiert
+  (Migrationen vorher von Hand ausfuehren, falls dieser Schritt noch
+  fehlschlaegt).
 - Kein automatisches Firewall-Handling (ufw) — falls eine Firewall aktiv
-  ist, muessen Ports von Hand freigegeben werden.
+  ist, muessen Ports von Hand freigegeben werden, inklusive des
+  zufaelligen Assistent-Ports waehrend der Einrichtung.
 - Kein Testlauf auf einer echten Debian/Ubuntu-VM durchgefuehrt (siehe
-  Roadmap-Schritt 15) — bisher nur `bash -n` und `shellcheck` geprueft.
+  Roadmap-Schritt 15) — bisher nur `bash -n`, `shellcheck`, `node -c` und
+  ein lokaler Trockenlauf des Assistenten mit einer Testdatenbank-Attrappe
+  geprueft.
