@@ -3,6 +3,11 @@ import { eq } from "drizzle-orm";
 import { db, usersTable, type UserRole } from "@workspace/db";
 import { requireAuth, requireRole, invalidateUserCache, type AuthRequest } from "../middlewares/auth";
 
+// Quelle der Rollen ist der Aufzaehlungstyp user_role (acht Werte, siehe
+// lib/db/src/schema/index.ts). "owner" fehlt hier bewusst: es gibt dafuer
+// keine Berechtigungszuordnung, ein so zugewiesener Nutzer haette weniger
+// Rechte als ein sanitaeter. cto -> owner ist als eigenes Vorhaben nach R1
+// eingeplant, nicht Teil dieser Liste.
 const VALID_ROLES = ["cto", "admin", "sanitaeter_leitung_admin", "sanitaeter_leitung", "teacher", "sanitaeter", "student_paramedic"] as const satisfies readonly UserRole[];
 
 function isValidRole(value: string): value is (typeof VALID_ROLES)[number] {

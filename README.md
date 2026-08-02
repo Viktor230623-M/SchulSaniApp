@@ -79,8 +79,13 @@ Schema und Migrationen liegen in `lib/db` (Drizzle):
 
 ```sh
 cd lib/db
-pnpm push          # Schema gegen DATABASE_URL anwenden
+pnpm generate      # Migration aus Schemaaenderungen erzeugen
+pnpm migrate       # Migrationen gegen DATABASE_URL anwenden
+pnpm drift         # prueft, ob Schema und Migrationsstand auseinanderlaufen
 ```
+
+`pnpm push-unsicher` wendet das Schema direkt an, ohne Migrationsdatei — kein
+Weg fuer die Produktion, nur fuer schnelles lokales Experimentieren.
 
 ### Start
 
