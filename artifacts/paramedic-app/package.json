@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "expo start",
     "build": "node scripts/build.js",
+    "build:web": "node scripts/generate-web-assets.js && expo export --platform web",
     "serve": "node server/serve.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "android": "expo run:android",
