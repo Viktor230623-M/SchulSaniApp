@@ -10,7 +10,7 @@ const router = Router();
 
 router.get("/", requireAuth, async (req: AuthRequest, res) => {
   const { userId, role } = req.user!;
-  const canSeeAll = ["admin", "teacher", "sanitaeter_leitung", "sanitaeter_leitung_admin", "cto"].includes(role);
+  const canSeeAll = ["admin", "teacher", "sanitaeter_leitung", "sanitaeter_leitung_admin", "owner"].includes(role);
   const items = canSeeAll
     ? await db.select().from(loaTable).orderBy(desc(loaTable.createdAt))
     : await db.select().from(loaTable).where(eq(loaTable.userId, userId)).orderBy(desc(loaTable.createdAt));
@@ -68,7 +68,7 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
   res.status(201).json(newReq);
 });
 
-router.post("/:id/approve", requireAuth, requireRole("admin", "teacher", "sanitaeter_leitung", "sanitaeter_leitung_admin", "cto"), async (req: AuthRequest, res) => {
+router.post("/:id/approve", requireAuth, requireRole("admin", "teacher", "sanitaeter_leitung", "sanitaeter_leitung_admin", "owner"), async (req: AuthRequest, res) => {
   const note = req.body.note;
   if (note && note.length > 500) {
     res.status(400).json({ error: "note max 500 characters" });
@@ -92,7 +92,7 @@ router.post("/:id/approve", requireAuth, requireRole("admin", "teacher", "sanita
   res.json(r);
 });
 
-router.post("/:id/reject", requireAuth, requireRole("admin", "teacher", "sanitaeter_leitung", "sanitaeter_leitung_admin", "cto"), async (req: AuthRequest, res) => {
+router.post("/:id/reject", requireAuth, requireRole("admin", "teacher", "sanitaeter_leitung", "sanitaeter_leitung_admin", "owner"), async (req: AuthRequest, res) => {
   const reason = req.body.reason ?? "Nicht möglich.";
   if (reason.length > 500) {
     res.status(400).json({ error: "reason max 500 characters" });

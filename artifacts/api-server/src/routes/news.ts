@@ -10,7 +10,7 @@ const router = Router();
 
 router.get("/", requireAuth, async (req: AuthRequest, res) => {
   const { role, userId } = req.user!;
-  const canModerate = ["admin", "teacher", "cto"].includes(role);
+  const canModerate = ["admin", "teacher", "owner"].includes(role);
   const items = await db.select().from(newsTable).orderBy(desc(newsTable.publishedAt));
   const filtered = items.filter((n) => {
     if (canModerate) return true;
@@ -39,7 +39,7 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
     summary: summary ?? (content.length > 80 ? content.substring(0, 80) + "..." : content),
     content,
     category: category ?? "announcement",
-    status: ["admin", "cto"].includes(role) ? "approved" as const : "pending" as const,
+    status: ["admin", "owner"].includes(role) ? "approved" as const : "pending" as const,
     publishedAt: new Date(),
     author: authorName,
     authorId: userId,
@@ -57,7 +57,7 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
   res.status(201).json(newItem);
 });
 
-router.post("/:id/approve", requireAuth, requireRole("admin", "teacher", "cto"), async (req, res) => {
+router.post("/:id/approve", requireAuth, requireRole("admin", "teacher", "owner"), async (req, res) => {
   const [item] = await db.update(newsTable).set({ status: "approved" }).where(eq(newsTable.id, req.params["id"]!)).returning();
   if (!item) { res.status(404).json({ error: "Not found" }); return; }
   
@@ -71,7 +71,7 @@ router.post("/:id/approve", requireAuth, requireRole("admin", "teacher", "cto"),
   res.json(item);
 });
 
-router.post("/:id/reject", requireAuth, requireRole("admin", "teacher", "cto"), async (req, res) => {
+router.post("/:id/reject", requireAuth, requireRole("admin", "teacher", "owner"), async (req, res) => {
   const { reason } = req.body as { reason?: string };
   if (!reason || !reason.trim()) {
     res.status(400).json({ error: "reason is required" });
@@ -128,7 +128,7 @@ router.post("/read-all", requireAuth, async (req: AuthRequest, res) => {
 
 router.delete("/:id", requireAuth, async (req: AuthRequest, res) => {
   const { userId, role } = req.user!;
-  const canModerate = ["admin", "teacher", "cto"].includes(role);
+  const canModerate = ["admin", "teacher", "owner"].includes(role);
   const [item] = await db.select().from(newsTable).where(eq(newsTable.id, req.params["id"]!));
   if (!item) { res.status(404).json({ error: "Not found" }); return; }
   if (item.authorId !== userId && !canModerate) {

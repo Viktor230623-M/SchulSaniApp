@@ -8,7 +8,7 @@ const router = Router();
 
 router.get("/", requireAuth, async (req: AuthRequest, res) => {
   const { userId, role } = req.user!;
-  const canSeeAll = ["admin", "cto", "sanitaeter_leitung", "sanitaeter_leitung_admin"].includes(role);
+  const canSeeAll = ["admin", "owner", "sanitaeter_leitung", "sanitaeter_leitung_admin"].includes(role);
   const items = canSeeAll
     ? await db.select().from(notificationsTable).orderBy(desc(notificationsTable.createdAt))
     : await db.select().from(notificationsTable).where(eq(notificationsTable.userId, userId)).orderBy(desc(notificationsTable.createdAt));

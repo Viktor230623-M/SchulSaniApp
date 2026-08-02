@@ -12,7 +12,7 @@ const router: IRouter = Router();
 
 /**
  * The console is bound to one specific account, not to a role — a second admin
- * or cto account must not inherit it. Override via env when handing it over.
+ * or owner account must not inherit it. Override via env when handing it over.
  */
 const OWNER_USER_ID = process.env["OWNER_USER_ID"] ?? "iserv-viktor.gnjatic";
 

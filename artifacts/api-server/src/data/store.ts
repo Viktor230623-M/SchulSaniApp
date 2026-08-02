@@ -1,7 +1,7 @@
 import bcrypt from "bcryptjs";
 
 export type UserRole =
-  | "cto"
+  | "owner"
   | "student_paramedic"
   | "sanitaeter_leitung"
   | "admin"
