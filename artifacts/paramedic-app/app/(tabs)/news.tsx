@@ -196,7 +196,7 @@ export default function NewsScreen() {
   const [rejectNewsId, setRejectNewsId] = useState<string | null>(null);
   const [rejectNewsReason, setRejectNewsReason] = useState("");
 
-  const canModerate = ["admin", "teacher", "cto"].includes(user?.role ?? "");
+  const canModerate = ["admin", "teacher", "owner"].includes(user?.role ?? "");
 
   useEffect(() => { load(); }, []);
 

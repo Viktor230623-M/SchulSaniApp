@@ -45,7 +45,7 @@ const OUTCOMES: IncidentOutcome[] = [
 const PATIENT_TYPES: PatientType[] = ["student", "teacher", "visitor", "other"];
 const AVPU: AvpuScore[] = ["A", "V", "P", "U"];
 
-const LEADERSHIP_ROLES = ["admin", "cto", "sanitaeter_leitung", "sanitaeter_leitung_admin"];
+const LEADERSHIP_ROLES = ["admin", "owner", "sanitaeter_leitung", "sanitaeter_leitung_admin"];
 
 export default function ReportScreen() {
   const insets = useSafeAreaInsets();

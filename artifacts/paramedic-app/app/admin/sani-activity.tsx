@@ -31,7 +31,7 @@ interface ActivityUser {
 }
 
 const ROLE_CONFIG: Record<User["role"], { label: string; bg: string; text: string }> = {
-  cto: { label: "CTO", bg: "#CCFBF1", text: "#0F766E" },
+  owner: { label: "Owner", bg: "#CCFBF1", text: "#0F766E" },
   admin: { label: "Administrator", bg: "#FEF2F2", text: "#DC2626" },
   sanitaeter_leitung_admin: { label: "Head Admin", bg: "#EFF6FF", text: "#2563EB" },
   sanitaeter_leitung: { label: "Head Paramedic", bg: "#EFF6FF", text: "#2563EB" },
@@ -60,7 +60,7 @@ export default function SaniActivityScreen() {
   const [userActivities, setUserActivities] = useState<ActivitySummary[]>([]);
   const [loadingActivities, setLoadingActivities] = useState(false);
 
-  const canView = ["cto", "admin", "sanitaeter_leitung", "sanitaeter_leitung_admin"].includes(
+  const canView = ["owner", "admin", "sanitaeter_leitung", "sanitaeter_leitung_admin"].includes(
     user?.role || ""
   );
 

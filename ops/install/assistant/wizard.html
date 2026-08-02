@@ -1,0 +1,646 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SchulSani — Einrichtung</title>
+<style nonce="__NONCE__">
+  :root {
+    --bg: #FFFFFF;
+    --bg-secondary: #F9FAFB;
+    --bg-tertiary: #F3F4F6;
+    --card: #FFFFFF;
+    --card-border: #E5E7EB;
+    --text: #111827;
+    --text-secondary: #6B7280;
+    --text-tertiary: #9CA3AF;
+    --tint: #22C55E;
+    --tint-dark: #16A34A;
+    --tint-light: #DCFCE7;
+    --danger: #EF4444;
+    --danger-bg: #FEF2F2;
+    --warning: #F97316;
+    --input-bg: #F9FAFB;
+    --input-border: #E5E7EB;
+    --shadow: rgba(0, 0, 0, 0.08);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0F0F0F;
+      --bg-secondary: #1A1A1A;
+      --bg-tertiary: #242424;
+      --card: #1A1A1A;
+      --card-border: #2E2E2E;
+      --text: #F9FAFB;
+      --text-secondary: #9CA3AF;
+      --text-tertiary: #6B7280;
+      --tint-light: #052E16;
+      --danger-bg: #2A1414;
+      --input-bg: #242424;
+      --input-border: #2E2E2E;
+      --shadow: rgba(0, 0, 0, 0.4);
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+    min-height: 100dvh;
+  }
+  .wrap {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 24px 20px 48px;
+  }
+  header.top {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 24px;
+    text-align: center;
+  }
+  .badge {
+    width: 56px;
+    height: 56px;
+    border-radius: 16px;
+    background: var(--tint);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 24px;
+    font-weight: 700;
+  }
+  h1 { font-size: 20px; font-weight: 700; margin: 4px 0 0; }
+  .subtitle { font-size: 13px; color: var(--text-secondary); margin: 0; }
+
+  .progress {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 24px;
+  }
+  .progress .dot {
+    flex: 1;
+    height: 4px;
+    border-radius: 4px;
+    background: var(--card-border);
+    transition: background 200ms ease-out;
+  }
+  .progress .dot.done { background: var(--tint-dark); }
+  .progress .dot.active { background: var(--tint); }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: 20px;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    box-shadow: 0 4px 16px var(--shadow);
+  }
+  .card h2 { font-size: 16px; font-weight: 600; margin: 0; }
+  .card p.hint { font-size: 13px; color: var(--text-secondary); margin: -8px 0 0; }
+
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label { font-size: 13px; font-weight: 500; }
+  .field .optional { color: var(--text-tertiary); font-weight: 400; }
+  .field input[type="text"],
+  .field input[type="email"],
+  .field input[type="color"] {
+    width: 100%;
+    font-size: 15px;
+    font-family: inherit;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px solid var(--input-border);
+    background: var(--input-bg);
+    color: var(--text);
+    min-height: 44px;
+  }
+  .field input:focus {
+    outline: 2px solid var(--tint);
+    outline-offset: 1px;
+  }
+  .field .helper { font-size: 12px; color: var(--text-tertiary); }
+  .field .error {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: var(--danger-bg);
+    color: var(--danger);
+    font-size: 13px;
+  }
+  .field.invalid .error { display: flex; }
+  .field.invalid input { border-color: var(--danger); }
+  .color-row { display: flex; gap: 10px; align-items: center; }
+  .color-row input[type="color"] { width: 56px; padding: 4px; flex: 0 0 auto; }
+  .color-row input[type="text"] { flex: 1; }
+
+  .actions { display: flex; gap: 10px; margin-top: 8px; }
+  button {
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 600;
+    border-radius: 12px;
+    border: none;
+    padding: 14px 18px;
+    min-height: 48px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  button:focus-visible { outline: 2px solid var(--tint); outline-offset: 2px; }
+  button.primary { background: var(--tint); color: #fff; flex: 1; }
+  button.primary:active { background: var(--tint-dark); }
+  button.secondary { background: var(--bg-tertiary); color: var(--text); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .steplog { display: flex; flex-direction: column; gap: 10px; }
+  .steplog .row { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+  .steplog .icon {
+    width: 22px; height: 22px; border-radius: 999px; flex: 0 0 auto;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--bg-tertiary); color: var(--text-tertiary); font-size: 13px;
+  }
+  .steplog .row.ok .icon { background: var(--tint-light); color: var(--tint-dark); }
+  .steplog .row.fail .icon { background: var(--danger-bg); color: var(--danger); }
+  .steplog .row.pending .icon { background: var(--bg-tertiary); color: var(--text-tertiary); }
+
+  .summary dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; font-size: 13px; margin: 0; }
+  .summary dt { color: var(--text-secondary); }
+  .summary dd { margin: 0; font-weight: 500; word-break: break-word; }
+
+  .banner {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    background: var(--danger-bg);
+    color: var(--danger);
+    font-size: 13px;
+  }
+  .banner.visible { display: flex; }
+
+  .final {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 12px;
+  }
+  .final .check {
+    width: 64px; height: 64px; border-radius: 999px;
+    background: var(--tint-light); color: var(--tint-dark);
+    display: flex; align-items: center; justify-content: center; font-size: 30px;
+  }
+
+  [data-page] { display: none; }
+  [data-page].active { display: flex; flex-direction: column; gap: 16px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="badge" aria-hidden="true">S</div>
+    <h1>SchulSani — Einrichtung</h1>
+    <p class="subtitle">Diese Seite laeuft nur auf diesem Server, waehrend die Einrichtung dauert.</p>
+  </header>
+
+  <div class="progress" id="progress" aria-hidden="true">
+    <div class="dot" data-step="1"></div>
+    <div class="dot" data-step="2"></div>
+    <div class="dot" data-step="3"></div>
+    <div class="dot" data-step="4"></div>
+    <div class="dot" data-step="5"></div>
+  </div>
+
+  <div class="banner" id="globalBanner" role="alert"></div>
+
+  <form id="wizardForm" novalidate>
+
+    <section data-page="1" class="card">
+      <h2>Schule und Domain</h2>
+      <p class="hint">Diese Werte stehen anschliessend in den Konfigurationsdateien der App.</p>
+
+      <div class="field" data-field="schoolName">
+        <label for="schoolName">Name des Schulsanitaetsdienstes</label>
+        <input type="text" id="schoolName" name="schoolName" autocomplete="off" placeholder="Schulsanitaetsdienst Beispielschule">
+        <div class="error"><span>—</span></div>
+      </div>
+
+      <div class="field" data-field="domain">
+        <label for="domain">Domain der App</label>
+        <input type="text" id="domain" name="domain" autocomplete="off" placeholder="sani.beispielschule.de" inputmode="url">
+        <div class="helper">Ohne "https://" — nur der Domainname.</div>
+        <div class="error"><span>—</span></div>
+      </div>
+
+      <div class="field" data-field="iservDomain">
+        <label for="iservDomain">Domain der IServ-Instanz</label>
+        <input type="text" id="iservDomain" name="iservDomain" autocomplete="off" placeholder="beispielschule.de" inputmode="url">
+        <div class="helper">Dort meldet sich die App zur Anmeldung an.</div>
+        <div class="error"><span>—</span></div>
+      </div>
+
+      <div class="field" data-field="emailDomain">
+        <label for="emailDomain">Mail-Domain der Schule</label>
+        <input type="text" id="emailDomain" name="emailDomain" autocomplete="off" placeholder="beispielschule.de" inputmode="url">
+        <div class="error"><span>—</span></div>
+      </div>
+
+      <div class="actions">
+        <button type="button" class="primary" data-next>Weiter</button>
+      </div>
+    </section>
+
+    <section data-page="2" class="card">
+      <h2>App-Kennung</h2>
+      <p class="hint">Anzeigename und Farbe, wie sie in der App und im Startbildschirm erscheinen.</p>
+
+      <div class="field" data-field="appName">
+        <label for="appName">Anwendungsname</label>
+        <input type="text" id="appName" name="appName" autocomplete="off" placeholder="SchulSani">
+        <div class="error"><span>—</span></div>
+      </div>
+
+      <div class="field" data-field="themeColor">
+        <label for="themeColor">Akzentfarbe</label>
+        <div class="color-row">
+          <input type="color" id="themeColorPicker" value="#22C55E" aria-label="Akzentfarbe auswaehlen">
+          <input type="text" id="themeColor" name="themeColor" autocomplete="off" placeholder="#22C55E">
+        </div>
+        <div class="error"><span>—</span></div>
+      </div>
+
+      <div class="field" data-field="bundleId">
+        <label for="bundleId">Bundle-Kennung (App Store / Play Store)</label>
+        <input type="text" id="bundleId" name="bundleId" autocomplete="off" placeholder="com.beispielschule.sani">
+        <div class="helper">Nach einer Veroeffentlichung nicht mehr aenderbar — pro Schule eindeutig.</div>
+        <div class="error"><span>—</span></div>
+      </div>
+
+      <div class="actions">
+        <button type="button" class="secondary" data-back>Zurueck</button>
+        <button type="button" class="primary" data-next>Weiter</button>
+      </div>
+    </section>
+
+    <section data-page="3" class="card">
+      <h2>Erweitert <span class="optional">(optional)</span></h2>
+      <p class="hint">Ohne Angabe gelten sinnvolle Voreinstellungen.</p>
+
+      <div class="field" data-field="schoolId">
+        <label for="schoolId">Schul-Kennung <span class="optional">(optional)</span></label>
+        <input type="text" id="schoolId" name="schoolId" autocomplete="off" placeholder="beispielschule">
+        <div class="error"><span>—</span></div>
+      </div>
+
+      <div class="field" data-field="ownerUserId">
+        <label for="ownerUserId">Eigentuemer-Kennung fuer die SQL-Konsole <span class="optional">(optional)</span></label>
+        <input type="text" id="ownerUserId" name="ownerUserId" autocomplete="off" placeholder="vorname.nachname">
+        <div class="helper">Ohne Angabe bleibt die Konsole fuer alle gesperrt.</div>
+        <div class="error"><span>—</span></div>
+      </div>
+
+      <div class="field" data-field="vapidSubject">
+        <label for="vapidSubject">Kontakt fuer Web-Push <span class="optional">(optional)</span></label>
+        <input type="email" id="vapidSubject" name="vapidSubject" autocomplete="off" placeholder="mailto:admin@beispielschule.de">
+        <div class="helper">Ohne Angabe wird eine Adresse aus der Mail-Domain gebildet.</div>
+        <div class="error"><span>—</span></div>
+      </div>
+
+      <div class="actions">
+        <button type="button" class="secondary" data-back>Zurueck</button>
+        <button type="button" class="primary" data-next>Weiter</button>
+      </div>
+    </section>
+
+    <section data-page="4" class="card">
+      <h2>Wer wird Eigentuemer dieser Instanz?</h2>
+      <p class="hint">Die Rolle "owner" ist die hoechste Rolle innerhalb der Schule — sie darf alle
+        anderen Rollen vergeben und alle Nutzer verwalten. Genau eine Person sollte sie zuerst
+        erhalten. Dieses Konto wird sofort freigegeben, sobald es sich zum ersten Mal ueber IServ
+        anmeldet.</p>
+
+      <div class="field" data-field="iservUsername">
+        <label for="iservUsername">IServ-Benutzerkennung der zukuenftigen Eigentuemerin/des zukuenftigen Eigentuemers</label>
+        <input type="text" id="iservUsername" name="iservUsername" autocomplete="off" placeholder="vorname.nachname">
+        <div class="helper">Erhaelt die Rolle "owner" (frueher: cto).</div>
+        <div class="error"><span>—</span></div>
+      </div>
+
+      <div class="actions">
+        <button type="button" class="secondary" data-back>Zurueck</button>
+        <button type="button" class="primary" data-next>Weiter</button>
+      </div>
+    </section>
+
+    <section data-page="5" class="card">
+      <h2>Zusammenfassung</h2>
+      <div class="summary">
+        <dl id="summaryList"></dl>
+      </div>
+      <p class="hint">Geheimnisse (Signaturschluessel, Web-Push-Schluessel) werden jetzt erzeugt und nirgends angezeigt.</p>
+
+      <div class="steplog" id="steplog">
+        <div class="row pending" data-log="config"><span class="icon">1</span><span>Konfiguration speichern</span></div>
+        <div class="row pending" data-log="secrets"><span class="icon">2</span><span>Geheimnisse erzeugen</span></div>
+        <div class="row pending" data-log="admin"><span class="icon">3</span><span>Eigentuemer-Konto anlegen</span></div>
+      </div>
+
+      <div class="actions">
+        <button type="button" class="secondary" data-back>Zurueck</button>
+        <button type="button" class="primary" id="runSetup">Einrichtung jetzt ausfuehren</button>
+      </div>
+    </section>
+
+    <section data-page="6" class="card final">
+      <div class="check" aria-hidden="true">&#10003;</div>
+      <h2>Einrichtung abgeschlossen</h2>
+      <p class="hint">Der Assistent beendet sich jetzt. Diese Seite ist danach nicht mehr erreichbar.</p>
+      <p class="hint">Naechste Schritte (Migrationen, Web-Export, TLS) folgen ueber install.sh bzw. eine spaetere Ausbaustufe.</p>
+    </section>
+
+  </form>
+</div>
+
+<script nonce="__NONCE__">
+(function () {
+  "use strict";
+
+  var TOTAL_PAGES = 6;
+  var current = 1;
+
+  var fieldMessages = {
+    schoolName: "Bitte einen Namen angeben.",
+    domain: 'Das ist keine gueltige Domain, ohne "https://".',
+    iservDomain: 'Das ist keine gueltige Domain, ohne "https://".',
+    emailDomain: "Das ist keine gueltige Mail-Domain.",
+    appName: "Bitte einen Anwendungsnamen angeben.",
+    themeColor: "Das ist keine gueltige Farbe (Beispiel: #22C55E).",
+    bundleId: "Das ist keine gueltige Kennung (Beispiel: com.beispielschule.sani).",
+    schoolId: "Nur Kleinbuchstaben, Ziffern, Bindestrich, Unterstrich.",
+    ownerUserId: "Das sieht nicht wie eine IServ-Benutzerkennung aus.",
+    vapidSubject: 'Bitte im Format "mailto:name@domain.de" angeben, oder freilassen.',
+    iservUsername: "Das sieht nicht wie eine gueltige IServ-Benutzerkennung aus."
+  };
+
+  var domainRe = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i;
+  var bundleRe = /^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)+$/;
+  var hexRe = /^#[0-9a-fA-F]{6}$/;
+  var identRe = /^[a-z0-9][a-z0-9._-]{1,63}$/i;
+  var schoolIdRe = /^[a-z0-9_-]{1,40}$/i;
+  var mailtoRe = /^mailto:[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
+  var requiredValidators = {
+    schoolName: function (v) { return v.trim().length > 0 && v.trim().length <= 120; },
+    domain: function (v) { return domainRe.test(v.trim()); },
+    iservDomain: function (v) { return domainRe.test(v.trim()); },
+    emailDomain: function (v) { return domainRe.test(v.trim()); },
+    appName: function (v) { return v.trim().length > 0 && v.trim().length <= 60; },
+    themeColor: function (v) { return hexRe.test(v.trim()); },
+    bundleId: function (v) { return bundleRe.test(v.trim()); },
+    schoolId: function (v) { return v.trim() === "" || schoolIdRe.test(v.trim()); },
+    ownerUserId: function (v) { return v.trim() === "" || identRe.test(v.trim()); },
+    vapidSubject: function (v) { return v.trim() === "" || mailtoRe.test(v.trim()); },
+    iservUsername: function (v) { return identRe.test(v.trim()); }
+  };
+
+  var pageFields = {
+    1: ["schoolName", "domain", "iservDomain", "emailDomain"],
+    2: ["appName", "themeColor", "bundleId"],
+    3: ["schoolId", "ownerUserId", "vapidSubject"],
+    4: ["iservUsername"]
+  };
+
+  function el(id) { return document.getElementById(id); }
+
+  function showPage(n) {
+    document.querySelectorAll("[data-page]").forEach(function (sec) {
+      sec.classList.toggle("active", Number(sec.getAttribute("data-page")) === n);
+    });
+    document.querySelectorAll(".progress .dot").forEach(function (dot) {
+      var step = Number(dot.getAttribute("data-step"));
+      dot.classList.toggle("done", step < n);
+      dot.classList.toggle("active", step === n);
+    });
+    current = n;
+    var main = document.querySelector(".wrap");
+    if (main) main.scrollIntoView({ block: "start" });
+  }
+
+  function setFieldError(name, message) {
+    var wrap = document.querySelector('.field[data-field="' + name + '"]');
+    if (!wrap) return;
+    if (message) {
+      wrap.classList.add("invalid");
+      var span = wrap.querySelector(".error span");
+      if (span) span.textContent = message;
+    } else {
+      wrap.classList.remove("invalid");
+    }
+  }
+
+  function validatePage(n) {
+    var fields = pageFields[n] || [];
+    var ok = true;
+    fields.forEach(function (name) {
+      var input = el(name);
+      if (!input) return;
+      var valid = requiredValidators[name] ? requiredValidators[name](input.value) : true;
+      setFieldError(name, valid ? "" : fieldMessages[name]);
+      if (!valid) ok = false;
+    });
+    return ok;
+  }
+
+  function showBanner(message) {
+    var b = el("globalBanner");
+    if (!message) {
+      b.classList.remove("visible");
+      b.textContent = "";
+      return;
+    }
+    b.textContent = message;
+    b.classList.add("visible");
+  }
+
+  function collectConfig() {
+    return {
+      schoolName: el("schoolName").value,
+      domain: el("domain").value,
+      iservDomain: el("iservDomain").value,
+      emailDomain: el("emailDomain").value,
+      appName: el("appName").value,
+      themeColor: el("themeColor").value,
+      bundleId: el("bundleId").value,
+      schoolId: el("schoolId").value,
+      ownerUserId: el("ownerUserId").value,
+      vapidSubject: el("vapidSubject").value
+    };
+  }
+
+  function renderSummary() {
+    var cfg = collectConfig();
+    var rows = [
+      ["Schule", cfg.schoolName],
+      ["Domain", cfg.domain],
+      ["IServ-Domain", cfg.iservDomain],
+      ["Mail-Domain", cfg.emailDomain],
+      ["Anwendungsname", cfg.appName],
+      ["Farbe", cfg.themeColor],
+      ["Bundle-Kennung", cfg.bundleId],
+      ["Schul-Kennung", cfg.schoolId || "(nicht gesetzt)"],
+      ["Eigentuemer-Kennung", cfg.ownerUserId || "(nicht gesetzt)"],
+      ["Eigentuemer", el("iservUsername").value || "(nicht gesetzt)"]
+    ];
+    var dl = el("summaryList");
+    dl.innerHTML = "";
+    rows.forEach(function (pair) {
+      var dt = document.createElement("dt");
+      dt.textContent = pair[0];
+      var dd = document.createElement("dd");
+      dd.textContent = pair[1];
+      dl.appendChild(dt);
+      dl.appendChild(dd);
+    });
+  }
+
+  function setLogState(key, status, text) {
+    var row = document.querySelector('[data-log="' + key + '"]');
+    if (!row) return;
+    row.classList.remove("ok", "fail", "pending");
+    row.classList.add(status);
+    var icon = row.querySelector(".icon");
+    if (icon) icon.textContent = status === "ok" ? "✓" : status === "fail" ? "✕" : row.getAttribute("data-log") === "config" ? "1" : row.getAttribute("data-log") === "secrets" ? "2" : "3";
+    if (text) {
+      var span = row.querySelector("span:last-child");
+      if (span) span.textContent = text;
+    }
+  }
+
+  function postJson(url, body) {
+    return fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body || {})
+    }).then(function (res) {
+      return res.json().then(function (data) { return { status: res.status, data: data }; });
+    });
+  }
+
+  function applyFieldErrorsFromServer(errors) {
+    Object.keys(errors || {}).forEach(function (name) {
+      if (name === "_") return;
+      setFieldError(name, errors[name]);
+    });
+  }
+
+  function runSetup() {
+    showBanner("");
+    var btn = el("runSetup");
+    btn.disabled = true;
+
+    var cfg = collectConfig();
+    var admin = { iservUsername: el("iservUsername").value };
+
+    setLogState("config", "pending", "Konfiguration speichern");
+    postJson("/api/config", cfg).then(function (r) {
+      if (r.status !== 200) {
+        setLogState("config", "fail", "Konfiguration ungueltig");
+        applyFieldErrorsFromServer(r.data.errors);
+        showBanner("Bitte die markierten Felder pruefen.");
+        btn.disabled = false;
+        return Promise.reject(new Error("config"));
+      }
+      setLogState("config", "ok", "Konfiguration gespeichert");
+      setLogState("secrets", "pending", "Geheimnisse erzeugen");
+      return postJson("/api/secrets", {});
+    }).then(function (r) {
+      if (!r || r.status !== 200) {
+        setLogState("secrets", "fail", "Geheimnisse konnten nicht erzeugt werden");
+        showBanner((r && r.data && r.data.error) || "Unbekannter Fehler bei den Geheimnissen.");
+        btn.disabled = false;
+        return Promise.reject(new Error("secrets"));
+      }
+      setLogState("secrets", "ok", "Geheimnisse erzeugt");
+      setLogState("admin", "pending", "Eigentuemer-Konto anlegen");
+      return postJson("/api/admin", admin);
+    }).then(function (r) {
+      if (!r || r.status !== 200) {
+        setLogState("admin", "fail", "Eigentuemer-Konto konnte nicht angelegt werden");
+        applyFieldErrorsFromServer(r && r.data && r.data.errors);
+        showBanner((r && r.data && r.data.error) || "Unbekannter Fehler beim Eigentuemer-Konto.");
+        btn.disabled = false;
+        return Promise.reject(new Error("admin"));
+      }
+      setLogState("admin", "ok", "Eigentuemer-Konto angelegt");
+      return postJson("/api/finish", {});
+    }).then(function (r) {
+      if (!r || r.status !== 200) {
+        showBanner((r && r.data && r.data.error) || "Einrichtung konnte nicht abgeschlossen werden.");
+        btn.disabled = false;
+        return;
+      }
+      showPage(6);
+    }).catch(function () {
+      // Fehler wurde bereits angezeigt, Ablauf hier beendet.
+    });
+  }
+
+  function loadExistingState() {
+    fetch("/api/state").then(function (res) { return res.json(); }).then(function (data) {
+      if (!data.config) return;
+      var c = data.config;
+      if (el("schoolName")) el("schoolName").value = c.schoolName || "";
+      if (el("domain")) el("domain").value = c.domain || "";
+      if (el("iservDomain")) el("iservDomain").value = c.iservDomain || "";
+      if (el("emailDomain")) el("emailDomain").value = c.emailDomain || "";
+      if (el("appName")) el("appName").value = c.appName || "";
+      if (el("themeColor")) { el("themeColor").value = c.themeColor || "#22C55E"; el("themeColorPicker").value = c.themeColor || "#22C55E"; }
+      if (el("bundleId")) el("bundleId").value = c.bundleId || "";
+      if (el("schoolId")) el("schoolId").value = c.schoolId || "";
+      if (el("ownerUserId")) el("ownerUserId").value = c.ownerUserId || "";
+      if (el("vapidSubject")) el("vapidSubject").value = (c.vapidSubject || "").indexOf("mailto:admin@") === 0 ? "" : (c.vapidSubject || "");
+      if (data.admin && data.admin.username && el("iservUsername")) el("iservUsername").value = data.admin.username;
+    }).catch(function () { /* kein Vorzustand — normaler Erststart */ });
+  }
+
+  document.addEventListener("click", function (e) {
+    var target = e.target;
+    if (!(target instanceof HTMLElement)) return;
+    if (target.hasAttribute("data-next")) {
+      if (!validatePage(current)) return;
+      if (current === 4) renderSummary();
+      showPage(Math.min(current + 1, TOTAL_PAGES));
+    } else if (target.hasAttribute("data-back")) {
+      showBanner("");
+      showPage(Math.max(current - 1, 1));
+    } else if (target.id === "runSetup") {
+      runSetup();
+    }
+  });
+
+  el("themeColorPicker").addEventListener("input", function () {
+    el("themeColor").value = this.value.toUpperCase();
+  });
+  el("themeColor").addEventListener("input", function () {
+    if (hexRe.test(this.value.trim())) el("themeColorPicker").value = this.value.trim();
+  });
+
+  document.getElementById("wizardForm").addEventListener("submit", function (e) { e.preventDefault(); });
+
+  showPage(1);
+  loadExistingState();
+})();
+</script>
+</body>
+</html>

@@ -13,7 +13,7 @@ const router: IRouter = Router();
 
 /**
  * The console is bound to one specific account, not to a role — a second admin
- * or cto account must not inherit it. Set OWNER_USER_ID per instance; without
+ * or owner account must not inherit it. Set OWNER_USER_ID per instance; without
  * it the console stays closed to everyone rather than falling back to some
  * other instance's account.
  */

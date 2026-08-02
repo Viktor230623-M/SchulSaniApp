@@ -3,12 +3,11 @@ import { eq } from "drizzle-orm";
 import { db, usersTable, type UserRole } from "@workspace/db";
 import { requireAuth, requireRole, invalidateUserCache, type AuthRequest } from "../middlewares/auth";
 
-// Quelle der Rollen ist der Aufzaehlungstyp user_role (acht Werte, siehe
-// lib/db/src/schema/index.ts). "owner" fehlt hier bewusst: es gibt dafuer
-// keine Berechtigungszuordnung, ein so zugewiesener Nutzer haette weniger
-// Rechte als ein sanitaeter. cto -> owner ist als eigenes Vorhaben nach R1
-// eingeplant, nicht Teil dieser Liste.
-const VALID_ROLES = ["cto", "admin", "sanitaeter_leitung_admin", "sanitaeter_leitung", "teacher", "sanitaeter", "student_paramedic"] as const satisfies readonly UserRole[];
+// Quelle der Rollen ist der Aufzaehlungstyp user_role (siehe
+// lib/db/src/schema/index.ts). "cto" fehlt hier: der Wert bleibt im Typ, bis
+// die vorhandenen Zeilen auf "owner" umgestellt sind, wird aber nicht mehr
+// vergeben.
+const VALID_ROLES = ["owner", "admin", "sanitaeter_leitung_admin", "sanitaeter_leitung", "teacher", "sanitaeter", "student_paramedic"] as const satisfies readonly UserRole[];
 
 function isValidRole(value: string): value is (typeof VALID_ROLES)[number] {
   return (VALID_ROLES as readonly string[]).includes(value);
@@ -21,9 +20,9 @@ function safeUser(u: typeof usersTable.$inferSelect) {
   return rest;
 }
 
-// Which roles a requester is permitted to assign. Only the Owner (cto) may grant cto.
+// Which roles a requester is permitted to assign. Only the Owner (owner) may grant owner.
 function allowedTargetRoles(requester: string): string[] {
-  if (requester === "cto") return [...VALID_ROLES];
+  if (requester === "owner") return [...VALID_ROLES];
   if (requester === "admin") return ["admin", "sanitaeter_leitung", "sanitaeter", "student_paramedic"];
   if (requester === "sanitaeter_leitung_admin") return ["admin", "sanitaeter_leitung", "sanitaeter", "student_paramedic"];
   return [];
@@ -31,18 +30,18 @@ function allowedTargetRoles(requester: string): string[] {
 
 // Whether a requester may modify (change role of / delete) a user who currently holds existingRole.
 function canModifyTarget(requester: string, existingRole: string): boolean {
-  if (requester === "cto") return true;
-  if (requester === "admin") return !["cto", "teacher", "sanitaeter_leitung_admin"].includes(existingRole);
-  if (requester === "sanitaeter_leitung_admin") return !["cto", "teacher"].includes(existingRole);
+  if (requester === "owner") return true;
+  if (requester === "admin") return !["owner", "teacher", "sanitaeter_leitung_admin"].includes(existingRole);
+  if (requester === "sanitaeter_leitung_admin") return !["owner", "teacher"].includes(existingRole);
   return false;
 }
 
-router.get("/", requireAuth, requireRole("admin", "cto", "sanitaeter_leitung_admin", "teacher"), async (_req, res) => {
+router.get("/", requireAuth, requireRole("admin", "owner", "sanitaeter_leitung_admin", "teacher"), async (_req, res) => {
   const users = await db.select().from(usersTable);
   res.json(users.map(safeUser));
 });
 
-router.get("/pending", requireAuth, requireRole("admin", "cto"), async (_req, res) => {
+router.get("/pending", requireAuth, requireRole("admin", "owner"), async (_req, res) => {
   const users = await db.select().from(usersTable).where(eq(usersTable.isApproved, false));
   res.json(users.map(safeUser));
 });
@@ -52,7 +51,7 @@ router.get("/:id", requireAuth, async (req: AuthRequest, res) => {
   const requestedId = req.params["id"]!;
   
   // Allow users to access their own data or allow admins/teachers to access any
-  const canAccessAll = ["admin", "cto", "teacher", "sanitaeter_leitung_admin", "sanitaeter_leitung"].includes(requestingUser.role);
+  const canAccessAll = ["admin", "owner", "teacher", "sanitaeter_leitung_admin", "sanitaeter_leitung"].includes(requestingUser.role);
   const isOwnData = requestingUser.userId === requestedId;
   
   if (!canAccessAll && !isOwnData) {
@@ -89,7 +88,7 @@ router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
 
 // --- Admin endpoints ---
 
-router.patch("/:id/approve", requireAuth, requireRole("admin", "cto"), async (req: AuthRequest, res) => {
+router.patch("/:id/approve", requireAuth, requireRole("admin", "owner"), async (req: AuthRequest, res) => {
   const { id } = req.params as { id: string };
   const { role } = req.body as { role?: string };
 
@@ -97,7 +96,7 @@ router.patch("/:id/approve", requireAuth, requireRole("admin", "cto"), async (re
   if (!existing) { res.status(404).json({ error: "User not found" }); return; }
 
   // Same gate as /role and DELETE: approving carries an optional role change, so
-  // without this an admin could "approve" a cto account and demote it on the way.
+  // without this an admin could "approve" an owner account and demote it on the way.
   if (!canModifyTarget(req.user!.role, existing.role ?? "sanitaeter")) {
     res.status(403).json({ error: "Insufficient permissions to modify this user" }); return;
   }
@@ -116,7 +115,7 @@ router.patch("/:id/approve", requireAuth, requireRole("admin", "cto"), async (re
   res.json(safeUser(updated!));
 });
 
-router.patch("/:id/role", requireAuth, requireRole("admin", "cto", "sanitaeter_leitung_admin"), async (req: AuthRequest, res) => {
+router.patch("/:id/role", requireAuth, requireRole("admin", "owner", "sanitaeter_leitung_admin"), async (req: AuthRequest, res) => {
   const { id } = req.params as { id: string };
   const { role } = req.body as { role: string };
   const requestorRole = req.user!.role;
@@ -146,7 +145,7 @@ router.patch("/:id/role", requireAuth, requireRole("admin", "cto", "sanitaeter_l
   res.json(safeUser(updated));
 });
 
-router.delete("/:id", requireAuth, requireRole("admin", "cto"), async (req: AuthRequest, res) => {
+router.delete("/:id", requireAuth, requireRole("admin", "owner"), async (req: AuthRequest, res) => {
   const { id } = req.params as { id: string };
   if (req.user!.userId === id) { res.status(403).json({ error: "Cannot delete your own account" }); return; }
   const [target] = await db.select({ role: usersTable.role }).from(usersTable).where(eq(usersTable.id, id));

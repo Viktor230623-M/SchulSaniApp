@@ -77,8 +77,8 @@ export default function LOAScreen() {
   const [rejectReason, setRejectReason] = useState("");
 
   const role = user?.role ?? "";
-  const canModerate = ["admin", "sanitaeter_leitung", "sanitaeter_leitung_admin", "teacher", "cto"].includes(role);
-  const canCreate = ["student_paramedic", "sanitaeter_leitung", "sanitaeter_leitung_admin", "admin", "cto", "sanitaeter"].includes(role);
+  const canModerate = ["admin", "sanitaeter_leitung", "sanitaeter_leitung_admin", "teacher", "owner"].includes(role);
+  const canCreate = ["student_paramedic", "sanitaeter_leitung", "sanitaeter_leitung_admin", "admin", "owner", "sanitaeter"].includes(role);
   const [tab, setTab] = useState<"mine" | "all">("mine");
   const [segmentWidth, setSegmentWidth] = useState(0);
   const tabAnim = useSharedValue(0);
@@ -124,7 +124,7 @@ export default function LOAScreen() {
         toDate: toYMD(toDate),
         reason,
       });
-      if (role === "cto") {
+      if (role === "owner") {
         const approved = await ApiService.approveLOA(req.id, t("loa.autoApproved", lang));
         addLOA(approved);
       } else {

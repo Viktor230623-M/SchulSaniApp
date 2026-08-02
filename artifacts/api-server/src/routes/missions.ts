@@ -54,7 +54,7 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
   res.json(visible);
 });
 
-router.post("/", requireAuth, requireRole("admin", "sanitaeter_leitung", "sanitaeter_leitung_admin", "cto", "teacher"), async (req, res) => {
+router.post("/", requireAuth, requireRole("admin", "sanitaeter_leitung", "sanitaeter_leitung_admin", "owner", "teacher"), async (req, res) => {
   const { title, description, location, priority, scheduledFor, patientInfo } = req.body;
   if (!title || !location) {
     res.status(400).json({ error: "title and location required" });
@@ -137,7 +137,7 @@ router.post("/:id/undismiss", requireAuth, async (req: AuthRequest, res) => {
   res.json({ success: true, missionId });
 });
 
-router.post("/:id/reject", requireAuth, requireRole("admin", "sanitaeter_leitung", "sanitaeter_leitung_admin", "cto", "teacher"), async (req, res) => {
+router.post("/:id/reject", requireAuth, requireRole("admin", "sanitaeter_leitung", "sanitaeter_leitung_admin", "owner", "teacher"), async (req, res) => {
   const [m] = await db.update(missionsTable).set({ status: "rejected" }).where(eq(missionsTable.id, req.params["id"]!)).returning();
   if (!m) { res.status(404).json({ error: "Not found" }); return; }
   res.json(m);
@@ -154,7 +154,7 @@ router.post("/:id/complete", requireAuth, async (req: AuthRequest, res) => {
 
   const userId = req.user!.userId;
   const role = req.user!.role;
-  const isLeadership = ["admin", "sanitaeter_leitung", "sanitaeter_leitung_admin", "cto", "teacher"].includes(role);
+  const isLeadership = ["admin", "sanitaeter_leitung", "sanitaeter_leitung_admin", "owner", "teacher"].includes(role);
   const isAssignedResponder = existing.assignedParamedicId === userId;
   if (!isLeadership && !isAssignedResponder) {
     res.status(403).json({ error: "Forbidden – only the assigned responder or leadership can complete this mission" });

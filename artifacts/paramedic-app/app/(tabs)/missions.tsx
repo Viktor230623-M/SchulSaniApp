@@ -27,7 +27,7 @@ import ApiService from "@/services/ApiService";
 import { useAppStore } from "@/store/useAppStore";
 import { localized } from "@/utils/localize";
 
-const CREATE_ROLES = ["cto", "admin", "sanitaeter_leitung_admin", "sanitaeter_leitung", "teacher"];
+const CREATE_ROLES = ["owner", "admin", "sanitaeter_leitung_admin", "sanitaeter_leitung", "teacher"];
 
 function PriorityBadge({ priority, lang }: { priority: MissionPriority; lang: AppLanguage }) {
   const cfg = {
@@ -59,7 +59,7 @@ function StatusBadge({ status, lang }: { status: MissionStatus; lang: AppLanguag
   );
 }
 
-const LEADERSHIP_ROLES = ["admin", "cto", "sanitaeter_leitung", "sanitaeter_leitung_admin", "teacher"];
+const LEADERSHIP_ROLES = ["admin", "owner", "sanitaeter_leitung", "sanitaeter_leitung_admin", "teacher"];
 
 interface MissionCardProps {
   mission: Mission;

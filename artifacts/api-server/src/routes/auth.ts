@@ -205,7 +205,7 @@ async function iServAuth(username: string, password: string): Promise<{ firstNam
 function buildUserResponse(user: { id: string; firstName: string | null; lastName: string | null; email: string | null; role: string }) {
   return {
     user: { id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email, role: user.role },
-    isTealUnlocked: user.role === "cto",
+    isTealUnlocked: user.role === "owner",
   };
 }
 

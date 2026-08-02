@@ -35,7 +35,7 @@ import { enableWebPush, webPushState } from "@/services/WebPushService";
 import { useAppStore } from "@/store/useAppStore";
 
 const ROLE_CONFIG: Record<User["role"], { label: string; bg: string; text: string; icon: string }> = {
-  cto: { label: "Owner", bg: "#CCFBF1", text: "#0F766E", icon: "" },
+  owner: { label: "Owner", bg: "#CCFBF1", text: "#0F766E", icon: "" },
   admin: { label: "Administrator", bg: "#FEF2F2", text: "#DC2626", icon: "" },
   sanitaeter_leitung_admin: { label: "Head Admin", bg: "#EFF6FF", text: "#2563EB", icon: "" },
   sanitaeter_leitung: { label: "Head Paramedic", bg: "#EFF6FF", text: "#2563EB", icon: "" },
@@ -45,12 +45,12 @@ const ROLE_CONFIG: Record<User["role"], { label: string; bg: string; text: strin
 };
 
 const ROLE_PROTECTED_FROM: Record<string, string[]> = {
-  admin: ["cto", "teacher", "sanitaeter_leitung_admin"],
-  sanitaeter_leitung_admin: ["cto", "teacher"],
+  admin: ["owner", "teacher", "sanitaeter_leitung_admin"],
+  sanitaeter_leitung_admin: ["owner", "teacher"],
 };
 
 function canEditUserRole(requestorRole: string, targetRole: string): boolean {
-  if (requestorRole === "cto") return true;
+  if (requestorRole === "owner") return true;
   const blocked = ROLE_PROTECTED_FROM[requestorRole] ?? [];
   return blocked.length > 0 && !blocked.includes(targetRole);
 }
@@ -63,7 +63,7 @@ function getAllowedRoles(requestorRole: string): { key: string }[] {
     { key: "teacher" },
     { key: "admin" },
   ];
-  if (requestorRole === "cto") return all;
+  if (requestorRole === "owner") return all;
   if (requestorRole === "admin") return all.filter((r) => ["sanitaeter", "sanitaeter_leitung"].includes(r.key));
   if (requestorRole === "sanitaeter_leitung_admin") return all.filter((r) => ["sanitaeter", "sanitaeter_leitung", "admin"].includes(r.key));
   return [];
@@ -101,7 +101,7 @@ export default function SettingsScreen() {
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [showUsers, setShowUsers] = useState(false);
-  const canSeeAllUsers = ["admin", "cto", "sanitaeter_leitung_admin", "teacher"].includes(user?.role ?? "");
+  const canSeeAllUsers = ["admin", "owner", "sanitaeter_leitung_admin", "teacher"].includes(user?.role ?? "");
 
   const [showActivityLog, setShowActivityLog] = useState(false);
   const [activityLogData, setActivityLogData] = useState<(Mission | LOARequest & { type: string })[]>([]);
@@ -111,10 +111,10 @@ export default function SettingsScreen() {
   const [saniActivityData, setSaniActivityData] = useState<(Mission & { assignedUser: User | null })[]>([]);
   const [loadingSaniActivity, setLoadingSaniActivity] = useState(false);
 
-  const isAdmin = ["admin", "cto"].includes(user?.role ?? "");
+  const isAdmin = ["admin", "owner"].includes(user?.role ?? "");
   // The database console is bound to one account, not to a role.
   const isOwner = user?.id === OWNER_USER_ID;
-  const canManageRoles = ["admin", "cto", "sanitaeter_leitung_admin"].includes(user?.role ?? "");
+  const canManageRoles = ["admin", "owner", "sanitaeter_leitung_admin"].includes(user?.role ?? "");
   const [showAdmin, setShowAdmin] = useState(false);
   const [pendingUsers, setPendingUsers] = useState<User[]>([]);
   const [loadingPending, setLoadingPending] = useState(false);
@@ -609,7 +609,7 @@ export default function SettingsScreen() {
 
           {showAdmin && (
             <>
-              {/* ── Pending Approvals (admin/cto only) ── */}
+              {/* ── Pending Approvals (admin/owner only) ── */}
               {isAdmin && (
               <><View style={[styles.adminSubHeader, { borderTopColor: theme.cardBorder }]}>
                 <Text style={[styles.adminSubtitle, { color: theme.text }]}>{t("settings.pendingApprovals", lang)}</Text>

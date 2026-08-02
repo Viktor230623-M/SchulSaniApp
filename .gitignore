@@ -48,3 +48,5 @@ artifacts/api-server/.env
 
 # Interne Notizen und Planungsunterlagen
 docs/superpowers/
+.claude/
+.playwright-mcp/
