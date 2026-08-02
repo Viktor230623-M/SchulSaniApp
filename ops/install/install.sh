@@ -9,6 +9,7 @@ set -euo pipefail
 LOG_FILE="/var/log/schulsani-install.log"
 DRY_RUN=0
 MIN_FREE_DISK_MB=2048
+NODE_MAJOR_VERSION="22"
 
 # --- Ausgabegestaltung -------------------------------------------------
 
@@ -240,6 +241,94 @@ step_check_existing_services() {
   fi
 }
 
+# --- Paketbeschaffung ------------------------------------------------------
+
+apt_update_once_done=0
+
+apt_update_once() {
+  if [[ "$apt_update_once_done" -eq 1 ]]; then
+    return 0
+  fi
+  run apt-get update -qq
+  apt_update_once_done=1
+}
+
+step_install_node() {
+  step_start "Node.js besorgen"
+  if command -v node >/dev/null 2>&1; then
+    local current_major
+    current_major="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)"
+    if [[ "$current_major" -ge "$NODE_MAJOR_VERSION" ]]; then
+      step_ok "Node $(node -v) bereits vorhanden (mind. $NODE_MAJOR_VERSION erwartet)."
+      return 0
+    fi
+    step_skip "Node $(node -v) vorhanden, aber aelter als erwartete Version $NODE_MAJOR_VERSION."
+  fi
+  apt_update_once
+  run bash -c "curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR_VERSION}.x | bash -"
+  run apt-get install -y nodejs
+  step_ok "Node.js ${NODE_MAJOR_VERSION}.x installiert."
+}
+
+step_install_pnpm() {
+  step_start "pnpm ueber Corepack besorgen"
+  if command -v pnpm >/dev/null 2>&1; then
+    step_ok "pnpm $(pnpm --version) bereits vorhanden."
+    return 0
+  fi
+  if ! command -v corepack >/dev/null 2>&1; then
+    fail_with "corepack fehlt." "Node-Installation unvollstaendig — Schritt 'Node.js besorgen' pruefen."
+  fi
+  run corepack enable
+  run corepack prepare pnpm@latest --activate
+  step_ok "pnpm ueber Corepack aktiviert."
+}
+
+step_install_postgres() {
+  step_start "PostgreSQL besorgen"
+  if command -v psql >/dev/null 2>&1 && dpkg -s postgresql >/dev/null 2>&1; then
+    step_ok "PostgreSQL bereits installiert ($(psql --version))."
+    return 0
+  fi
+  apt_update_once
+  run apt-get install -y postgresql postgresql-contrib
+  run systemctl enable --now postgresql
+  step_ok "PostgreSQL installiert und gestartet."
+}
+
+step_install_nginx() {
+  step_start "nginx besorgen"
+  if dpkg -s nginx >/dev/null 2>&1; then
+    step_ok "nginx bereits installiert."
+    return 0
+  fi
+  apt_update_once
+  run apt-get install -y nginx
+  run systemctl enable --now nginx
+  step_ok "nginx installiert und gestartet."
+}
+
+step_install_certbot() {
+  step_start "certbot besorgen"
+  if command -v certbot >/dev/null 2>&1; then
+    step_ok "certbot bereits installiert ($(certbot --version 2>&1))."
+    return 0
+  fi
+  apt_update_once
+  run apt-get install -y certbot python3-certbot-nginx
+  step_ok "certbot installiert."
+}
+
+step_install_pm2() {
+  step_start "PM2 besorgen"
+  if command -v pm2 >/dev/null 2>&1; then
+    step_ok "PM2 bereits installiert ($(pm2 --version 2>/dev/null))."
+    return 0
+  fi
+  run npm install -g pm2
+  step_ok "PM2 global installiert."
+}
+
 # --- Ablauf ----------------------------------------------------------------
 
 main() {
@@ -252,7 +341,14 @@ main() {
   step_check_ports
   step_check_existing_services
 
-  printf '\n%s✔ Voraussetzungspruefung abgeschlossen.%s\n' "$COLOR_GREEN" "$COLOR_RESET"
+  step_install_node
+  step_install_pnpm
+  step_install_postgres
+  step_install_nginx
+  step_install_certbot
+  step_install_pm2
+
+  printf '\n%s✔ Paketbeschaffung abgeschlossen.%s\n' "$COLOR_GREEN" "$COLOR_RESET"
   printf 'Protokoll: %s\n' "$LOG_FILE"
   log_line "=== Lauf abgeschlossen ==="
 }
