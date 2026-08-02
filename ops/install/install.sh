@@ -8,6 +8,7 @@ set -euo pipefail
 
 LOG_FILE="/var/log/schulsani-install.log"
 DRY_RUN=0
+MIN_FREE_DISK_MB=2048
 
 # --- Ausgabegestaltung -------------------------------------------------
 
@@ -169,6 +170,76 @@ step_detect_os() {
   esac
 }
 
+# --- Systemvoraussetzungen ------------------------------------------------
+
+step_check_disk_space() {
+  step_start "Freien Speicherplatz pruefen"
+  local free_mb
+  free_mb="$(df -Pm / | awk 'NR==2 {print $4}')"
+  if [[ -z "$free_mb" ]]; then
+    fail_with "Freier Speicherplatz auf / konnte nicht ermittelt werden."
+  fi
+  if [[ "$free_mb" -lt "$MIN_FREE_DISK_MB" ]]; then
+    fail_with "Nur ${free_mb} MB frei auf /, mindestens ${MIN_FREE_DISK_MB} MB noetig." \
+      "Speicherplatz freigeben oder eine groessere Platte einhaengen, dann erneut starten."
+  fi
+  step_ok "${free_mb} MB frei auf / (mindestens ${MIN_FREE_DISK_MB} MB noetig)."
+}
+
+port_is_free() {
+  local port="$1"
+  if command -v ss >/dev/null 2>&1; then
+    if ss -tlnH "( sport = :$port )" 2>/dev/null | grep -q .; then
+      return 1
+    fi
+    return 0
+  elif command -v netstat >/dev/null 2>&1; then
+    if netstat -tln 2>/dev/null | awk '{print $4}' | grep -qE "[.:]$port\$"; then
+      return 1
+    fi
+    return 0
+  else
+    # Kein Werkzeug zur Pruefung vorhanden — nicht blockieren, nur warnen.
+    return 0
+  fi
+}
+
+step_check_ports() {
+  step_start "Ports 80 und 443 pruefen"
+  local port
+  local all_free=1
+  for port in 80 443; do
+    if port_is_free "$port"; then
+      step_ok "Port $port ist frei."
+    else
+      step_fail "Port $port ist bereits belegt."
+      all_free=0
+    fi
+  done
+  if [[ "$all_free" -ne 1 ]]; then
+    fail_with "Mindestens ein benoetigter Port ist belegt." \
+      "Pruefen mit: ss -tlnp | grep -E ':80|:443' — belegenden Dienst stoppen oder Server wechseln."
+  fi
+}
+
+service_is_active() {
+  command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet "$1" 2>/dev/null
+}
+
+step_check_existing_services() {
+  step_start "Vorhandene Dienste pruefen"
+  if service_is_active nginx; then
+    step_skip "nginx laeuft bereits — wird spaeter als vorhanden behandelt."
+  else
+    step_ok "Kein laufendes nginx gefunden."
+  fi
+  if service_is_active postgresql; then
+    step_skip "PostgreSQL laeuft bereits — wird spaeter als vorhanden behandelt."
+  else
+    step_ok "Kein laufendes PostgreSQL gefunden."
+  fi
+}
+
 # --- Ablauf ----------------------------------------------------------------
 
 main() {
@@ -177,7 +248,11 @@ main() {
   step_check_root
   step_detect_os
 
-  printf '\n%s✔ Grundgeruest durchlaufen.%s\n' "$COLOR_GREEN" "$COLOR_RESET"
+  step_check_disk_space
+  step_check_ports
+  step_check_existing_services
+
+  printf '\n%s✔ Voraussetzungspruefung abgeschlossen.%s\n' "$COLOR_GREEN" "$COLOR_RESET"
   printf 'Protokoll: %s\n' "$LOG_FILE"
   log_line "=== Lauf abgeschlossen ==="
 }
