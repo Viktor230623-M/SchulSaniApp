@@ -23,7 +23,7 @@ export function setAuthToken(token: string | null) {
 }
 
 async function apiFetch(url: string, init?: RequestInit): Promise<Response> {
-  // App und API liegen beide auf sani.avo-network.com, weshalb fetch das Cookie
+  // App und API liegen beide unter EXPO_PUBLIC_DOMAIN, weshalb fetch das Cookie
   // schon im Standardmodus "same-origin" mitschickt. Explizit gesetzt, damit ein
   // spaeterer Umzug der API auf eine andere Domain nicht still die Sitzung bricht.
   const resp = await fetch(url, { ...init, credentials: "include" });
