@@ -10,6 +10,8 @@ LOG_FILE="/var/log/schulsani-install.log"
 DRY_RUN=0
 MIN_FREE_DISK_MB=2048
 NODE_MAJOR_VERSION="22"
+DB_NAME="schulSani"
+DB_ROLE="saniapp"
 
 # --- Ausgabegestaltung -------------------------------------------------
 
@@ -329,6 +331,51 @@ step_install_pm2() {
   step_ok "PM2 global installiert."
 }
 
+# --- Datenbank-Provisionierung --------------------------------------------
+
+DB_PASSWORD=""
+
+psql_as_postgres() {
+  sudo -u postgres psql -tAc "$1"
+}
+
+step_provision_database() {
+  step_start "Datenbank und Rolle anlegen"
+
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    step_skip "Trockenlauf — Rolle/Datenbank werden nicht angelegt."
+    return 0
+  fi
+
+  local role_exists
+  role_exists="$(psql_as_postgres "SELECT 1 FROM pg_roles WHERE rolname='${DB_ROLE}'" || true)"
+  if [[ "$role_exists" == "1" ]]; then
+    step_skip "Rolle '${DB_ROLE}' existiert bereits — Passwort bleibt unveraendert."
+  else
+    DB_PASSWORD="$(openssl rand -hex 24)"
+    psql_as_postgres "CREATE ROLE ${DB_ROLE} WITH LOGIN PASSWORD '${DB_PASSWORD}';" >/dev/null
+    step_ok "Rolle '${DB_ROLE}' angelegt."
+  fi
+
+  local db_exists
+  db_exists="$(psql_as_postgres "SELECT 1 FROM pg_database WHERE datname='${DB_NAME}'" || true)"
+  if [[ "$db_exists" == "1" ]]; then
+    step_skip "Datenbank '${DB_NAME}' existiert bereits."
+  else
+    sudo -u postgres createdb --owner="$DB_ROLE" "$DB_NAME"
+    step_ok "Datenbank '${DB_NAME}' angelegt, Eigentuemer '${DB_ROLE}'."
+  fi
+
+  if [[ -n "$DB_PASSWORD" ]]; then
+    printf '\n  %sNeues Datenbank-Passwort erzeugt.%s Wird an den Einrichtungsassistenten\n' "$COLOR_YELLOW" "$COLOR_RESET"
+    printf '  uebergeben und in artifacts/api-server/.env eingetragen — hier nicht\n'
+    printf '  angezeigt und nicht protokolliert.\n'
+    log_line "Datenbank-Passwort fuer Rolle ${DB_ROLE} erzeugt (Wert nicht protokolliert)."
+  else
+    printf '\n  Bestehende Rolle wird weiterverwendet, kein neues Passwort erzeugt.\n'
+  fi
+}
+
 # --- Ablauf ----------------------------------------------------------------
 
 main() {
@@ -348,7 +395,9 @@ main() {
   step_install_certbot
   step_install_pm2
 
-  printf '\n%s✔ Paketbeschaffung abgeschlossen.%s\n' "$COLOR_GREEN" "$COLOR_RESET"
+  step_provision_database
+
+  printf '\n%s✔ Datenbank-Provisionierung abgeschlossen.%s\n' "$COLOR_GREEN" "$COLOR_RESET"
   printf 'Protokoll: %s\n' "$LOG_FILE"
   log_line "=== Lauf abgeschlossen ==="
 }
