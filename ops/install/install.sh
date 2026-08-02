@@ -97,13 +97,19 @@ run() {
   "$@"
 }
 
+UPDATE_MODE=0
+
 usage() {
   cat <<'EOF'
-Verwendung: install.sh [--dry-run]
+Verwendung: install.sh [--dry-run] [--update]
 
   --dry-run   Fuehrt nichts aus, zeigt nur an, was das Skript taete.
               Installiert keine Pakete, legt keine Datenbank an,
               schreibt keine Dateien ausserhalb des Protokolls.
+  --update    Ueberspringt Systemteil und Einrichtungsassistenten. Liest die
+              vorhandenen .env-Dateien, fuehrt nur Migrationen, Web-Export
+              und einen Dienst-Neustart aus. Fuer eine bereits eingerichtete
+              Instanz (z. B. nach einem Deploy neuer Migrationen).
 
 Muss als root ausgefuehrt werden (sudo install.sh).
 EOF
@@ -115,6 +121,9 @@ for arg in "$@"; do
   case "$arg" in
     --dry-run)
       DRY_RUN=1
+      ;;
+    --update)
+      UPDATE_MODE=1
       ;;
     -h|--help)
       usage
@@ -528,7 +537,209 @@ step_start_assistant() {
   step_ok "Einrichtung im Assistenten abgeschlossen."
 }
 
+# --- Hilfsfunktion: Wert aus einer .env-Datei lesen -----------------------
+
+read_env_value() {
+  local file="$1" key="$2"
+  [[ -f "$file" ]] || return 0
+  grep -E "^${key}=" "$file" | tail -1 | cut -d '=' -f2-
+}
+
+# --- Migrationslauf einbinden (Schritt 7) ----------------------------------
+
+step_run_migrations() {
+  step_start "Migrationen einspielen"
+
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    step_skip "Trockenlauf — Migrationen werden nicht ausgefuehrt."
+    return 0
+  fi
+
+  local script_dir app_root
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  app_root="$(cd "${script_dir}/../.." && pwd)"
+
+  if [[ ! -f "${app_root}/artifacts/api-server/.env" ]]; then
+    fail_with "artifacts/api-server/.env fehlt." "Erst Konfiguration/Einrichtungsassistenten durchlaufen lassen."
+  fi
+
+  set +e
+  ( cd "$app_root" && pnpm --filter @workspace/db migrate )
+  local rc=$?
+  set -e
+  if [[ "$rc" -ne 0 ]]; then
+    fail_with "Migrationslauf fehlgeschlagen (Code ${rc})." \
+      "Setzt einen 'migrate'-Befehl in lib/db/package.json voraus (siehe R1-Roadmap). Protokoll/Ausgabe oben pruefen."
+  fi
+  step_ok "Migrationen eingespielt."
+}
+
+# --- Web-Export einbinden (Schritt 8) --------------------------------------
+
+step_web_export() {
+  step_start "Web-Export bauen"
+
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    step_skip "Trockenlauf — Web-Export wird nicht gebaut."
+    return 0
+  fi
+
+  local script_dir app_root app_dir
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  app_root="$(cd "${script_dir}/../.." && pwd)"
+  app_dir="${app_root}/artifacts/paramedic-app"
+
+  if [[ ! -f "${app_dir}/.env" ]]; then
+    fail_with "artifacts/paramedic-app/.env fehlt." "Erst Konfiguration/Einrichtungsassistenten durchlaufen lassen."
+  fi
+
+  # Reste eines fremden Laufs im Metro-Cache haben auf dem Bestandsserver
+  # bereits einmal falsche Instanzwerte in dist/ getragen. Vor jedem Export
+  # aufraeumen.
+  run rm -rf /tmp/metro-cache
+
+  if [[ -f "${app_dir}/scripts/generate-web-assets.js" ]]; then
+    ( cd "$app_dir" && run node scripts/generate-web-assets.js )
+  fi
+
+  set +e
+  ( cd "$app_dir" && npx expo export --platform web )
+  local rc=$?
+  set -e
+  if [[ "$rc" -ne 0 ]]; then
+    fail_with "Web-Export fehlgeschlagen (Code ${rc})." "Ausgabe oben pruefen."
+  fi
+  step_ok "Web-Export gebaut nach artifacts/paramedic-app/dist/."
+}
+
+# --- nginx-Site aktivieren und TLS beziehen (Schritt 11) -------------------
+
+step_setup_tls() {
+  step_start "nginx aktivieren und TLS beziehen"
+
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    step_skip "Trockenlauf — TLS wird nicht bezogen."
+    return 0
+  fi
+
+  local script_dir app_root domain dist_path site_file resolved_ip server_ip
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  app_root="$(cd "${script_dir}/../.." && pwd)"
+  domain="$(read_env_value "${app_root}/artifacts/paramedic-app/.env" "EXPO_PUBLIC_DOMAIN")"
+  dist_path="${app_root}/artifacts/paramedic-app/dist"
+
+  if [[ -z "$domain" ]]; then
+    fail_with "Domain unbekannt (EXPO_PUBLIC_DOMAIN fehlt in .env)." "Erst Einrichtungsassistenten durchlaufen lassen."
+  fi
+  if [[ ! -d "$dist_path" ]]; then
+    fail_with "Web-Export fehlt (${dist_path})." "Schritt 'Web-Export bauen' erneut pruefen."
+  fi
+
+  site_file="/etc/nginx/sites-available/schulsani"
+  sed -e "s#<DOMAIN>#${domain}#g" -e "s#<DIST_PATH>#${dist_path}#g" \
+    "${script_dir}/nginx.conf.template" >"$site_file"
+  log_line "BEFEHL: nginx-Site fuer ${domain} nach ${site_file} gerendert."
+  run ln -sf "$site_file" "/etc/nginx/sites-enabled/schulsani"
+  run nginx -t
+  run systemctl reload nginx
+  step_ok "nginx-Site fuer ${domain} aktiviert."
+
+  resolved_ip="$(getent hosts "$domain" 2>/dev/null | awk '{print $1}' | head -1)"
+  server_ip="$(server_ip_hint)"
+  if [[ -z "$resolved_ip" ]]; then
+    fail_with "DNS-Eintrag fuer ${domain} nicht gefunden." \
+      "A-Record fuer ${domain} auf ${server_ip} anlegen, dann install.sh erneut ausfuehren."
+  fi
+  if [[ "$resolved_ip" != "$server_ip" ]] && [[ "$server_ip" != "<server-ip>" ]]; then
+    printf '  %sHinweis:%s %s zeigt auf %s, dieser Server hat %s — kann bei Mehrfach-NAT normal sein.\n' \
+      "$COLOR_YELLOW" "$COLOR_RESET" "$domain" "$resolved_ip" "$server_ip"
+  fi
+
+  set +e
+  certbot --nginx -d "$domain" --non-interactive --agree-tos -m "admin@${domain#*.}" --redirect
+  local rc=$?
+  set -e
+  if [[ "$rc" -ne 0 ]]; then
+    fail_with "certbot ist fehlgeschlagen (Code ${rc})." \
+      "Haeufigste Ursache: DNS zeigt noch nicht auf diesen Server, oder Port 80 ist von aussen nicht erreichbar."
+  fi
+  step_ok "TLS-Zertifikat fuer ${domain} bezogen."
+}
+
+# --- Dienst starten und Selbstpruefung (Schritt 12) ------------------------
+
+step_start_service_and_check() {
+  step_start "Dienst starten und pruefen"
+
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    step_skip "Trockenlauf — Dienst wird nicht gestartet, keine Pruefung."
+    return 0
+  fi
+
+  local script_dir app_root ecosystem_file domain backend_env db_url http_code
+
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  app_root="$(cd "${script_dir}/../.." && pwd)"
+  ecosystem_file="/etc/schulsani/ecosystem.config.js"
+  backend_env="${app_root}/artifacts/api-server/.env"
+  domain="$(read_env_value "${app_root}/artifacts/paramedic-app/.env" "EXPO_PUBLIC_DOMAIN")"
+
+  if [[ ! -f "$ecosystem_file" ]]; then
+    fail_with "PM2-Ecosystem-Datei fehlt (${ecosystem_file})."
+  fi
+  sed -i "s#<APP_ROOT>#${app_root}#g" "$ecosystem_file"
+
+  if pm2 describe sani-backend >/dev/null 2>&1; then
+    run pm2 restart sani-backend
+  else
+    run pm2 start "$ecosystem_file"
+  fi
+  run pm2 save
+
+  # HTTP-Status pruefen.
+  if [[ -n "$domain" ]]; then
+    http_code="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 10 "https://${domain}/" || echo "000")"
+  else
+    http_code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "http://localhost:3002/" || echo "000")"
+  fi
+  if [[ "$http_code" == "200" ]]; then
+    step_ok "HTTP-Status ${http_code}."
+  else
+    step_fail "HTTP-Status ${http_code} (erwartet 200)."
+  fi
+
+  # PM2-Status pruefen.
+  if pm2 jlist 2>/dev/null | grep -q '"name":"sani-backend".*"status":"online"'; then
+    step_ok "PM2-Prozess sani-backend online."
+  else
+    step_fail "PM2-Prozess sani-backend laeuft nicht."
+  fi
+
+  # Datenbankverbindung pruefen.
+  db_url="$(read_env_value "$backend_env" "DATABASE_URL")"
+  if [[ -n "$db_url" ]] && psql "$db_url" -tAc "SELECT 1" >/dev/null 2>&1; then
+    step_ok "Datenbankverbindung erfolgreich."
+  else
+    step_fail "Datenbankverbindung fehlgeschlagen."
+  fi
+}
+
 # --- Ablauf ----------------------------------------------------------------
+
+update_main() {
+  print_header
+  step_prepare_log
+  step_check_root
+  step_detect_os
+
+  step_run_migrations
+  step_web_export
+  step_start_service_and_check
+
+  printf '\n%s✔ Aktualisierung abgeschlossen.%s\n' "$COLOR_GREEN" "$COLOR_RESET"
+  printf 'Protokoll: %s\n' "$LOG_FILE"
+  log_line "=== Aktualisierungslauf abgeschlossen ==="
+}
 
 main() {
   print_header
@@ -557,11 +768,21 @@ main() {
 
   step_start_assistant
 
-  printf '\n%s✔ Konfiguration, Geheimnisse und Administrator-Konto eingerichtet.%s\n' "$COLOR_GREEN" "$COLOR_RESET"
-  printf 'Noch offen: Migrationen, Web-Export, TLS-Beschaffung, Selbstpruefung —\n'
-  printf 'folgen in einer spaeteren Ausbaustufe.\n'
+  printf '\n%s✔ Konfiguration, Geheimnisse und Eigentuemer-Konto eingerichtet.%s\n' "$COLOR_GREEN" "$COLOR_RESET"
+  log_line "=== Assistent abgeschlossen ==="
+
+  step_run_migrations
+  step_web_export
+  step_setup_tls
+  step_start_service_and_check
+
+  printf '\n%s✔ Installation abgeschlossen.%s\n' "$COLOR_GREEN" "$COLOR_RESET"
   printf 'Protokoll: %s\n' "$LOG_FILE"
   log_line "=== Lauf abgeschlossen ==="
 }
 
-main "$@"
+if [[ "$UPDATE_MODE" -eq 1 ]]; then
+  update_main "$@"
+else
+  main "$@"
+fi
