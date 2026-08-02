@@ -376,6 +376,29 @@ step_provision_database() {
   fi
 }
 
+# --- PM2-Ecosystem-Datei bereitstellen -------------------------------------
+
+step_install_pm2_ecosystem() {
+  step_start "PM2-Ecosystem-Datei bereitstellen"
+  local script_dir target_dir target_file
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  target_dir="/etc/schulsani"
+  target_file="${target_dir}/ecosystem.config.js"
+
+  if [[ ! -f "${script_dir}/ecosystem.config.js" ]]; then
+    fail_with "Vorlage ${script_dir}/ecosystem.config.js fehlt im Repository."
+  fi
+
+  if [[ -f "$target_file" ]]; then
+    step_skip "Ecosystem-Datei existiert bereits unter ${target_file}."
+    return 0
+  fi
+
+  run mkdir -p "$target_dir"
+  run install -m 644 "${script_dir}/ecosystem.config.js" "$target_file"
+  step_ok "Vorlage nach ${target_file} kopiert (Platzhalter noch zu ersetzen)."
+}
+
 # --- Ablauf ----------------------------------------------------------------
 
 main() {
@@ -397,7 +420,9 @@ main() {
 
   step_provision_database
 
-  printf '\n%s✔ Datenbank-Provisionierung abgeschlossen.%s\n' "$COLOR_GREEN" "$COLOR_RESET"
+  step_install_pm2_ecosystem
+
+  printf '\n%s✔ PM2-Ecosystem-Datei bereitgestellt.%s\n' "$COLOR_GREEN" "$COLOR_RESET"
   printf 'Protokoll: %s\n' "$LOG_FILE"
   log_line "=== Lauf abgeschlossen ==="
 }
