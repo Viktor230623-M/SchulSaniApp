@@ -52,7 +52,7 @@ const translations = {
       adminSystem: "Verwaltungssystem",
     },
     roles: {
-      cto: "Eigentümer",
+      owner: "Eigentümer",
       student_paramedic: "Sanitäter",
       sanitaeter: "Sanitäter",
       sanitaeter_leitung: "Sanitäter Leitung",
@@ -476,7 +476,7 @@ const translations = {
       adminSystem: "Administration System",
     },
     roles: {
-      cto: "Owner",
+      owner: "Owner",
       student_paramedic: "Paramedic",
       sanitaeter: "Paramedic",
       sanitaeter_leitung: "Head Paramedic",

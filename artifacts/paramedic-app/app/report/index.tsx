@@ -20,7 +20,7 @@ import type { IncidentReport } from "@/models";
 import ApiService from "@/services/ApiService";
 import { useAppStore } from "@/store/useAppStore";
 
-const LEADERSHIP_ROLES = ["admin", "cto", "sanitaeter_leitung", "sanitaeter_leitung_admin"];
+const LEADERSHIP_ROLES = ["admin", "owner", "sanitaeter_leitung", "sanitaeter_leitung_admin"];
 
 export default function ReportsIndexScreen() {
   const insets = useSafeAreaInsets();

@@ -1,5 +1,5 @@
 export type UserRole =
-  | "cto"
+  | "owner"
   | "sanitaeter"
   | "student_paramedic"
   | "sanitaeter_leitung"
