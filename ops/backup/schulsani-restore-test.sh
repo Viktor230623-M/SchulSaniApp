@@ -5,7 +5,8 @@ set -euo pipefail
 
 BACKUP_DIR="/var/backups/schulsani"
 KEY_FILE="/root/.schulsani-backup.key"
-SOURCE_DB="schulSani"
+# Ueberschreibbar, falls die Instanz einen anderen Datenbanknamen verwendet.
+SOURCE_DB="${SCHULSANI_DB_NAME:-schulSani}"
 TEST_DB="schulsani_restore_test"
 
 LATEST="$(ls -1t "$BACKUP_DIR"/schulsani-*.dump.gpg 2>/dev/null | head -1)"

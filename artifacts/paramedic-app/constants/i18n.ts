@@ -1,4 +1,5 @@
 import type { AppLanguage } from "@/models";
+import { APP_NAME } from "@/constants/appConfig";
 
 const translations = {
   de: {
@@ -239,7 +240,7 @@ const translations = {
       notificationsActive: "Benachrichtigungen sind aktiv",
       notificationsNeedsInstall: "Erst über Teilen → Zum Home-Bildschirm hinzufügen, danach sind Benachrichtigungen möglich.",
       notificationsDenied: "Die Erlaubnis wurde in den iOS-Einstellungen unter Safari zurückgenommen.",
-      notificationsFocusHint: "Damit Einsatzalarme auch bei aktiviertem Fokus oder „Nicht stören\" ankommen: Einstellungen → Fokus → Nicht stören → Benachrichtigungen erlauben → SchulSani hinzufügen.",
+      notificationsFocusHint: "Damit Einsatzalarme auch bei aktiviertem Fokus oder „Nicht stören\" ankommen: Einstellungen → Fokus → Nicht stören → Benachrichtigungen erlauben → {{appName}} hinzufügen.",
     },
     report: {
       title: "Einsatzprotokoll",
@@ -663,7 +664,7 @@ const translations = {
       notificationsActive: "Notifications are active",
       notificationsNeedsInstall: "First use Share → Add to Home Screen, then notifications are possible.",
       notificationsDenied: "Permission was revoked in iOS Settings under Safari.",
-      notificationsFocusHint: "So mission alerts get through even with Focus or Do Not Disturb on: Settings → Focus → Do Not Disturb → Allowed Notifications → Apps → add SchulSani.",
+      notificationsFocusHint: "So mission alerts get through even with Focus or Do Not Disturb on: Settings → Focus → Do Not Disturb → Allowed Notifications → Apps → add {{appName}}.",
     },
     report: {
       title: "Incident Report",
@@ -862,5 +863,7 @@ export function t(path: string, lang: AppLanguage): string {
   for (const key of keys) {
     result = result?.[key] as Record<string, unknown> | undefined;
   }
-  return (result as string) ?? path;
+  const text = (result as string) ?? path;
+  // {{appName}}-Platzhalter statt eines fest eingebauten Instanznamens im Text.
+  return text.includes("{{appName}}") ? text.split("{{appName}}").join(APP_NAME) : text;
 }

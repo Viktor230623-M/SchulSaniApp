@@ -1,6 +1,8 @@
 import { ScrollViewStyleReset } from "expo-router/html";
 import type { PropsWithChildren } from "react";
 
+import { APP_NAME, THEME_COLOR } from "@/constants/appConfig";
+
 /**
  * Huelle des ausgelieferten HTML-Dokuments.
  *
@@ -22,12 +24,12 @@ export default function Root({ children }: PropsWithChildren) {
         />
 
         <link rel="manifest" href="/manifest.json" />
-        <meta name="theme-color" content="#22C55E" />
+        <meta name="theme-color" content={THEME_COLOR} />
 
         {/* iOS wertet das Manifest nur teilweise aus und braucht diese Angaben. */}
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-        <meta name="apple-mobile-web-app-title" content="SchulSani" />
+        <meta name="apple-mobile-web-app-title" content={APP_NAME} />
         <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
 
         <ScrollViewStyleReset />

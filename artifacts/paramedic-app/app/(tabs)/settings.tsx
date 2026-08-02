@@ -11,7 +11,7 @@ import { Feather, Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import Constants from "expo-constants";
-import { ISERV_DOMAIN, SCHOOL_NAME } from "@/constants/appConfig";
+import { ISERV_DOMAIN, OWNER_USER_ID, SCHOOL_NAME } from "@/constants/appConfig";
 import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
@@ -113,7 +113,7 @@ export default function SettingsScreen() {
 
   const isAdmin = ["admin", "cto"].includes(user?.role ?? "");
   // The database console is bound to one account, not to a role.
-  const isOwner = user?.id === "iserv-viktor.gnjatic";
+  const isOwner = user?.id === OWNER_USER_ID;
   const canManageRoles = ["admin", "cto", "sanitaeter_leitung_admin"].includes(user?.role ?? "");
   const [showAdmin, setShowAdmin] = useState(false);
   const [pendingUsers, setPendingUsers] = useState<User[]>([]);

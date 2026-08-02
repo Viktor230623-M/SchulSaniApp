@@ -1,6 +1,5 @@
 {
   "expo": {
-    "name": "SchulSani",
     "slug": "paramedic-app",
     "version": "2.1.0",
     "orientation": "portrait",
@@ -15,7 +14,6 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.schulsani.app",
       "buildNumber": "1",
       "infoPlist": {
         "UIBackgroundModes": ["remote-notification"]
@@ -23,7 +21,6 @@
     },
     "android": {
       "softwareKeyboardLayoutMode": "pan",
-      "package": "com.schulsani.app",
       "versionCode": 1,
       "permissions": [
         "RECEIVE_BOOT_COMPLETED",
@@ -35,21 +32,13 @@
       "favicon": "./assets/images/favicon.png",
       "bundler": "metro",
       "output": "static",
-      "name": "SchulSani",
-      "shortName": "SchulSani",
       "lang": "de",
-      "themeColor": "#22C55E",
       "backgroundColor": "#FFFFFF",
       "display": "standalone",
       "startUrl": "/"
     },
     "plugins": [
-      [
-        "expo-router",
-        {
-          "origin": "https://sani.avo-network.com"
-        }
-      ],
+      "expo-router",
       "expo-font",
       "expo-web-browser",
       [

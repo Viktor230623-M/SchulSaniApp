@@ -39,3 +39,8 @@ yarn-error.*
 .vercel
 
 .env
+
+# Aus den Vorlagen manifest.template.json/sw.template.js erzeugt, siehe
+# scripts/generate-web-assets.js. Enthaelt Instanzwerte, kein Quelltext.
+/public/manifest.json
+/public/sw.js

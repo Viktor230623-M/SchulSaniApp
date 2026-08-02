@@ -8,6 +8,7 @@ import { eq } from "drizzle-orm";
 import { db, usersTable, userRoleEnum, type UserRole } from "@workspace/db";
 import { requireAuth, type AuthRequest } from "../middlewares/auth";
 import { createSession, resolveSession, revokeSession } from "../lib/sessions";
+import { config } from "../config";
 
 const router = Router();
 
@@ -48,9 +49,9 @@ if (JWT_SECRET.length < 32) {
   throw new Error("JWT_SECRET must be at least 32 characters long");
 }
 
-const ISERV_BASE = process.env["ISERV_BASE_URL"] ?? "https://gymbla.de";
+const ISERV_BASE = config.iservBaseUrl;
 
-const EMAIL_DOMAIN = process.env["EMAIL_DOMAIN"] ?? "gymbla.de";
+const EMAIL_DOMAIN = config.emailDomain;
 
 const UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1 SchulSanitaeter/1.0";
 

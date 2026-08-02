@@ -3,7 +3,8 @@
 # Sicherungen, die aelter als die im Loeschkonzept festgelegten 30 Tage sind.
 set -euo pipefail
 
-DB_NAME="schulSani"
+# Ueberschreibbar, falls die Instanz einen anderen Datenbanknamen verwendet.
+DB_NAME="${SCHULSANI_DB_NAME:-schulSani}"
 DB_USER="saniadmin"
 BACKUP_DIR="/var/backups/schulsani"
 KEY_FILE="/root/.schulsani-backup.key"

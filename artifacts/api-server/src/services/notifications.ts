@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { eq, and, or } from "drizzle-orm";
 import { db, notificationsTable, deviceTokensTable, usersTable, dutyTable, type Notification, type NewNotification, type DeviceToken } from "@workspace/db";
 import { sendWebPush } from "../lib/webPush";
+import { config } from "../config";
 
 export type NotificationType =
   | "mission_assigned"
@@ -206,7 +207,7 @@ function getDefaultTitle(type: NotificationType): string {
     reminder: "Erinnerung",
     high_priority_alert: "WICHTIG",
   };
-  return titles[type] ?? "SchulSani";
+  return titles[type] ?? config.appName;
 }
 
 async function sendExpoPushMessages(messages: any[]): Promise<void> {

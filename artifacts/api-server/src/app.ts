@@ -4,6 +4,7 @@ import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import router from "./routes";
+import { config } from "./config";
 
 const app: Express = express();
 app.disable("x-powered-by");
@@ -13,9 +14,8 @@ app.disable("x-powered-by");
 app.set("trust proxy", 1);
 app.use(helmet());
 
-const allowedOrigins = process.env["ALLOWED_ORIGINS"]?.split(",").map((o) => o.trim()) || ["https://sani.avo-network.com"];
 app.use(cors({
-  origin: allowedOrigins,
+  origin: config.allowedOrigins,
   credentials: true,
 }));
 
