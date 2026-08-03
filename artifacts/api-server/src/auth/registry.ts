@@ -35,18 +35,56 @@ interface RawLocalProviderConfig {
 type RawProviderConfig = RawIservFormProviderConfig | RawOidcRedirectProviderConfig | RawLocalProviderConfig;
 
 /**
- * Rueckfallweg dieser Installation ohne gesetzte AUTH_PROVIDERS_PATH:
- * genau ein Eintrag, der dem heutigen Verhalten entspricht.
+ * Rueckfallweg nur, wenn AUTH_PROVIDERS_PATH explizit gesetzt ist und iserv-form
+ * als Konfiguration enthalten ist. Ohne Datei: kein Anbieter registriert; Start
+ * scheitert oder bietet nur lokale Konten (siehe auth.ts).
  */
 function defaultProviders(): AuthProvider[] {
-  return [
-    createIservFormProvider({
-      key: "iserv-form",
-      displayName: "IServ",
-      iservBaseUrl: config.iservBaseUrl,
-      emailDomain: config.emailDomain,
-    }),
-  ];
+  const authProvidersPath = process.env["AUTH_PROVIDERS_PATH"];
+  if (!authProvidersPath) {
+    return [];
+  }
+  try {
+    const rawConfigs: RawProviderConfig[] = JSON.parse(
+      fs.readFileSync(authProvidersPath, "utf-8"),
+    ) as RawProviderConfig[];
+    return rawConfigs
+      .map((raw) => {
+        if (raw.type === "iserv-form") {
+          return createIservFormProvider({
+            key: raw.key,
+            displayName: raw.displayName,
+            iservBaseUrl: raw.iservBaseUrl,
+            emailDomain: raw.emailDomain,
+          });
+        }
+        if (raw.type === "oidc-redirect") {
+          return createOidcRedirectProvider({
+            key: raw.key,
+            displayName: raw.displayName,
+            issuerUrl: raw.issuerUrl,
+            clientId: raw.clientId,
+            clientSecret: raw.clientSecret,
+            redirectUri: raw.redirectUri,
+            scopes: raw.scopes,
+          });
+        }
+        if (raw.type === "local") {
+          return createLocalProvider({
+            key: raw.key,
+            displayName: raw.displayName,
+            schoolId: raw.schoolId,
+          });
+        }
+        throw new Error(`Unbekannter Anbietertyp: ${(raw as any).type}`);
+      })
+      .filter((p) => p !== null && p !== undefined);
+  } catch (err) {
+    console.error("AUTH_PROVIDERS_PATH kann nicht gelesen werden:", err);
+    throw new Error(
+      "AUTH_PROVIDERS_PATH fehlt oder ist ungueltig. Ohne explizite Konfiguration ist kein Anmeldeweg aktiv.",
+    );
+  }
 }
 
 function buildProvider(raw: RawProviderConfig): AuthProvider {
