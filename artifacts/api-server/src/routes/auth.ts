@@ -49,9 +49,10 @@ if (JWT_SECRET.length < 32) {
   throw new Error("JWT_SECRET must be at least 32 characters long");
 }
 
-// Anmeldewege dieser Installation, siehe ../auth/registry. Ohne konfigurierte
-// Liste bleibt es bei genau einem Eintrag mit den Werten dieser Konfiguration
-// -- unveraendertes Verhalten gegenueber dem frueheren Modulzustand.
+// Anmeldewege dieser Installation, siehe ../auth/registry. Kein Anmeldeweg ist
+// mehr still voreingestellt: fehlt AUTH_PROVIDERS_PATH oder ist die Datei
+// unvollstaendig, bricht loadAuthProviders() den Start mit einer erklaerenden
+// Meldung ab, statt stillschweigend ohne Anmeldeweg hochzufahren.
 const authProviders = loadAuthProviders();
 const primaryAuthProvider = authProviders.find(
   (p): p is PasswordAuthProvider => p.type === "iserv-form",

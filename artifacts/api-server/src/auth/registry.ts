@@ -40,58 +40,7 @@ interface RawLocalProviderConfig {
 
 type RawProviderConfig = RawIservFormProviderConfig | RawOidcRedirectProviderConfig | RawLocalProviderConfig;
 
-/**
- * Rueckfallweg nur, wenn AUTH_PROVIDERS_PATH explizit gesetzt ist und iserv-form
- * als Konfiguration enthalten ist. Ohne Datei: kein Anbieter registriert; Start
- * scheitert oder bietet nur lokale Konten (siehe auth.ts).
- */
-function defaultProviders(): AuthProvider[] {
-  const authProvidersPath = process.env["AUTH_PROVIDERS_PATH"];
-  if (!authProvidersPath) {
-    return [];
-  }
-  try {
-    const rawConfigs: RawProviderConfig[] = JSON.parse(
-      fs.readFileSync(authProvidersPath, "utf-8"),
-    ) as RawProviderConfig[];
-    return rawConfigs
-      .map((raw) => {
-        if (raw.type === "iserv-form") {
-          return createIservFormProvider({
-            key: raw.key,
-            displayName: raw.displayName,
-            iservBaseUrl: raw.iservBaseUrl,
-            emailDomain: raw.emailDomain,
-          });
-        }
-        if (raw.type === "oidc-redirect") {
-          return createOidcRedirectProvider({
-            key: raw.key,
-            displayName: raw.displayName,
-            issuerUrl: raw.issuerUrl,
-            clientId: raw.clientId,
-            clientSecret: raw.clientSecret,
-            redirectUri: raw.redirectUri,
-            scopes: raw.scopes,
-          });
-        }
-        if (raw.type === "local") {
-          return createLocalProvider({
-            key: raw.key,
-            displayName: raw.displayName,
-            schoolId: raw.schoolId,
-          });
-        }
-        throw new Error(`Unbekannter Anbietertyp: ${(raw as any).type}`);
-      })
-      .filter((p) => p !== null && p !== undefined);
-  } catch (err) {
-    console.error("AUTH_PROVIDERS_PATH kann nicht gelesen werden:", err);
-    throw new Error(
-      "AUTH_PROVIDERS_PATH fehlt oder ist ungueltig. Ohne explizite Konfiguration ist kein Anmeldeweg aktiv.",
-    );
-  }
-}
+const EXAMPLE_FILE = "ops/install/auth-providers.example.json";
 
 function buildProvider(raw: RawProviderConfig): AuthProvider {
   const groupToRoleMap = raw.groupToRoleMap ?? {};
@@ -155,18 +104,25 @@ function buildProvider(raw: RawProviderConfig): AuthProvider {
 }
 
 /**
- * Laedt die Anmeldewege dieser Installation.
+ * Laedt die Anmeldewege dieser Installation aus der Datei unter
+ * AUTH_PROVIDERS_PATH, einmalig beim Start (nicht bei jeder Anmeldung).
  *
- * Fehlt AUTH_PROVIDERS_PATH, faellt die Installation auf genau einen Eintrag
- * zurueck, der dem heutigen Verhalten entspricht (iserv-form mit den Werten
- * aus der bestehenden Konfiguration). Ist die Variable gesetzt, aber die
- * Datei leer, kein JSON-Feld oder unlesbar, bricht der Start mit einer
- * klaren Meldung ab -- ein Server ohne Anmeldeweg darf nicht stillschweigend
- * starten. Nach dem Muster von ROLE_MAP_PATH (siehe routes/auth.ts).
+ * Kein Anmeldeweg ist mehr still voreingestellt: fehlt die Umgebungsvariable,
+ * ist die Datei leer, kein JSON-Feld oder unlesbar, oder ist ein Eintrag
+ * unvollstaendig (siehe buildProvider), bricht der Start mit einer erklaerenden
+ * Meldung ab -- ein Server ohne Anmeldeweg darf nicht stillschweigend starten.
  */
 export function loadAuthProviders(): AuthProvider[] {
   const providersPath = process.env["AUTH_PROVIDERS_PATH"];
-  if (!providersPath) return defaultProviders();
+  if (!providersPath) {
+    throw new Error(
+      `AUTH_PROVIDERS_PATH ist nicht gesetzt. Diese Installation kennt ohne sie keinen Anmeldeweg. ` +
+        `Setze die Variable auf den Pfad einer JSON-Datei mit einem Feld von Anmeldeweg-Eintraegen ` +
+        `(je Eintrag mindestens key, displayName, type, dazu die typspezifischen Felder wie iservBaseUrl/emailDomain ` +
+        `bei "iserv-form" oder issuerUrl/clientId/redirectUri bei "oidc-redirect"). ` +
+        `Beispielaufbau: ${EXAMPLE_FILE}.`,
+    );
+  }
 
   let raw: unknown;
   try {
@@ -174,11 +130,15 @@ export function loadAuthProviders(): AuthProvider[] {
     raw = JSON.parse(content);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    throw new Error(`Anmeldewege konnten nicht aus "${providersPath}" gelesen werden: ${message}`);
+    throw new Error(
+      `Anmeldewege konnten nicht aus "${providersPath}" gelesen werden: ${message}. Beispielaufbau: ${EXAMPLE_FILE}.`,
+    );
   }
 
   if (!Array.isArray(raw) || raw.length === 0) {
-    throw new Error(`Anmeldewege in "${providersPath}" sind leer oder kein Feld von Eintraegen.`);
+    throw new Error(
+      `Anmeldewege in "${providersPath}" sind leer oder kein Feld von Eintraegen. Beispielaufbau: ${EXAMPLE_FILE}.`,
+    );
   }
 
   return raw.map((entry) => buildProvider(entry as RawProviderConfig));

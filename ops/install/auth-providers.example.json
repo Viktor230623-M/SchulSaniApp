@@ -1,0 +1,29 @@
+[
+  {
+    "key": "iserv-form",
+    "displayName": "IServ",
+    "type": "iserv-form",
+    "iservBaseUrl": "https://iserv.beispielschule.example",
+    "emailDomain": "beispielschule.example",
+    "groupToRoleMap": {
+      "sanitaeter": "sanitaeter",
+      "sanitaeter-leitung": "sanitaeter_leitung",
+      "lehrer": "teacher"
+    }
+  },
+  {
+    "_deaktiviert": true,
+    "_hinweis": "Beispiel fuer einen weiterleitungsbasierten Anmeldeweg. Zum Aktivieren key/type wiederherstellen, Platzhalterwerte ersetzen und diesen Kommentar-Eintrag entfernen.",
+    "key": "oidc-beispiel",
+    "displayName": "Schul-Login (OIDC)",
+    "type": "oidc-redirect",
+    "issuerUrl": "https://login.beispielschule.example",
+    "clientId": "beispiel-client-id",
+    "redirectUri": "https://sani.beispielschule.example/auth/oidc-beispiel/callback",
+    "scopes": ["openid", "email", "profile"],
+    "groupToRoleMap": {
+      "sani-team": "sanitaeter",
+      "sani-leitung": "sanitaeter_leitung"
+    }
+  }
+]
