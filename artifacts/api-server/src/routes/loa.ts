@@ -61,9 +61,8 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
 
   const t = await translateToLanguages({ reason }, "de").catch(() => ({}));
   if (Object.keys(t).length > 0) {
-    // translationsJson entfernt (Schema-Referenz offen)
-  // await db.update(loaTable).set({ translationsJson: JSON.stringify(t) }).where(eq(loaTable.id, newReq.id));
-  // newReq.translationsJson = JSON.stringify(t);
+    await db.update(loaTable).set({ translationsJson: JSON.stringify(t) }).where(eq(loaTable.id, newReq.id));
+    newReq.translationsJson = JSON.stringify(t);
   }
 
   res.status(201).json(newReq);

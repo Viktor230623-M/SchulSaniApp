@@ -50,9 +50,8 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
 
   const t = await translateToLanguages({ title, summary: newItem.summary ?? "", content }, "de").catch(() => ({}));
   if (Object.keys(t).length > 0) {
-    // translationsJson entfernt (Schema-Referenz offen)
-  // await db.update(newsTable).set({ translationsJson: JSON.stringify(t) }).where(eq(newsTable.id, newItem.id));
-  // newItem.translationsJson = JSON.stringify(t);
+    await db.update(newsTable).set({ translationsJson: JSON.stringify(t) }).where(eq(newsTable.id, newItem.id));
+    newItem.translationsJson = JSON.stringify(t);
   }
 
   res.status(201).json(newItem);
