@@ -7,6 +7,7 @@ export interface PermissionDef {
 
 export const PERMISSIONS: readonly PermissionDef[] = [
   { key: "users.read_all", description: "Alle Nutzerkonten der Schule einsehen", essential: false, hiddenFromUi: false },
+  { key: "users.read_pending", description: "Warteliste noch nicht freigeschalteter Konten einsehen", essential: false, hiddenFromUi: false },
   { key: "users.approve", description: "Neue Nutzer freischalten", essential: false, hiddenFromUi: false },
   { key: "users.assign_role", description: "Nutzern eine Rolle zuweisen", essential: true, hiddenFromUi: false },
   { key: "users.delete", description: "Nutzerkonten loeschen", essential: false, hiddenFromUi: false },
@@ -38,14 +39,14 @@ export const ESSENTIAL_PERMISSIONS: readonly PermissionKey[] =
 export const DEFAULT_ROLE_PERMISSIONS: Record<string, readonly PermissionKey[]> = {
   owner: PERMISSIONS.map((p) => p.key),
   admin: [
-    "users.read_all", "users.approve", "users.assign_role", "users.delete",
+    "users.read_all", "users.read_pending", "users.approve", "users.assign_role", "users.delete",
     "news.moderate", "loa.create", "loa.moderate",
     "missions.create", "missions.moderate", "missions.view_all", "missions.receive_alerts",
     "activity.view", "notifications.view_all",
     "reports.read_all", "reports.see_patient_info",
   ],
   sanitaeter_leitung_admin: [
-    "users.read_all", "users.approve", "users.assign_role",
+    "users.read_all", "users.assign_role",
     "loa.create", "loa.moderate",
     "missions.create", "missions.moderate", "missions.view_all", "missions.receive_alerts",
     "activity.view", "notifications.view_all",

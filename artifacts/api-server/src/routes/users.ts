@@ -41,7 +41,7 @@ router.get("/", requireAuth, requirePermission("users.read_all"), async (_req, r
   res.json(users.map(safeUser));
 });
 
-router.get("/pending", requireAuth, requirePermission("users.read_all"), async (_req, res) => {
+router.get("/pending", requireAuth, requirePermission("users.read_pending"), async (_req, res) => {
   const users = await db.select().from(usersTable).where(eq(usersTable.isApproved, false));
   res.json(users.map(safeUser));
 });
