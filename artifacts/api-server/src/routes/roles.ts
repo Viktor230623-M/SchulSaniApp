@@ -38,19 +38,25 @@ function scopeCondition(schoolId: string | null) {
  * haengen, steht hier bewusst nicht drin.
  */
 router.get("/", requireAuth, async (req: AuthRequest, res) => {
-  const rows = await db.select({
-    id: rolesTable.id,
-    key: rolesTable.key,
-    displayName: rolesTable.displayName,
-    displayNameEn: rolesTable.displayNameEn,
-    color: rolesTable.color,
-    sortOrder: rolesTable.sortOrder,
-    isSystem: rolesTable.isSystem,
-  })
-    .from(rolesTable)
-    .where(scopeCondition(scopeOf(req)))
-    .orderBy(rolesTable.sortOrder);
-  res.json(rows);
+  const [rows, counts] = await Promise.all([
+    db.select({
+      id: rolesTable.id,
+      key: rolesTable.key,
+      displayName: rolesTable.displayName,
+      displayNameEn: rolesTable.displayNameEn,
+      color: rolesTable.color,
+      sortOrder: rolesTable.sortOrder,
+      isSystem: rolesTable.isSystem,
+    })
+      .from(rolesTable)
+      .where(scopeCondition(scopeOf(req)))
+      .orderBy(rolesTable.sortOrder),
+    db.select({ role: usersTable.role, count: sql<number>`count(*)` })
+      .from(usersTable)
+      .groupBy(usersTable.role),
+  ]);
+  const countByKey = new Map(counts.map((c) => [String(c.role), Number(c.count)]));
+  res.json(rows.map((r) => ({ ...r, userCount: countByKey.get(r.key) ?? 0 })));
 });
 
 /** Berechtigungen einer Rolle — nur fuer die Verwaltung. */
