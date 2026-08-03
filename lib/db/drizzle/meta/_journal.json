@@ -29,6 +29,13 @@
       "when": 1785774524198,
       "tag": "0003_rollenprotokoll_migration",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1785774725122,
+      "tag": "0004_anmeldeweg_und_subjekt",
+      "breakpoints": true
     }
   ]
 }

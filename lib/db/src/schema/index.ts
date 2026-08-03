@@ -19,9 +19,18 @@ export const userRoleEnum = pgEnum("user_role", [
 ]);
 
 // Users table
+//
+// authProvider/externalSubject bilden den Anmeldeweg ab (R6): woher ein Konto
+// stammt (z. B. "iserv-form", spaeter "oidc") und das Merkmal, mit dem der
+// Anbieter den Menschen wiedererkennt (bei IServ der Benutzername, bei OIDC
+// der sub-Claim). Eindeutig ist nur das Tripel aus Schule, Anbieter und
+// Subjekt — derselbe Benutzername kann in zwei Schulen unabhaengig vergeben
+// sein, deshalb kein globaler Unique-Index mehr auf iserv_username allein.
 export const usersTable = pgTable("users", {
   id: text("id").primaryKey(),
-  iservUsername: text("iserv_username").unique(),
+  iservUsername: text("iserv_username"),
+  authProvider: text("auth_provider"),
+  externalSubject: text("external_subject"),
   firstName: text("first_name"),
   lastName: text("last_name"),
   email: text("email").unique(),
@@ -33,7 +42,11 @@ export const usersTable = pgTable("users", {
   approvedBy: text("approved_by"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (t) => [
+  unique("users_school_id_auth_provider_external_subject_key").on(
+    t.schoolId, t.authProvider, t.externalSubject,
+  ),
+]);
 
 // News table
 export const newsTable = pgTable("news", {
