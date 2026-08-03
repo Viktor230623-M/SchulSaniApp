@@ -18,6 +18,13 @@ import type {
 
 const API_BASE = `https://${process.env["EXPO_PUBLIC_DOMAIN"]}/api`;
 
+/** Anmeldeweg dieser Installation, wie ihn GET /auth/providers liefert. */
+export interface AuthProviderInfo {
+  key: string;
+  displayName: string;
+  type: "iserv-form" | "oidc-redirect";
+}
+
 let authToken: string | null = null;
 
 export function setAuthToken(token: string | null) {
@@ -91,6 +98,32 @@ const ApiService = {
     } finally {
       clearTimeout(timeout);
     }
+  },
+
+  /**
+   * Anmeldewege dieser Installation. Oeffentlicher Endpunkt, kein Cookie
+   * noetig. Wirft bei Netzfehler oder Zeitlimit -- der Aufrufer entscheidet,
+   * wie der Anmeldebildschirm bei einem Ausfall dieses Abrufs aussieht.
+   */
+  async getAuthProviders(): Promise<AuthProviderInfo[]> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8_000);
+    try {
+      const resp = await fetch(`${API_BASE}/auth/providers`, {
+        headers: { "ngrok-skip-browser-warning": "true" },
+        signal: controller.signal,
+      });
+      if (!resp.ok) throw new Error("Anmeldewege konnten nicht geladen werden");
+      const data = await resp.json();
+      return Array.isArray(data.providers) ? data.providers : [];
+    } finally {
+      clearTimeout(timeout);
+    }
+  },
+
+  /** URL des Weiterleitungsstarts eines Anmeldewegs (GET /auth/:provider/start). */
+  getProviderStartUrl(providerKey: string): string {
+    return `${API_BASE}/auth/${encodeURIComponent(providerKey)}/start`;
   },
 
   async logout(): Promise<void> {

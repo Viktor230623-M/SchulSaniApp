@@ -22,9 +22,16 @@ export interface AuthResult {
   /** Eindeutige Kennung des Nutzers beim Anbieter (z. B. IServ-Benutzername). */
   subject: string;
   profile: AuthProfile;
+  /**
+   * Nur beim lokalen Anbieter gesetzt: das gerade gepruefte Passwort war ein
+   * Einmal-Passwort (Einladung oder Zuruecksetzen durch einen Verwalter).
+   * Der Aufrufer darf daraus keine vollwertige Sitzung ausstellen, bevor ein
+   * Passwortwechsel stattgefunden hat.
+   */
+  mustChangePassword?: boolean;
 }
 
-export type AuthProviderType = "iserv-form" | "oidc-redirect";
+export type AuthProviderType = "iserv-form" | "oidc-redirect" | "local";
 
 interface AuthProviderBase {
   /** Eindeutiger Schluessel des Anmeldewegs innerhalb der Installation. */
@@ -35,11 +42,13 @@ interface AuthProviderBase {
 }
 
 /**
- * Passwortbasierter Anmeldeweg (Bestandsweg): Zugangsdaten werden
- * entgegengenommen und direkt gegen den fremden Dienst geprueft.
+ * Passwortbasierter Anmeldeweg: Zugangsdaten werden entgegengenommen und
+ * direkt geprueft -- entweder gegen den fremden Dienst (Bestandsweg
+ * "iserv-form") oder gegen den lokalen Passwort-Hash ("local", Rueckfallebene
+ * fuer Schulen ohne nutzbaren Identitaetsdienst).
  */
 export interface PasswordAuthProvider extends AuthProviderBase {
-  readonly type: "iserv-form";
+  readonly type: "iserv-form" | "local";
   authenticate(credentials: { username: string; password: string }): Promise<AuthResult>;
 }
 

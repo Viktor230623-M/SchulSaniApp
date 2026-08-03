@@ -38,6 +38,13 @@ export const usersTable = pgTable("users", {
   role: userRoleEnum("role").default("sanitaeter").notNull(),
   schoolId: text("school_id"),
   passwordHash: text("password_hash").default(""),
+  // Lokale Konten (R6, Schritt 6): erzwingt einen Passwortwechsel, solange das
+  // aktuelle Passwort ein von einem Verwalter vergebenes Einmal-Passwort ist
+  // (Einladung oder Zuruecksetzen). Bleibt fuer alle anderen Anmeldewege false.
+  mustChangePassword: boolean("must_change_password").default(false).notNull(),
+  // Ablauf des Einmal-Passworts. Nur gesetzt, waehrend mustChangePassword
+  // greift; danach (nach erfolgreichem Wechsel) wieder null.
+  oneTimePasswordExpiresAt: timestamp("one_time_password_expires_at"),
   isApproved: boolean("is_approved").default(false).notNull(),
   approvedBy: text("approved_by"),
   createdAt: timestamp("created_at").defaultNow().notNull(),

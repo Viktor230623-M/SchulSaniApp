@@ -112,6 +112,14 @@ export async function requireAuth(req: AuthRequest, res: Response, next: NextFun
     res.status(401).json({ error: "Invalid or expired token" });
     return;
   }
+  // Ein lokales Konto mit noch nicht gewechseltem Einmal-Passwort bekommt hier
+  // keine nutzbare Sitzung fuer andere Routen -- einzige Ausnahme ist der
+  // Passwortwechsel selbst (routes/auth.ts, prueft Bearer und Kontostand
+  // eigenstaendig, ohne ueber requireAuth zu laufen).
+  if (live.mustChangePassword) {
+    res.status(403).json({ error: "Passwortwechsel erforderlich", code: "PASSWORD_CHANGE_REQUIRED" });
+    return;
+  }
   req.user = { userId: payload.userId, role: live.role, permissions: live.permissions };
   next();
 }

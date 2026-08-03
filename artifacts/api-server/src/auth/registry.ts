@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import { config } from "../config";
 import { createIservFormProvider } from "./providers/iservForm";
 import { createOidcRedirectProvider } from "./providers/oidc";
+import { createLocalProvider } from "./providers/local";
 import type { AuthProvider } from "./types";
 
 interface RawIservFormProviderConfig {
@@ -23,7 +24,15 @@ interface RawOidcRedirectProviderConfig {
   scopes?: string[];
 }
 
-type RawProviderConfig = RawIservFormProviderConfig | RawOidcRedirectProviderConfig;
+interface RawLocalProviderConfig {
+  key: string;
+  displayName: string;
+  type: "local";
+  /** Ohne Angabe: process.env.SCHOOL_ID, sonst "school" -- wie die uebrigen Anmeldewege. */
+  schoolId?: string;
+}
+
+type RawProviderConfig = RawIservFormProviderConfig | RawOidcRedirectProviderConfig | RawLocalProviderConfig;
 
 /**
  * Rueckfallweg dieser Installation ohne gesetzte AUTH_PROVIDERS_PATH:
@@ -69,6 +78,19 @@ function buildProvider(raw: RawProviderConfig): AuthProvider {
       clientSecret: raw.clientSecret,
       redirectUri: raw.redirectUri,
       scopes: raw.scopes,
+    });
+  }
+
+  if (raw.type === "local") {
+    if (!raw.key || !raw.displayName) {
+      throw new Error(
+        `Anmeldeweg "${raw.key ?? "?"}" ist unvollstaendig konfiguriert (key, displayName erforderlich).`,
+      );
+    }
+    return createLocalProvider({
+      key: raw.key,
+      displayName: raw.displayName,
+      schoolId: raw.schoolId ?? process.env["SCHOOL_ID"] ?? "school",
     });
   }
 
