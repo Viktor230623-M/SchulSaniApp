@@ -35,31 +35,6 @@ import ApiService from "@/services/ApiService";
 import { enableWebPush, webPushState } from "@/services/WebPushService";
 import { has, useAppStore } from "@/store/useAppStore";
 
-const ROLE_PROTECTED_FROM: Record<string, string[]> = {
-  admin: ["owner", "teacher", "sanitaeter_leitung_admin"],
-  sanitaeter_leitung_admin: ["owner", "teacher"],
-};
-
-function canEditUserRole(requestorRole: string, targetRole: string): boolean {
-  if (requestorRole === "owner") return true;
-  const blocked = ROLE_PROTECTED_FROM[requestorRole] ?? [];
-  return blocked.length > 0 && !blocked.includes(targetRole);
-}
-
-function getAllowedRoles(requestorRole: string): { key: string }[] {
-  const all = [
-    { key: "sanitaeter" },
-    { key: "sanitaeter_leitung" },
-    { key: "sanitaeter_leitung_admin" },
-    { key: "teacher" },
-    { key: "admin" },
-  ];
-  if (requestorRole === "owner") return all;
-  if (requestorRole === "admin") return all.filter((r) => ["sanitaeter", "sanitaeter_leitung"].includes(r.key));
-  if (requestorRole === "sanitaeter_leitung_admin") return all.filter((r) => ["sanitaeter", "sanitaeter_leitung", "admin"].includes(r.key));
-  return [];
-}
-
 function RoleBadgeLarge({ label, bg, text }: { label: string; bg: string; text: string }) {
   return (
     <View style={[styles.roleBadgeLarge, { backgroundColor: bg, borderColor: text + "30" }]}>
@@ -104,7 +79,10 @@ export default function SettingsScreen() {
   const isAdmin = has("users.read_pending");
   // The database console is bound to one account, not to a role.
   const isOwner = user?.isOwnerAccount ?? false;
-  const canManageRoles = ["admin", "owner", "sanitaeter_leitung_admin"].includes(user?.role ?? "");
+  const canAssignRole = has("users.assign_role");
+  const canDeleteUsers = has("users.delete");
+  const canManageRoleCatalog = has("roles.manage");
+  const canManageRoles = canAssignRole || canDeleteUsers || isAdmin || canManageRoleCatalog;
   const [showAdmin, setShowAdmin] = useState(false);
   const [pendingUsers, setPendingUsers] = useState<User[]>([]);
   const [loadingPending, setLoadingPending] = useState(false);
@@ -581,6 +559,22 @@ export default function SettingsScreen() {
             </Pressable>
           )}
 
+          {canManageRoleCatalog && (
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push("/admin/roles");
+              }}
+              style={styles.sectionHeaderRow}
+            >
+              <View style={styles.adminHeaderLeft}>
+                <Ionicons name="key-outline" size={13} color={theme.textTertiary} />
+                <Text style={[styles.sectionTitle, { color: theme.textTertiary }]}>Rollen</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={theme.textTertiary} />
+            </Pressable>
+          )}
+
           <Pressable
             onPress={() => {
               setShowAdmin((v) => !v);
@@ -629,7 +623,7 @@ export default function SettingsScreen() {
                 </View>
               ) : (
                 pendingUsers.map((u) => {
-                  const pendingRoleBtns = getAllowedRoles(user?.role ?? "");
+                  const pendingRoleBtns = roles.roles;
                   const selectedRole = pendingRoles[u.id] ?? "sanitaeter";
                   const isProcessing = adminProcessing === u.id;
                   return (
@@ -709,8 +703,9 @@ export default function SettingsScreen() {
                 allUsers.map((u) => {
                   const cfg = roles.colors(u.role);
                   const isCurrentUser = u.id === user?.id;
-                  const roleManageBtns = getAllowedRoles(user?.role ?? "");
-                  const canEdit = !isCurrentUser && canEditUserRole(user?.role ?? "", u.role);
+                  const roleManageBtns = roles.roles;
+                  const canEditRole = !isCurrentUser && canAssignRole;
+                  const canRemove = !isCurrentUser && canDeleteUsers;
                   return (
                     <View key={u.id} style={[styles.adminCard, { borderColor: theme.cardBorder }]}>
                       <View style={styles.adminCardHeader}>
@@ -725,7 +720,7 @@ export default function SettingsScreen() {
                             <Text style={[styles.smallRoleText, { color: cfg.text }]}>{roles.displayName(u.role, lang)}</Text>
                           </View>
                         </View>
-                        {!isCurrentUser && canEdit ? (
+                        {canRemove ? (
                           <Pressable
                             onPress={() => handleDeleteUser(u.id, formatFullName(u.firstName, u.lastName))}
                             style={({ pressed }) => [styles.deleteBtn, { opacity: pressed ? 0.5 : 1 }]}
@@ -738,7 +733,7 @@ export default function SettingsScreen() {
                           </View>
                         )}
                       </View>
-                      {canEdit && (
+                      {canEditRole && (
                         <View style={styles.rolePicker}>
                           {roleManageBtns.map((r) => {
                             const selected = u.role === r.key;

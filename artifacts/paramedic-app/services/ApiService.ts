@@ -13,6 +13,7 @@ import type {
   User,
   SqlPreset,
   DbConsoleResult,
+  PermissionDef,
 } from "@/models";
 
 const API_BASE = `https://${process.env["EXPO_PUBLIC_DOMAIN"]}/api`;
@@ -325,6 +326,63 @@ const ApiService = {
       throw new Error(data.error ?? "Rollen konnten nicht geladen werden");
     }
     return resp.json();
+  },
+
+  async getPermissionCatalog(): Promise<PermissionDef[]> {
+    const resp = await apiFetch(`${API_BASE}/roles/permissions`, { headers: headers() });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      throw new Error(data.error ?? "Berechtigungen konnten nicht geladen werden");
+    }
+    return resp.json();
+  },
+
+  async getRolePermissions(roleId: string): Promise<string[]> {
+    const resp = await apiFetch(`${API_BASE}/roles/${roleId}/permissions`, { headers: headers() });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error ?? "Berechtigungen der Rolle konnten nicht geladen werden");
+    return data.permissions ?? [];
+  },
+
+  async setRolePermissions(roleId: string, permissions: string[]): Promise<string[]> {
+    const resp = await apiFetch(`${API_BASE}/roles/${roleId}/permissions`, {
+      method: "PUT",
+      headers: headers(),
+      body: JSON.stringify({ permissions }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error ?? "Berechtigungen konnten nicht gespeichert werden");
+    return data.permissions ?? [];
+  },
+
+  async createRole(input: { key: string; displayName: string; displayNameEn?: string; color?: string }): Promise<{ id: string; key: string }> {
+    const resp = await apiFetch(`${API_BASE}/roles`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify(input),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error ?? "Rolle konnte nicht angelegt werden");
+    return data;
+  },
+
+  async updateRole(id: string, input: { displayName?: string; displayNameEn?: string | null; color?: string | null }): Promise<{ id: string }> {
+    const resp = await apiFetch(`${API_BASE}/roles/${id}`, {
+      method: "PATCH",
+      headers: headers(),
+      body: JSON.stringify(input),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error ?? "Rolle konnte nicht geaendert werden");
+    return data;
+  },
+
+  async deleteRole(id: string): Promise<void> {
+    const resp = await apiFetch(`${API_BASE}/roles/${id}`, { method: "DELETE", headers: headers() });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      throw new Error(data.error ?? "Rolle konnte nicht geloescht werden");
+    }
   },
 
   async getOnDutyUsers(): Promise<User[]> {

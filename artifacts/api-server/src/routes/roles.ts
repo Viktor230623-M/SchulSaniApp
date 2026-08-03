@@ -4,7 +4,7 @@ import rateLimit from "express-rate-limit";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { db, rolesTable, rolePermissionsTable, usersTable } from "@workspace/db";
 import { requireAuth, requirePermission, invalidateRoleCache, invalidateAllRoleCaches, type AuthRequest } from "../middlewares/auth";
-import { isValidPermission } from "../lib/permissions";
+import { isValidPermission, PERMISSIONS } from "../lib/permissions";
 import {
   assertAdminReachable,
   getRolePermissions,
@@ -57,6 +57,11 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
   ]);
   const countByKey = new Map(counts.map((c) => [String(c.role), Number(c.count)]));
   res.json(rows.map((r) => ({ ...r, userCount: countByKey.get(r.key) ?? 0 })));
+});
+
+/** Berechtigungskatalog mit deutschen Beschreibungen — nur fuer die Verwaltung. */
+router.get("/permissions", requireAuth, requirePermission("roles.manage"), async (_req: AuthRequest, res) => {
+  res.json(PERMISSIONS);
 });
 
 /** Berechtigungen einer Rolle — nur fuer die Verwaltung. */

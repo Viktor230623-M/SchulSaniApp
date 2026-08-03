@@ -35,6 +35,15 @@ export interface RoleInfo {
   color: string | null;
   sortOrder: number;
   isSystem: boolean;
+  userCount: number;
+}
+
+/** Zeile aus GET /roles/permissions — Berechtigungskatalog mit deutscher Beschreibung. */
+export interface PermissionDef {
+  key: string;
+  description: string;
+  essential: boolean;
+  hiddenFromUi: boolean;
 }
 
 export type MissionStatus = "pending" | "accepted" | "rejected" | "completed" | "archived";

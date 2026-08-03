@@ -75,6 +75,7 @@ function RootLayoutNav() {
         <Stack.Screen name="report/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="admin/database" options={{ headerShown: false }} />
         <Stack.Screen name="admin/sani-activity" options={{ headerShown: false }} />
+        <Stack.Screen name="admin/roles" options={{ headerShown: false }} />
         <Stack.Screen name="activity-log" />
       </Stack.Protected>
       <Stack.Protected guard={authStatus === "anon"}>
