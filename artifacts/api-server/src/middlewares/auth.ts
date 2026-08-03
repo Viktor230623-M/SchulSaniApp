@@ -49,6 +49,16 @@ export function invalidateUserCache(userId: string): void {
   userCache.delete(userId);
 }
 
+export function invalidateRoleCache(roleKey: string): void {
+  for (const [userId, entry] of userCache.entries()) {
+    if (entry.role === roleKey) userCache.delete(userId);
+  }
+}
+
+export function invalidateAllRoleCaches(): void {
+  userCache.clear();
+}
+
 async function getLiveUser(userId: string): Promise<LiveUser | null> {
   const cached = userCache.get(userId);
   if (cached && cached.expires > Date.now()) return cached;
