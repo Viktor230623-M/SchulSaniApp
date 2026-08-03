@@ -2,6 +2,7 @@ import { Router } from "express";
 import { eq } from "drizzle-orm";
 import { db, usersTable, type UserRole } from "@workspace/db";
 import { requireAuth, requirePermission, invalidateUserCache, type AuthRequest } from "../middlewares/auth";
+import { assertAdminReachable, logRoleChangeTx, LockoutError } from "../lib/rolePermissions";
 
 // Quelle der Rollen ist der Aufzaehlungstyp user_role (siehe
 // lib/db/src/schema/index.ts). "cto" fehlt hier: der Wert bleibt im Typ, bis
@@ -135,11 +136,27 @@ router.patch("/:id/role", requireAuth, requirePermission("users.assign_role"), a
     res.status(403).json({ error: "Insufficient permissions to change this user's role" }); return;
   }
 
-  const [updated] = await db
-    .update(usersTable)
-    .set({ role, updatedAt: new Date() })
-    .where(eq(usersTable.id, id))
-    .returning();
+  let updated: typeof existing | undefined;
+  try {
+    await db.transaction(async (tx) => {
+      const rows = await tx
+        .update(usersTable)
+        .set({ role, updatedAt: new Date() })
+        .where(eq(usersTable.id, id))
+        .returning();
+      updated = rows[0];
+      await logRoleChangeTx(tx, {
+        actorId: req.user!.userId, targetUserId: id, action: "assign_role",
+        before: existing.role, after: role,
+      });
+      // In derselben Transaktion, damit zwei gleichzeitige Herabstufungen
+      // nicht gemeinsam den letzten Verwalter entfernen.
+      await assertAdminReachable(tx, null);
+    });
+  } catch (err) {
+    if (err instanceof LockoutError) { res.status(409).json({ error: err.message }); return; }
+    throw err;
+  }
   if (!updated) { res.status(404).json({ error: "User not found" }); return; }
   invalidateUserCache(id);
   res.json(safeUser(updated));
@@ -153,8 +170,24 @@ router.delete("/:id", requireAuth, requirePermission("users.delete"), async (req
   if (!canModifyTarget(req.user!.role, target.role ?? "sanitaeter")) {
     res.status(403).json({ error: "Insufficient permissions to delete this user" }); return;
   }
-  const result = await db.delete(usersTable).where(eq(usersTable.id, id)).returning();
-  if (result.length === 0) { res.status(404).json({ error: "User not found" }); return; }
+  let geloescht = 0;
+  try {
+    await db.transaction(async (tx) => {
+      const result = await tx.delete(usersTable).where(eq(usersTable.id, id)).returning();
+      geloescht = result.length;
+      if (geloescht > 0) {
+        await logRoleChangeTx(tx, {
+          actorId: req.user!.userId, targetUserId: id, action: "delete_user",
+          before: target.role, after: null,
+        });
+        await assertAdminReachable(tx, null);
+      }
+    });
+  } catch (err) {
+    if (err instanceof LockoutError) { res.status(409).json({ error: err.message }); return; }
+    throw err;
+  }
+  if (geloescht === 0) { res.status(404).json({ error: "User not found" }); return; }
   invalidateUserCache(id);
   res.status(204).send();
 });
