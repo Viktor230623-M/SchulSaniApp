@@ -52,7 +52,8 @@ const ApiService = {
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error ?? "Anmeldung fehlgeschlagen");
     if (data.token) setAuthToken(data.token);
-    return { user: data.user as User, isTealUnlocked: data.isTealUnlocked, token: data.token };
+    const user: User = { ...data.user, permissions: data.permissions ?? [] };
+    return { user, isTealUnlocked: data.isTealUnlocked, token: data.token };
   },
 
   /**
@@ -79,7 +80,8 @@ const ApiService = {
       const data = await resp.json();
       if (!data.token) return null;
       setAuthToken(data.token);
-      return { user: data.user as User, isTealUnlocked: data.isTealUnlocked, token: data.token };
+      const user: User = { ...data.user, permissions: data.permissions ?? [] };
+      return { user, isTealUnlocked: data.isTealUnlocked, token: data.token };
     } catch {
       // Netzwerkfehler oder Abbruch durch das Zeitlimit: als "nicht angemeldet"
       // behandeln, nicht als Absturz.

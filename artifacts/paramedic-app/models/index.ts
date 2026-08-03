@@ -19,6 +19,8 @@ export interface User {
   isApproved?: boolean;
   /** Serverseitig berechnet: Konto mit Zugriff auf die SQL-Konsole. */
   isOwnerAccount?: boolean;
+  /** Vom Server mit der Anmeldeantwort geliefert; einzige Quelle fuer Sichtbarkeit im Client. */
+  permissions?: string[];
   avatarUri?: string;
   createdAt: string;
   updatedAt: string;

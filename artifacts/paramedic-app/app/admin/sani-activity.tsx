@@ -20,7 +20,7 @@ import type { ActivitySummary, User } from "@/models";
 
 type ActivitySummaryItem = ActivitySummary;
 import ApiService from "@/services/ApiService";
-import { useAppStore } from "@/store/useAppStore";
+import { has, useAppStore } from "@/store/useAppStore";
 
 interface ActivityUser {
   userId: string;
@@ -51,7 +51,6 @@ export default function SaniActivityScreen() {
   const lang = useAppStore((s) => s.language);
   const themeKey = useAppStore((s) => s.theme);
   const theme = getTheme(themeKey);
-  const user = useAppStore((s) => s.user);
 
   const [users, setUsers] = useState<ActivityUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,9 +59,7 @@ export default function SaniActivityScreen() {
   const [userActivities, setUserActivities] = useState<ActivitySummary[]>([]);
   const [loadingActivities, setLoadingActivities] = useState(false);
 
-  const canView = ["owner", "admin", "sanitaeter_leitung", "sanitaeter_leitung_admin"].includes(
-    user?.role || ""
-  );
+  const canView = has("activity.view");
 
   const loadUsers = async () => {
     try {

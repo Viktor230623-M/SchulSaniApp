@@ -32,7 +32,7 @@ import type { AppLanguage, AppTheme, User, Mission, LOARequest } from "@/models"
 import { confirmAction, notify } from "@/lib/dialog";
 import ApiService from "@/services/ApiService";
 import { enableWebPush, webPushState } from "@/services/WebPushService";
-import { useAppStore } from "@/store/useAppStore";
+import { has, useAppStore } from "@/store/useAppStore";
 
 const ROLE_CONFIG: Record<User["role"], { label: string; bg: string; text: string; icon: string }> = {
   owner: { label: "Owner", bg: "#CCFBF1", text: "#0F766E", icon: "" },
@@ -101,7 +101,7 @@ export default function SettingsScreen() {
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [showUsers, setShowUsers] = useState(false);
-  const canSeeAllUsers = ["admin", "owner", "sanitaeter_leitung_admin", "teacher"].includes(user?.role ?? "");
+  const canSeeAllUsers = has("users.read_all");
 
   const [showActivityLog, setShowActivityLog] = useState(false);
   const [activityLogData, setActivityLogData] = useState<(Mission | LOARequest & { type: string })[]>([]);
@@ -111,7 +111,7 @@ export default function SettingsScreen() {
   const [saniActivityData, setSaniActivityData] = useState<(Mission & { assignedUser: User | null })[]>([]);
   const [loadingSaniActivity, setLoadingSaniActivity] = useState(false);
 
-  const isAdmin = ["admin", "owner"].includes(user?.role ?? "");
+  const isAdmin = has("users.read_pending");
   // The database console is bound to one account, not to a role.
   const isOwner = user?.isOwnerAccount ?? false;
   const canManageRoles = ["admin", "owner", "sanitaeter_leitung_admin"].includes(user?.role ?? "");
