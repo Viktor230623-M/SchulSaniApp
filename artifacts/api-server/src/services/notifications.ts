@@ -1,8 +1,9 @@
 import { randomUUID } from "crypto";
-import { eq, and, or } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { db, notificationsTable, deviceTokensTable, usersTable, dutyTable, type Notification, type NewNotification, type DeviceToken } from "@workspace/db";
 import { sendWebPush } from "../lib/webPush";
 import { config } from "../config";
+import { loadRolePermissions } from "../lib/rolePermissions";
 
 export type NotificationType =
   | "mission_assigned"
@@ -81,19 +82,21 @@ export async function notifySanitaeters(data: {
   priority?: "normal" | "high";
   relatedId?: string;
 }): Promise<{ notifications: Notification[]; recipientCount: number }> {
-  const sanitaeters = await db
-    .select({ id: usersTable.id })
-    .from(usersTable)
-    .where(
-      or(
-        eq(usersTable.role, "sanitaeter"),
-        eq(usersTable.role, "student_paramedic"),
-        eq(usersTable.role, "sanitaeter_leitung"),
-        eq(usersTable.role, "sanitaeter_leitung_admin")
-      )
-    );
+  // Empfaengerkreis kommt aus derselben Rechteermittlung wie ueberall sonst
+  // (lib/rolePermissions.ts), nicht aus einer zweiten, fest verdrahteten Liste.
+  const allUsers = await db
+    .select({ id: usersTable.id, role: usersTable.role, schoolId: usersTable.schoolId })
+    .from(usersTable);
 
-  const userIds = sanitaeters.map((u) => u.id);
+  const schoolIds = Array.from(new Set(allUsers.map((u) => u.schoolId ?? null)));
+  const rolePermsBySchool = new Map<string | null, Record<string, string[]>>();
+  for (const schoolId of schoolIds) {
+    rolePermsBySchool.set(schoolId, await loadRolePermissions(schoolId));
+  }
+
+  const userIds = allUsers
+    .filter((u) => (rolePermsBySchool.get(u.schoolId ?? null)?.[u.role] ?? []).includes("missions.receive_alerts"))
+    .map((u) => u.id);
 
   if (userIds.length === 0) {
     return { notifications: [], recipientCount: 0 };

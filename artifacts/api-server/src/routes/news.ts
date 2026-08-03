@@ -21,7 +21,7 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
 });
 
 router.post("/", requireAuth, async (req: AuthRequest, res) => {
-  const { userId, role } = req.user!;
+  const { userId } = req.user!;
   const { title, summary, content, category } = req.body;
   if (!title || !content) {
     res.status(400).json({ error: "title and content required" });
@@ -39,7 +39,7 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
     summary: summary ?? (content.length > 80 ? content.substring(0, 80) + "..." : content),
     content,
     category: category ?? "announcement",
-    status: ["admin", "owner"].includes(role) ? "approved" as const : "pending" as const,
+    status: (req.user!.permissions ?? []).includes("news.publish_direct") ? "approved" as const : "pending" as const,
     publishedAt: new Date(),
     author: authorName,
     authorId: userId,

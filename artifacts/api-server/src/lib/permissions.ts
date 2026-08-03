@@ -40,8 +40,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, readonly PermissionKey[]> 
   owner: PERMISSIONS.map((p) => p.key),
   admin: [
     "users.read_all", "users.read_pending", "users.approve", "users.assign_role", "users.delete",
-    "news.moderate", "loa.create", "loa.moderate",
-    "missions.create", "missions.moderate", "missions.view_all", "missions.receive_alerts",
+    "news.moderate", "news.publish_direct", "loa.create", "loa.moderate",
+    "missions.create", "missions.moderate", "missions.view_all",
     "activity.view", "notifications.view_all",
     "reports.read_all", "reports.see_patient_info",
   ],
@@ -66,7 +66,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, readonly PermissionKey[]> 
     "activity.view",
     "reports.see_patient_info",
   ],
-  sanitaeter: ["loa.create"],
-  student_paramedic: ["loa.create"],
+  sanitaeter: ["loa.create", "missions.receive_alerts"],
+  student_paramedic: ["loa.create", "missions.receive_alerts"],
 };
 export function hasPermission(role: string, perm: string): boolean { return (DEFAULT_ROLE_PERMISSIONS[role] ?? []).includes(perm as any); }
