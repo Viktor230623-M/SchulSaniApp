@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import { Router } from "express";
 import jwt from "jsonwebtoken";
 import rateLimit from "express-rate-limit";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { db, usersTable, userRoleEnum, type UserRole } from "@workspace/db";
 import { permissionsForRole } from "../lib/rolePermissions";
 import { requireAuth, type AuthRequest } from "../middlewares/auth";
@@ -252,6 +252,139 @@ router.get("/session", sessionLimiter, async (req, res) => {
     token,
     ...(await buildUserResponse({ id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email, role })),
   });
+});
+
+/**
+ * Anmeldewege dieser Installation, oeffentlich abrufbar -- ohne Geheimnisse,
+ * ohne Client-Secret, ohne interne URLs. Kein Anmeldezwang auf dieser Route:
+ * ein Anmeldebildschirm muss wissen koennen, welche Wege es ueberhaupt gibt,
+ * bevor sich jemand angemeldet hat.
+ */
+router.get("/providers", (_req, res) => {
+  res.json({
+    providers: authProviders.map((p) => ({ key: p.key, displayName: p.displayName, type: p.type })),
+  });
+});
+
+/**
+ * Startet den Weiterleitungs-Ablauf eines OIDC-Anmeldewegs. Ein unbekannter
+ * oder nicht-weiterleitungsbasierter Schluessel liefert 404 -- ohne Hinweis
+ * darauf, ob der Schluessel grundsaetzlich existiert oder falsch konfiguriert
+ * ist, damit sich daraus kein Rateraum fuer Konfigurationsdetails ergibt.
+ */
+router.get("/:provider/start", authLimiter, async (req, res) => {
+  const provider = authProviders.find((p) => p.key === req.params["provider"]);
+  if (!provider || provider.type !== "oidc-redirect") {
+    res.status(404).json({ error: "Anmeldeweg nicht gefunden." });
+    return;
+  }
+
+  try {
+    const { redirectUrl } = await provider.beginRedirect();
+    res.redirect(redirectUrl);
+  } catch (err) {
+    console.error("OIDC-Weiterleitung konnte nicht gestartet werden:", err);
+    res.status(503).json({ error: "Anmeldedienst nicht erreichbar. Bitte später erneut versuchen." });
+  }
+});
+
+/**
+ * Rueckweg eines OIDC-Anmeldewegs. `completeRedirect` prueft State, Nonce und
+ * ID-Token (Signatur, Aussteller, Zielgruppe, Ablauf ueber JWKS); schlaegt das
+ * fehl, bricht die Anmeldung ab -- kein Rueckfall auf einen anderen Weg.
+ *
+ * Kontowiedererkennung laeuft ueber das Tripel (Schule, Anbieter, Subjekt),
+ * nie ueber die E-Mail-Adresse: eine fremde Identitaet mit zufaellig gleicher
+ * Mailadresse darf sich nicht an ein bestehendes Konto haengen.
+ *
+ * Am Ende dieselbe Sitzungsausgabe wie beim Formular-Login: ein httpOnly-
+ * Sitzungscookie (`createSession`, unveraendert), das der Client anschliessend
+ * ueber GET /auth/session gegen Token und Nutzerprojektion eintauscht.
+ */
+router.get("/:provider/callback", authLimiter, async (req, res) => {
+  const provider = authProviders.find((p) => p.key === req.params["provider"]);
+  if (!provider || provider.type !== "oidc-redirect") {
+    res.status(404).json({ error: "Anmeldeweg nicht gefunden." });
+    return;
+  }
+
+  const query: Record<string, string> = {};
+  for (const [k, v] of Object.entries(req.query)) {
+    if (typeof v === "string") query[k] = v;
+  }
+
+  let authResult: { subject: string; profile: { firstName: string; lastName: string; email: string; phone: string } };
+  try {
+    authResult = await provider.completeRedirect(query);
+  } catch (err) {
+    console.error("OIDC-Anmeldung abgebrochen:", err);
+    res.status(401).json({ error: "Anmeldung fehlgeschlagen." });
+    return;
+  }
+
+  const { subject, profile } = authResult;
+  const schoolId = process.env["SCHOOL_ID"] ?? "school";
+
+  try {
+    const existing = await db
+      .select({ id: usersTable.id, role: usersTable.role, isApproved: usersTable.isApproved })
+      .from(usersTable)
+      .where(
+        and(
+          eq(usersTable.schoolId, schoolId),
+          eq(usersTable.authProvider, provider.key),
+          eq(usersTable.externalSubject, subject),
+        ),
+      )
+      .limit(1);
+
+    const userId: string = existing[0]?.id ?? crypto.randomUUID();
+    const role: UserRole = existing[0]?.role ?? getRoleForUser(subject);
+    const isApproved: boolean = existing[0]?.isApproved ?? false;
+
+    const firstName = profile.firstName || subject;
+    const lastName = profile.lastName || "";
+    const email = profile.email;
+    const phone = profile.phone;
+
+    await db
+      .insert(usersTable)
+      .values({
+        id: userId,
+        authProvider: provider.key,
+        externalSubject: subject,
+        firstName,
+        lastName,
+        email,
+        phone,
+        role,
+        isApproved,
+        schoolId,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: usersTable.id,
+        set: { firstName, lastName, email, updatedAt: new Date() },
+      });
+
+    if (!isApproved) {
+      res.status(403).json({ error: "Dein Account wartet auf Freischaltung durch einen Administrator." });
+      return;
+    }
+
+    const sessionToken = await createSession(userId);
+    res.cookie(SESSION_COOKIE, sessionToken, sessionCookieOptions());
+
+    // Kein eigener Anmeldebildschirm fuer OIDC in dieser Version (Schritt 7).
+    // Der Client liest die Sitzung nach der Weiterleitung ueber GET /auth/session
+    // aus dem gerade gesetzten Cookie -- derselbe Mechanismus wie beim Reload.
+    const landingUrl = config.allowedOrigins[0] ?? "/";
+    res.redirect(landingUrl);
+  } catch (err) {
+    console.error("OIDC-Anmeldung: Kontoabgleich fehlgeschlagen:", err);
+    res.status(500).json({ error: "Anmeldung fehlgeschlagen." });
+  }
 });
 
 export default router;
