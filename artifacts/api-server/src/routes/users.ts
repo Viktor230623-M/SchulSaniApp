@@ -2,7 +2,8 @@ import { Router } from "express";
 import { eq } from "drizzle-orm";
 import { db, usersTable, type UserRole } from "@workspace/db";
 import { requireAuth, requirePermission, invalidateUserCache, type AuthRequest } from "../middlewares/auth";
-import { assertAdminReachable, logRoleChangeTx, LockoutError } from "../lib/rolePermissions";
+import { assertAdminReachable, LockoutError } from "../lib/rolePermissions";
+import { logRoleChangeTx } from "../lib/roleChangeLog";
 
 // Quelle der Rollen ist der Aufzaehlungstyp user_role (siehe
 // lib/db/src/schema/index.ts). "cto" fehlt hier: der Wert bleibt im Typ, bis

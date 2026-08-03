@@ -8,6 +8,7 @@ import {
   missionsTable,
   notificationsTable,
   reportAccessLogTable,
+  roleChangeLogTable,
   sessionsTable,
 } from "@workspace/db";
 import { computeCutoffs } from "../lib/retentionRules";
@@ -80,6 +81,12 @@ export async function runRetention(now: Date = new Date()): Promise<RetentionRes
     .where(lt(reportAccessLogTable.createdAt, cutoffs.accessLog))
     .returning({ id: reportAccessLogTable.id });
   results.push({ table: "report_access_log", action: "deleted", count: accessLog.length });
+
+  const roleChanges = await db
+    .delete(roleChangeLogTable)
+    .where(lt(roleChangeLogTable.createdAt, cutoffs.roleChangeLog))
+    .returning({ id: roleChangeLogTable.id });
+  results.push({ table: "role_change_log", action: "deleted", count: roleChanges.length });
 
   // Einsatzhistorie wird anonymisiert, nicht geloescht: die Statistik bleibt
   // erhalten, der Personenbezug entfaellt.

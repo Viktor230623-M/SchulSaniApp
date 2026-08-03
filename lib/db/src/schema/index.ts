@@ -201,6 +201,23 @@ export const dbConsoleLogTable = pgTable("db_console_log", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Wer hat wann welche Rolle oder welche Rollenberechtigung geaendert.
+// Erforderlich fuer den Rechenschaftsnachweis nach Art. 5 Abs. 2 DSGVO: eine
+// solche Aenderung steuert faktisch den Zugriff auf Gesundheitsdaten.
+// Aufbewahrung 12 Monate, wie report_access_log.
+export const roleChangeLogTable = pgTable("role_change_log", {
+  id: text("id").primaryKey(),
+  actorId: text("actor_id").notNull(),
+  actorName: text("actor_name"),
+  roleId: text("role_id"),
+  roleKey: text("role_key"),
+  targetUserId: text("target_user_id"),
+  action: text("action").notNull(), // create | rename | delete | set_permissions | assign_role | delete_user
+  permissionsBefore: json("permissions_before"),
+  permissionsAfter: json("permissions_after"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (t) => [index("role_change_log_created_idx").on(t.createdAt)]);
+
 // Wer hat wann welches Einsatzprotokoll gelesen. Erforderlich fuer den
 // Rechenschaftsnachweis nach Art. 5 Abs. 2 DSGVO. Aufbewahrung 12 Monate.
 export const reportAccessLogTable = pgTable("report_access_log", {

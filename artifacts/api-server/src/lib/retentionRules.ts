@@ -25,6 +25,8 @@ export interface RetentionCutoffs {
   consoleLog: Date;
   /** Zugriffsprotokolle der Anwendung: 12 Monate. */
   accessLog: Date;
+  /** Protokoll von Rollenaenderungen: 12 Monate, wie report_access_log. */
+  roleChangeLog: Date;
   /** Sitzungen: 30 Tage nach Widerruf. */
   sessionsRevoked: Date;
 }
@@ -57,6 +59,7 @@ export function computeCutoffs(now: Date): RetentionCutoffs {
     activityLogAnonymize: minusMonths(now, 24),
     consoleLog: minusMonths(now, 12),
     accessLog: minusMonths(now, 12),
+    roleChangeLog: minusMonths(now, 12),
     sessionsRevoked: minusDays(now, 30),
   };
 }

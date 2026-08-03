@@ -117,19 +117,3 @@ export async function roleHasPermission(roleId: string, permission: string): Pro
   return rows.length > 0;
 }
 
-export interface RoleChangeEntry {
-  actorId: string;
-  roleId?: string;
-  targetUserId?: string;
-  action: string;
-  before: unknown;
-  after: unknown;
-}
-
-/**
- * Vorlaeufig ohne Rumpf. Die Tabelle role_change_log entsteht in Aufgabe 13;
- * die Aufrufer stehen bereits richtig und aendern sich dann nicht mehr.
- */
-export async function logRoleChangeTx(_tx: Tx, _entry: RoleChangeEntry): Promise<void> {
-  // Tabelle folgt in Aufgabe 13.
-}
