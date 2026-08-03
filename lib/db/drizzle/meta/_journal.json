@@ -22,6 +22,13 @@
       "when": 1785759908047,
       "tag": "0002_rollen_und_rechte",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1785774524198,
+      "tag": "0003_rollenprotokoll_migration",
+      "breakpoints": true
     }
   ]
 }
