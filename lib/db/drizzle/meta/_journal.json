@@ -15,6 +15,13 @@
       "when": 1785627617855,
       "tag": "0001_sicht_und_kommentare",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785759908047,
+      "tag": "0002_rollen_und_rechte",
+      "breakpoints": true
     }
   ]
 }
