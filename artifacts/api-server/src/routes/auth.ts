@@ -1,6 +1,4 @@
 import * as fs from "node:fs";
-import * as https from "https";
-import * as http from "http";
 import { Router } from "express";
 import jwt from "jsonwebtoken";
 import rateLimit from "express-rate-limit";
@@ -10,6 +8,7 @@ import { permissionsForRole } from "../lib/rolePermissions";
 import { requireAuth, type AuthRequest } from "../middlewares/auth";
 import { createSession, resolveSession, revokeSession } from "../lib/sessions";
 import { config } from "../config";
+import { createIservFormProvider } from "../auth/providers/iservForm";
 
 const router = Router();
 
@@ -50,11 +49,15 @@ if (JWT_SECRET.length < 32) {
   throw new Error("JWT_SECRET must be at least 32 characters long");
 }
 
-const ISERV_BASE = config.iservBaseUrl;
-
-const EMAIL_DOMAIN = config.emailDomain;
-
-const UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1 SchulSanitaeter/1.0";
+// Der Bestandsweg (IServ-Formular) ist hinter dem Adapter-Interface in
+// ../auth gekapselt. Basis-URL und Mail-Domain sind Adapterzustand statt
+// Modulkonstanten -- unveraendertes Verhalten gegenueber dem frueheren Code.
+const primaryAuthProvider = createIservFormProvider({
+  key: "iserv-form",
+  displayName: "IServ",
+  iservBaseUrl: config.iservBaseUrl,
+  emailDomain: config.emailDomain,
+});
 
 // Roles are always resolved from the database after login.
 // There is no hardcoded username→role mapping — all roles are stored in the DB.
@@ -83,121 +86,6 @@ function isUserRole(value: string): value is UserRole {
 function getRoleForUser(username: string): UserRole {
   const mapped = BOOTSTRAP_ROLE_MAP[username.toLowerCase().trim()];
   return mapped !== undefined && isUserRole(mapped) ? mapped : "sanitaeter";
-}
-
-interface HttpResponse {
-  status: number;
-  headers: http.IncomingHttpHeaders;
-  rawHeaders: string[];
-  body: string;
-  location: string;
-}
-
-function httpRequest(method: "GET" | "POST", urlStr: string, reqHeaders: Record<string, string> = {}, body?: string): Promise<HttpResponse> {
-  return new Promise((resolve, reject) => {
-    const url = new URL(urlStr);
-    const lib = url.protocol === "https:" ? https : http;
-    const options: https.RequestOptions = {
-      hostname: url.hostname,
-      port: url.port ? Number(url.port) : url.protocol === "https:" ? 443 : 80,
-      path: url.pathname + url.search,
-      method,
-      headers: { ...reqHeaders, ...(body ? { "Content-Length": Buffer.byteLength(body).toString() } : {}) },
-    };
-    const req = lib.request(options, (res) => {
-      const chunks: Buffer[] = [];
-      res.on("data", (chunk: Buffer) => chunks.push(chunk));
-      res.on("end", () => {
-        const rawLoc = res.headers["location"];
-        const location = Array.isArray(rawLoc) ? rawLoc[0] : (rawLoc ?? "");
-        resolve({ status: res.statusCode ?? 0, headers: res.headers, rawHeaders: res.rawHeaders, body: Buffer.concat(chunks).toString("utf-8"), location });
-      });
-    });
-    req.on("error", reject);
-    if (body) req.write(body);
-    req.end();
-  });
-}
-
-function extractSetCookies(rawHeaders: string[]): Record<string, string> {
-  const result: Record<string, string> = {};
-  for (let i = 0; i < rawHeaders.length - 1; i++) {
-    if (rawHeaders[i].toLowerCase() === "set-cookie") {
-      const cookieStr = rawHeaders[i + 1];
-      const kv = cookieStr.split(";")[0]?.trim() ?? "";
-      const eq2 = kv.indexOf("=");
-      if (eq2 > 0) result[kv.slice(0, eq2).trim()] = kv.slice(eq2 + 1).trim();
-    }
-  }
-  return result;
-}
-
-function buildCookieHeader(cookies: Record<string, string>): string {
-  return Object.entries(cookies).map(([k, v]) => `${k}=${v}`).join("; ");
-}
-
-function resolveUrl(base: string, location: string): string {
-  if (location.startsWith("http://") || location.startsWith("https://")) return location;
-  const b = new URL(base);
-  return `${b.protocol}//${b.host}${location}`;
-}
-
-async function iServAuth(username: string, password: string): Promise<{ firstName: string; lastName: string; email: string; phone: string }> {
-  let cookies: Record<string, string> = {};
-  let loginFormUrl = `${ISERV_BASE}/iserv/app/login`;
-
-  for (let i = 0; i < 6; i++) {
-    const resp = await httpRequest("GET", loginFormUrl, { "User-Agent": UA, "Accept": "text/html,application/xhtml+xml,*/*", "Cookie": buildCookieHeader(cookies) });
-    Object.assign(cookies, extractSetCookies(resp.rawHeaders));
-    if (resp.status === 301 || resp.status === 302) loginFormUrl = resolveUrl(loginFormUrl, resp.location);
-    else if (resp.status === 200) break;
-    else throw new Error(`IServ antwortet nicht (${resp.status})`);
-  }
-
-  if (!cookies["IServAuthSession"]) throw new Error("IServ-Sitzung konnte nicht gestartet werden.");
-
-  const formBody = new URLSearchParams({ _username: username, _password: password }).toString();
-  const loginResp = await httpRequest("POST", loginFormUrl, { "Content-Type": "application/x-www-form-urlencoded", "User-Agent": UA, "Cookie": buildCookieHeader(cookies), "Referer": loginFormUrl, "Accept": "text/html,application/xhtml+xml,*/*" }, formBody);
-  Object.assign(cookies, extractSetCookies(loginResp.rawHeaders));
-
-  if (loginResp.status === 200) throw new Error("Ungültige Zugangsdaten");
-  if (loginResp.status !== 302) throw new Error(`Unerwartete Antwort vom Server (${loginResp.status})`);
-
-  const postRedirectLoc = loginResp.location;
-  if (postRedirectLoc.includes("/auth/login") || postRedirectLoc.includes("error") || postRedirectLoc.includes("login?")) throw new Error("Ungültige Zugangsdaten");
-
-  let nextUrl = resolveUrl(loginFormUrl, postRedirectLoc);
-  for (let i = 0; i < 6; i++) {
-    const resp = await httpRequest("GET", nextUrl, { "User-Agent": UA, "Cookie": buildCookieHeader(cookies), "Accept": "text/html,*/*" });
-    Object.assign(cookies, extractSetCookies(resp.rawHeaders));
-    if (resp.status === 301 || resp.status === 302) nextUrl = resolveUrl(nextUrl, resp.location);
-    else break;
-  }
-
-  let firstName = "";
-  let lastName = "";
-  let email = `${username}@${EMAIL_DOMAIN}`;
-  const phone = "";
-
-  try {
-    const profileResp = await httpRequest("GET", `${ISERV_BASE}/iserv/profile`, { "User-Agent": UA, "Cookie": buildCookieHeader(cookies), "Accept": "text/html,*/*" });
-    if (profileResp.status === 200) {
-      const html = profileResp.body;
-      const h1Match = html.match(/<h1[^>]*>\s*([^<]+)\s*<\/h1>/);
-      if (h1Match?.[1]) {
-        const fullName = h1Match[1].trim();
-        if (fullName && !fullName.toLowerCase().includes("iserv") && fullName.length < 60) {
-          const parts = fullName.split(/\s+/);
-          firstName = parts.slice(0, -1).join(" ") || parts[0] || username;
-          lastName = parts.length > 1 ? (parts[parts.length - 1] ?? "") : "";
-        }
-      }
-      const emailMatch = html.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
-      if (emailMatch?.[1]) email = emailMatch[1];
-    }
-  } catch {}
-
-  return { firstName, lastName, email, phone };
 }
 
 // Baut die Nutzerprojektion, wie sie sowohl Login als auch Sitzungswiederherstellung
@@ -231,11 +119,11 @@ router.post("/login", authLimiter, async (req, res) => {
 
   let firstName = cleanUsername.split(".")[0] || cleanUsername;
   let lastName = cleanUsername.split(".").slice(1).join(" ") || "";
-  let email = `${cleanUsername}@${EMAIL_DOMAIN}`;
+  let email = `${cleanUsername}@${config.emailDomain}`;
   let phone = "";
 
   try {
-    const profile = await iServAuth(cleanUsername, password);
+    const { profile } = await primaryAuthProvider.authenticate({ username: cleanUsername, password });
     if (profile.firstName) firstName = profile.firstName;
     if (profile.lastName) lastName = profile.lastName;
     if (profile.email) email = profile.email;
