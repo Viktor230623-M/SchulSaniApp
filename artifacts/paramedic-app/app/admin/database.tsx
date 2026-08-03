@@ -16,7 +16,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useTopPad } from "@/hooks/useTopPad";
 import { getTheme } from "@/constants/theme";
-import { OWNER_USER_ID } from "@/constants/appConfig";
 import type { DbConsoleResult, SqlPreset } from "@/models";
 import { confirmAction, notify } from "@/lib/dialog";
 import ApiService from "@/services/ApiService";
@@ -29,7 +28,7 @@ export default function DatabaseConsoleScreen() {
   const themeKey = useAppStore((s) => s.theme);
   const theme = getTheme(themeKey);
   const user = useAppStore((s) => s.user);
-  const isOwner = user?.id === OWNER_USER_ID;
+  const isOwner = user?.isOwnerAccount ?? false;
 
   const [presets, setPresets] = useState<SqlPreset[]>([]);
   const [tables, setTables] = useState<{ table: string; approx_rows: number }[]>([]);

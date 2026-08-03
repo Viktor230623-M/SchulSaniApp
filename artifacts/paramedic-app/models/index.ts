@@ -17,6 +17,8 @@ export interface User {
   role: UserRole;
   schoolId: string;
   isApproved?: boolean;
+  /** Serverseitig berechnet: Konto mit Zugriff auf die SQL-Konsole. */
+  isOwnerAccount?: boolean;
   avatarUri?: string;
   createdAt: string;
   updatedAt: string;

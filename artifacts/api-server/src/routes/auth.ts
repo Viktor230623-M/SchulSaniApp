@@ -207,8 +207,9 @@ async function buildUserResponse(user: { id: string; firstName: string | null; l
   // Die Rechte kommen mit der Anmeldeantwort, damit der Client nicht mehr aus
   // dem Rollennamen ableiten muss, was sichtbar ist.
   const permissions = await permissionsForRole(user.role, null);
+  const isOwnerAccount = config.ownerUserId !== undefined && user.id === config.ownerUserId;
   return {
-    user: { id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email, role: user.role },
+    user: { id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email, role: user.role, isOwnerAccount },
     permissions,
     isTealUnlocked: user.role === "owner",
   };
