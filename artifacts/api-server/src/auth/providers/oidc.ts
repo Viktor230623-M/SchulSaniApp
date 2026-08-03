@@ -46,6 +46,8 @@ export interface OidcRedirectProviderConfig {
   redirectUri: string;
   /** Ohne Angabe: "openid email profile". "openid" wird immer erzwungen. */
   scopes?: string[];
+  /** Anspruch im ID-Token, der die Gruppen traegt. Ohne Angabe: "groups". */
+  groupsClaim?: string;
 }
 
 function generateCodeVerifier(): string {
@@ -214,9 +216,18 @@ export function createOidcRedirectProvider(cfg: OidcRedirectProviderConfig): Red
       const firstName = typeof payload["given_name"] === "string" ? payload["given_name"] : "";
       const lastName = typeof payload["family_name"] === "string" ? payload["family_name"] : "";
 
+      // Anbieter liefern den Anspruch entweder als Liste oder, seltener, als
+      // einzelnen Wert. Alles andere zaehlt als keine Gruppe.
+      const rawGroups = payload[cfg.groupsClaim ?? "groups"];
+      const groups = Array.isArray(rawGroups)
+        ? rawGroups.filter((g): g is string => typeof g === "string")
+        : typeof rawGroups === "string"
+          ? [rawGroups]
+          : [];
+
       return {
         subject: sub,
-        profile: { firstName, lastName, email, phone: "" },
+        profile: { firstName, lastName, email, phone: "", groups },
       };
     },
   };

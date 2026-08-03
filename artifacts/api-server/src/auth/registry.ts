@@ -24,6 +24,8 @@ interface RawOidcRedirectProviderConfig {
   clientSecret?: string;
   redirectUri: string;
   scopes?: string[];
+  /** Anspruch im ID-Token mit den Gruppen. Ohne Angabe: "groups". */
+  groupsClaim?: string;
   /** Gruppe-zu-Rolle-Abbildung dieses Anbieters, siehe ../types.ts (AuthProviderBase). */
   groupToRoleMap?: Record<string, string>;
 }
@@ -77,6 +79,7 @@ function buildProvider(raw: RawProviderConfig): AuthProvider {
         clientSecret: raw.clientSecret,
         redirectUri: raw.redirectUri,
         scopes: raw.scopes,
+        groupsClaim: raw.groupsClaim,
       }),
       groupToRoleMap,
     };
