@@ -8,7 +8,8 @@ import { permissionsForRole } from "../lib/rolePermissions";
 import { requireAuth, type AuthRequest } from "../middlewares/auth";
 import { createSession, resolveSession, revokeSession } from "../lib/sessions";
 import { config } from "../config";
-import { createIservFormProvider } from "../auth/providers/iservForm";
+import { loadAuthProviders } from "../auth/registry";
+import type { PasswordAuthProvider } from "../auth/types";
 
 const router = Router();
 
@@ -49,15 +50,16 @@ if (JWT_SECRET.length < 32) {
   throw new Error("JWT_SECRET must be at least 32 characters long");
 }
 
-// Der Bestandsweg (IServ-Formular) ist hinter dem Adapter-Interface in
-// ../auth gekapselt. Basis-URL und Mail-Domain sind Adapterzustand statt
-// Modulkonstanten -- unveraendertes Verhalten gegenueber dem frueheren Code.
-const primaryAuthProvider = createIservFormProvider({
-  key: "iserv-form",
-  displayName: "IServ",
-  iservBaseUrl: config.iservBaseUrl,
-  emailDomain: config.emailDomain,
-});
+// Anmeldewege dieser Installation, siehe ../auth/registry. Ohne konfigurierte
+// Liste bleibt es bei genau einem Eintrag mit den Werten dieser Konfiguration
+// -- unveraendertes Verhalten gegenueber dem frueheren Modulzustand.
+const authProviders = loadAuthProviders();
+const primaryAuthProvider = authProviders.find(
+  (p): p is PasswordAuthProvider => p.type === "iserv-form",
+);
+if (!primaryAuthProvider) {
+  throw new Error("Kein passwortbasierter Anmeldeweg konfiguriert.");
+}
 
 // Roles are always resolved from the database after login.
 // There is no hardcoded username→role mapping — all roles are stored in the DB.
