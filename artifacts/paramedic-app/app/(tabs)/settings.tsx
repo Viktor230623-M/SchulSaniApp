@@ -833,7 +833,7 @@ const styles = StyleSheet.create({
   adminEmptyRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8 },
   adminEmptyIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: "#DCFCE7", alignItems: "center", justifyContent: "center" },
   pendingCard: { borderRadius: 12, borderWidth: 1.5, padding: 12, gap: 10 },
-  pendingStatusPill: { backgroundColor: "#FEF3C7", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+  pendingStatusPill: { backgroundColor: "#FEF3C7", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: "#F59E0B33" },
   pendingStatusText: { fontSize: 10, fontFamily: "Inter_600SemiBold", color: "#B45309" },
   adminCard: { borderRadius: 12, borderWidth: 1, padding: 12, gap: 10 },
   adminCardHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
