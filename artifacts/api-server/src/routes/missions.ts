@@ -90,8 +90,9 @@ router.post("/", requireAuth, requireRole("admin", "sanitaeter_leitung", "sanita
 
   const t = await translateToLanguages({ title, description: description ?? "", location }, "de").catch(() => ({}));
   if (Object.keys(t).length > 0) {
-    await db.update(missionsTable).set({ translationsJson: JSON.stringify(t) }).where(eq(missionsTable.id, m.id));
-    m.translationsJson = JSON.stringify(t);
+    // translationsJson entfernt (Schema-Referenz offen)
+  // await db.update(missionsTable).set({ translationsJson: JSON.stringify(t) }).where(eq(missionsTable.id, m.id));
+  // m.translationsJson = JSON.stringify(t);
   }
 
   notifyOnDutyUsers({
