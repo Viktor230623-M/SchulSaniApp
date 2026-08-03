@@ -116,3 +116,4 @@ nach 12 Monaten.
 
 Privates Projekt für den Schulsanitätsdienst einer einzelnen Schule. Kein
 öffentlicher Support, keine Garantie auf Weiterentwicklung oder Kompatibilität.
+Status: Dieses Projekt (SchulSaniApp) wird weiterentwickelt. Es ist nicht fraglich, ob es weiterentwickelt wird.
