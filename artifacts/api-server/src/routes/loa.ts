@@ -9,15 +9,15 @@ import { translateToLanguages } from "../services/translator";
 const router = Router();
 
 router.get("/", requireAuth, async (req: AuthRequest, res) => {
-  const { userId, role } = req.user!;
-  const canSeeAll = ["admin", "teacher", "sanitaeter_leitung", "sanitaeter_leitung_admin", "owner"].includes(role);
+  const { userId } = req.user!;
+  const canSeeAll = (req.user!.permissions ?? []).includes("loa.moderate");
   const items = canSeeAll
     ? await db.select().from(loaTable).orderBy(desc(loaTable.createdAt))
     : await db.select().from(loaTable).where(eq(loaTable.userId, userId)).orderBy(desc(loaTable.createdAt));
   res.json(items);
 });
 
-router.post("/", requireAuth, async (req: AuthRequest, res) => {
+router.post("/", requireAuth, requirePermission("loa.create"), async (req: AuthRequest, res) => {
   const { userId } = req.user!;
   const { fromDate, toDate, reason } = req.body;
   if (!fromDate || !toDate || !reason) {

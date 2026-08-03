@@ -152,8 +152,7 @@ router.post("/:id/complete", requireAuth, async (req: AuthRequest, res) => {
   if (!existing) { res.status(404).json({ error: "Not found" }); return; }
 
   const userId = req.user!.userId;
-  const role = req.user!.role;
-  const isLeadership = ["admin", "sanitaeter_leitung", "sanitaeter_leitung_admin", "owner", "teacher"].includes(role);
+  const isLeadership = (req.user!.permissions ?? []).includes("missions.view_all");
   const isAssignedResponder = existing.assignedParamedicId === userId;
   if (!isLeadership && !isAssignedResponder) {
     res.status(403).json({ error: "Forbidden – only the assigned responder or leadership can complete this mission" });
