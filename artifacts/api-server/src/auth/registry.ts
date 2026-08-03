@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import { config } from "../config";
 import { createIservFormProvider } from "./providers/iservForm";
+import { createOidcRedirectProvider } from "./providers/oidc";
 import type { AuthProvider } from "./types";
 
 interface RawIservFormProviderConfig {
@@ -15,7 +16,11 @@ interface RawOidcRedirectProviderConfig {
   key: string;
   displayName: string;
   type: "oidc-redirect";
-  [extra: string]: unknown;
+  issuerUrl: string;
+  clientId: string;
+  clientSecret?: string;
+  redirectUri: string;
+  scopes?: string[];
 }
 
 type RawProviderConfig = RawIservFormProviderConfig | RawOidcRedirectProviderConfig;
@@ -50,11 +55,25 @@ function buildProvider(raw: RawProviderConfig): AuthProvider {
     });
   }
 
-  // Der weiterleitungsbasierte Weg (OIDC) ist bisher nur im Interface
-  // vorgesehen (siehe types.ts) und noch nicht implementiert. Eine
-  // Konfiguration dieses Typs darf nicht stillschweigend ignoriert werden.
+  if (raw.type === "oidc-redirect") {
+    if (!raw.key || !raw.displayName || !raw.issuerUrl || !raw.clientId || !raw.redirectUri) {
+      throw new Error(
+        `Anmeldeweg "${raw.key ?? "?"}" ist unvollstaendig konfiguriert (key, displayName, issuerUrl, clientId, redirectUri erforderlich).`,
+      );
+    }
+    return createOidcRedirectProvider({
+      key: raw.key,
+      displayName: raw.displayName,
+      issuerUrl: raw.issuerUrl,
+      clientId: raw.clientId,
+      clientSecret: raw.clientSecret,
+      redirectUri: raw.redirectUri,
+      scopes: raw.scopes,
+    });
+  }
+
   throw new Error(
-    `Anmeldeweg "${raw.key}" hat den Typ "${raw.type}", der ist in dieser Version noch nicht implementiert.`,
+    `Anmeldeweg "${(raw as { key?: string }).key ?? "?"}" hat einen unbekannten Typ.`,
   );
 }
 
