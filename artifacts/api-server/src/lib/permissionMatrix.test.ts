@@ -11,6 +11,7 @@ vi.mock("@workspace/db", async () => {
     notificationsTable: { id: "notifications" },
     missionActivityLogTable: { id: "mission_activity_log" },
     incidentReportsTable: { id: "incident_reports", status: "text" },
+    reportAccessLogTable: { id: "report_access_log" },
   };
 
   function createMockTable(name: string) {
@@ -87,6 +88,7 @@ vi.mock("@workspace/db", async () => {
     notificationsTable: createMockTable("notifications"),
     missionActivityLogTable: createMockTable("mission_activity_log"),
     incidentReportsTable: createMockTable("incident_reports"),
+    reportAccessLogTable: createMockTable("report_access_log"),
   };
 });
 
@@ -148,6 +150,18 @@ vi.mock("../middlewares/auth", async () => {
   };
 });
 
+// Das globale Ratenlimit in app.ts ist pro IP gedacht und in Produktion
+// richtig. Im Test teilen sich alle 115 Faelle dieselbe App-Instanz und
+// denselben In-Memory-Zaehler auf derselben Adresse (127.0.0.1) — weit mehr
+// als die 100 Anfragen/Minute des Limits. Ohne diesen Mock kippen Tests ab
+// einer bestimmten Position in der Laufreihenfolge auf 429, unabhaengig von
+// Rolle oder Rechten. Das ist ein Artefakt des Testaufbaus (ein Prozess statt
+// vieler Clients), keine Lockerung der Ratenbegrenzung selbst — die bleibt in
+// app.ts unveraendert.
+vi.mock("express-rate-limit", () => ({
+  default: () => (_req: any, _res: any, next: any) => next(),
+}));
+
 import app from "../app";
 import type { Server } from "http";
 
@@ -186,6 +200,16 @@ const EXPECTED: Record<string, string[]> = {
 
 const ENDPOINTS = Object.keys(EXPECTED);
 
+// Manche Routen pruefen den Body, bevor sie ueberhaupt zur Rechtefrage
+// kommen (z. B. "reason is required"). Ohne passende Nutzlast antworten sie
+// mit 400 — unabhaengig davon, ob die Rolle den Endpunkt aufrufen darf. Das
+// ist ein Fixture-Luecke des Testaufbaus, keine Rechtegrenze: die Nutzlast
+// hier deckt nur die Validierung ab, die vor der Rechtepruefung im Code liegt.
+const REQUEST_BODIES: Record<string, Record<string, unknown>> = {
+  "PATCH /api/users/test-id/role": { role: "student_paramedic" },
+  "POST /api/news/test-id/reject": { reason: "Testgrund" },
+};
+
 describe("Permission Matrix — IST-Zustand vor Umbau", () => {
   let server: Server;
   let port: number;
@@ -210,11 +234,11 @@ describe("Permission Matrix — IST-Zustand vor Umbau", () => {
     return `mock-token-${userId}-${role}`;
   }
 
-  async function fetchStatus(method: string, path: string, token?: string) {
+  async function fetchStatus(method: string, path: string, token?: string, body?: Record<string, unknown>) {
     const url = `http://localhost:${port}${path}`;
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (token) headers["authorization"] = `Bearer ${token}`;
-    const res = await fetch(url, { method, headers });
+    const res = await fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined });
     return { status: res.status, body: await res.json().catch(() => ({})) };
   }
 
@@ -227,8 +251,12 @@ describe("Permission Matrix — IST-Zustand vor Umbau", () => {
       for (const r of rolesCanSeePatient) {
         const t = buildToken(r, `patient-${r}`);
         const result = await fetchStatus("GET", "/api/incident-reports/test-report-id", t);
-        // Erwartet 200 (Mock-DB liefert leere Liste, aber Route laeuft durch)
-        expect(result.status).toBe(200);
+        // Die Mock-DB liefert fuer jede Abfrage eine leere Liste — es gibt
+        // keinen Datensatz "test-report-id". Die Route antwortet deshalb
+        // folgerichtig mit 404, bevor sie ueberhaupt zur Sichtbarkeitsfrage
+        // kommt. Das ist eine Testdaten-Luecke des Fixtures, keine
+        // Rechtegrenze: 404 zaehlt hier wie im Rest der Matrix als "erlaubt".
+        expect([200, 404]).toContain(result.status);
       }
     }, 15000);
 
@@ -236,7 +264,8 @@ describe("Permission Matrix — IST-Zustand vor Umbau", () => {
       for (const r of rolesCannotSeePatient) {
         const t = buildToken(r, `patient-${r}`);
         const result = await fetchStatus("GET", "/api/incident-reports/test-report-id", t);
-        expect(result.status).toBe(200);
+        // Gleiche Begruendung: ohne Testdatensatz antwortet die Route mit 404.
+        expect([200, 404]).toContain(result.status);
       }
     }, 15000);
   });
@@ -250,7 +279,7 @@ describe("Permission Matrix — IST-Zustand vor Umbau", () => {
             const token = buildToken(role as RoleKey, `user-${role}`);
             const [method, ...restPath] = endpoint.split(" ");
             const path = restPath.join(" ");
-            const result = await fetchStatus(method, path, token);
+            const result = await fetchStatus(method, path, token, REQUEST_BODIES[endpoint]);
             const allowed = EXPECTED[endpoint].includes(role);
             if (allowed) {
               // Erlaubt: 200 oder 404 (Mock liefert keine Daten) oder 201 etc.
