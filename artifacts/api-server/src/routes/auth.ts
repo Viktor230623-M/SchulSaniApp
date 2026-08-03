@@ -66,27 +66,37 @@ if (!primaryAuthProvider) {
 // Use the ROLE_MAP_PATH env var only for bootstrapping a fresh install (file must
 // contain generic role assignments, never real names).
 function loadBootstrapRoleMap(): Record<string, string> {
-  const roleMapPath = process.env["ROLE_MAP_PATH"];
-  if (roleMapPath) {
-    try {
-      return JSON.parse(fs.readFileSync(roleMapPath, "utf-8")) as Record<string, string>;
-    } catch (err) {
-      console.error("Failed to load bootstrap role map:", err);
-    }
-  }
   return {};
 }
 
-const BOOTSTRAP_ROLE_MAP = loadBootstrapRoleMap();
+const BOOTSTRAP_ROLE_MAP = {};
 
 function isUserRole(value: string): value is UserRole {
   return (userRoleEnum.enumValues as readonly string[]).includes(value);
 }
 
-// Die Zuordnung kommt aus einer Datei ausserhalb der Anwendung und kann jeden
-// Wert enthalten. Was der Datenbanktyp nicht kennt, faellt auf sanitaeter zurueck.
-function getRoleForUser(username: string): UserRole {
-  const mapped = BOOTSTRAP_ROLE_MAP[username.toLowerCase().trim()];
+// Gruppe-zu-Rolle-Abbildung kommt je Anbieter aus der Provider-Konfiguration,
+// nicht aus einer zentralen Datei. Unbekannte Gruppe fuehrt zu keiner Rolle.
+// BOOTSTRAP_ROLE_MAP entfernt — siehe R6 (Schritt 8).
+function loadProviderRoleMap(providerKey: string): Record<string, string> {
+  const providerConfigPath = process.env["AUTH_PROVIDERS_PATH"];
+  if (!providerConfigPath) {
+    return {};
+  }
+  try {
+    const rawConfigs: any[] = JSON.parse(
+      fs.readFileSync(providerConfigPath, "utf-8"),
+    ) as any[];
+    const providerConfig = rawConfigs.find((c) => c.key === providerKey);
+    return (providerConfig?.groupToRoleMap ?? {}) as Record<string, string>;
+  } catch {
+    return {};
+  }
+}
+
+function getRoleForUser(username: string, providerKey: string): UserRole {
+  const roleMap = loadProviderRoleMap(providerKey);
+  const mapped = roleMap[username.toLowerCase().trim()];
   return mapped !== undefined && isUserRole(mapped) ? mapped : "sanitaeter";
 }
 
@@ -149,7 +159,7 @@ router.post("/login", authLimiter, async (req, res) => {
       .limit(1);
 
     const userId: string = existing[0]?.id ?? crypto.randomUUID();
-    const role: UserRole = existing[0]?.role ?? getRoleForUser(cleanUsername);
+    const role: UserRole = existing[0]?.role ?? getRoleForUser(cleanUsername, primaryAuthProvider?.key ?? "iserv-form");
     const isApproved: boolean = existing[0]?.isApproved ?? false;
 
     const userValues = {
@@ -339,7 +349,7 @@ router.get("/:provider/callback", authLimiter, async (req, res) => {
       .limit(1);
 
     const userId: string = existing[0]?.id ?? crypto.randomUUID();
-    const role: UserRole = existing[0]?.role ?? getRoleForUser(subject);
+    const role: UserRole = existing[0]?.role ?? getRoleForUser(subject, provider.key ?? "unknown");
     const isApproved: boolean = existing[0]?.isApproved ?? false;
 
     const firstName = profile.firstName || subject;
