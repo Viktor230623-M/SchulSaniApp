@@ -253,5 +253,29 @@ export type DbConsoleLog = typeof dbConsoleLogTable.$inferSelect;
 export type NewDbConsoleLog = typeof dbConsoleLogTable.$inferInsert;
 export type ReportAccessLog = typeof reportAccessLogTable.$inferSelect;
 export type NewReportAccessLog = typeof reportAccessLogTable.$inferInsert;
+export const rolesTable = pgTable("roles", {
+  id: text("id").primaryKey(),
+  schoolId: text("school_id"),
+  key: text("key").notNull(),
+  displayName: text("display_name").notNull(),
+  displayNameEn: text("display_name_en"),
+  color: text("color"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  isSystem: boolean("is_system").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => [unique("roles_school_id_key_key").on(t.schoolId, t.key)]);
+
+export const rolePermissionsTable = pgTable("role_permissions", {
+  id: text("id").primaryKey(),
+  roleId: text("role_id").notNull().references(() => rolesTable.id, { onDelete: "cascade" }),
+  permission: text("permission").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [unique("role_permissions_role_id_permission_key").on(t.roleId, t.permission)]);
+
+export type Role = typeof rolesTable.$inferSelect;
+export type NewRole = typeof rolesTable.$inferInsert;
+export type RolePermission = typeof rolePermissionsTable.$inferSelect;
+
 export type Session = typeof sessionsTable.$inferSelect;
 export type NewSession = typeof sessionsTable.$inferInsert;
