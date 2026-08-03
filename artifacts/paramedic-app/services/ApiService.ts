@@ -9,6 +9,7 @@ import type {
   MissionPriority,
   NewsItem,
   NotificationItem,
+  RoleInfo,
   User,
   SqlPreset,
   DbConsoleResult,
@@ -313,6 +314,15 @@ const ApiService = {
     if (!resp.ok) {
       const data = await resp.json().catch(() => ({}));
       throw new Error(data.error ?? "Benutzer konnten nicht geladen werden");
+    }
+    return resp.json();
+  },
+
+  async getRoles(): Promise<RoleInfo[]> {
+    const resp = await apiFetch(`${API_BASE}/roles`, { headers: headers() });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      throw new Error(data.error ?? "Rollen konnten nicht geladen werden");
     }
     return resp.json();
   },

@@ -26,6 +26,17 @@ export interface User {
   updatedAt: string;
 }
 
+/** Zeile aus GET /roles — Anzeigename und Farbe kommen aus der Datenbank, nicht mehr fest kodiert. */
+export interface RoleInfo {
+  id: string;
+  key: string;
+  displayName: string;
+  displayNameEn: string | null;
+  color: string | null;
+  sortOrder: number;
+  isSystem: boolean;
+}
+
 export type MissionStatus = "pending" | "accepted" | "rejected" | "completed" | "archived";
 export type MissionPriority = "high" | "medium" | "low";
 
