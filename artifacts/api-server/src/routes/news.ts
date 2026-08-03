@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 import { Router } from "express";
 import { desc, eq } from "drizzle-orm";
 import { db, newsTable, usersTable } from "@workspace/db";
-import { requireAuth, requireRole, type AuthRequest } from "../middlewares/auth";
+import { requireAuth, requirePermission, type AuthRequest } from "../middlewares/auth";
 import { notifySanitaeters } from "../services/notifications";
 import { translateToLanguages } from "../services/translator";
 
@@ -57,7 +57,7 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
   res.status(201).json(newItem);
 });
 
-router.post("/:id/approve", requireAuth, requireRole("admin", "teacher", "owner"), async (req, res) => {
+router.post("/:id/approve", requireAuth, requirePermission("news.moderate"), async (req, res) => {
   const [item] = await db.update(newsTable).set({ status: "approved" }).where(eq(newsTable.id, req.params.id as string)).returning();
   if (!item) { res.status(404).json({ error: "Not found" }); return; }
   
@@ -71,7 +71,7 @@ router.post("/:id/approve", requireAuth, requireRole("admin", "teacher", "owner"
   res.json(item);
 });
 
-router.post("/:id/reject", requireAuth, requireRole("admin", "teacher", "owner"), async (req, res) => {
+router.post("/:id/reject", requireAuth, requirePermission("news.moderate"), async (req, res) => {
   const { reason } = req.body as { reason?: string };
   if (!reason || !reason.trim()) {
     res.status(400).json({ error: "reason is required" });

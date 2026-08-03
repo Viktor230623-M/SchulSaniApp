@@ -68,6 +68,8 @@ const mockLiveUsers: Record<string, { role: string; isApproved: boolean }> = {};
 
 vi.mock("../middlewares/auth", async () => {
   const mockLiveCache: Record<string, { role: string; isApproved: boolean; expires: number }> = {};
+  // Echte Rechtematrix, damit der Mock nicht von den Routen abweicht.
+  const { DEFAULT_ROLE_PERMISSIONS: mockRolePermissions } = await import("./permissions");
   return {
     signToken: (payload: any) => `mock-token-${payload.userId}-${payload.role}`,
     verifyToken: (token: string) => {
@@ -102,10 +104,15 @@ vi.mock("../middlewares/auth", async () => {
       req.user = { userId, role: mockEntry.role };
       next();
     }),
-    requireRole: (...roles: string[]) => {
+    requirePermission: (...perms: string[]) => {
       return (req: any, res: any, next: any) => {
-        if (!req.user || !roles.includes(req.user.role)) {
-          res.status(403).json({ error: "Forbidden - insufficient role" });
+        if (!req.user) {
+          res.status(401).json({ error: "Unauthorized" });
+          return;
+        }
+        const granted = (mockRolePermissions[req.user.role] ?? []) as readonly string[];
+        if (!perms.every((p) => granted.includes(p))) {
+          res.status(403).json({ error: "Forbidden - missing permission" });
           return;
         }
         next();
@@ -231,8 +238,8 @@ describe("Permission Matrix — IST-Zustand vor Umbau", () => {
     }
   }, 300000);
 
-  describe("Erhebung: requireRole-Abdeckung", () => {
-    it("EXPECTED deckt jede requireRole-Stelle mindestens einmal", () => {
+  describe("Erhebung: Rollenabdeckung", () => {
+    it("EXPECTED deckt jede geschuetzte Route mindestens einmal", () => {
       // Abgleich gegen routes/*.ts durchgefuehrt in EXPECTED-Definition
       const covered = new Set();
       for (const [ep, roles] of Object.entries(EXPECTED)) {

@@ -1,12 +1,12 @@
 import { Router } from "express";
 import { eq, desc, sql } from "drizzle-orm";
 import { db, usersTable, missionActivityLogTable } from "@workspace/db";
-import { requireAuth, requireRole, type AuthRequest } from "../middlewares/auth";
+import { requireAuth, requirePermission, type AuthRequest } from "../middlewares/auth";
 
 const router = Router();
 
 // GET /activity/users - returns all users with their activity count and last activity
-router.get("/users", requireAuth, requireRole("admin", "owner", "sanitaeter_leitung", "sanitaeter_leitung_admin", "teacher"), async (_req, res) => {
+router.get("/users", requireAuth, requirePermission("activity.view"), async (_req, res) => {
   try {
     // Get all users
     const users = await db.select().from(usersTable);
@@ -69,7 +69,7 @@ router.get("/my", requireAuth, async (req: AuthRequest, res) => {
 });
 
 // GET /activity/user/:userId - returns activities for a specific user
-router.get("/user/:userId", requireAuth, requireRole("admin", "owner", "sanitaeter_leitung", "sanitaeter_leitung_admin", "teacher"), async (req: AuthRequest, res) => {
+router.get("/user/:userId", requireAuth, requirePermission("activity.view"), async (req: AuthRequest, res) => {
   try {
     const userId = req.params.userId as string;
 

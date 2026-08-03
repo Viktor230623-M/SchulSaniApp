@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 import { Router } from "express";
 import { desc, eq } from "drizzle-orm";
 import { db, loaTable, usersTable } from "@workspace/db";
-import { requireAuth, requireRole, type AuthRequest } from "../middlewares/auth";
+import { requireAuth, requirePermission, type AuthRequest } from "../middlewares/auth";
 import { notifyUser } from "../services/notifications";
 import { translateToLanguages } from "../services/translator";
 
@@ -68,7 +68,7 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
   res.status(201).json(newReq);
 });
 
-router.post("/:id/approve", requireAuth, requireRole("admin", "teacher", "sanitaeter_leitung", "sanitaeter_leitung_admin", "owner"), async (req: AuthRequest, res) => {
+router.post("/:id/approve", requireAuth, requirePermission("loa.moderate"), async (req: AuthRequest, res) => {
   const note = req.body.note;
   if (note && note.length > 500) {
     res.status(400).json({ error: "note max 500 characters" });
@@ -92,7 +92,7 @@ router.post("/:id/approve", requireAuth, requireRole("admin", "teacher", "sanita
   res.json(r);
 });
 
-router.post("/:id/reject", requireAuth, requireRole("admin", "teacher", "sanitaeter_leitung", "sanitaeter_leitung_admin", "owner"), async (req: AuthRequest, res) => {
+router.post("/:id/reject", requireAuth, requirePermission("loa.moderate"), async (req: AuthRequest, res) => {
   const reason = req.body.reason ?? "Nicht möglich.";
   if (reason.length > 500) {
     res.status(400).json({ error: "reason max 500 characters" });

@@ -54,7 +54,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, readonly PermissionKey[]> 
   ],
   sanitaeter_leitung: [
     "loa.create", "loa.moderate",
-    "missions.create", "missions.view_all", "missions.receive_alerts",
+    "missions.create", "missions.moderate", "missions.view_all", "missions.receive_alerts",
     "activity.view", "notifications.view_all",
     "reports.read_all", "reports.see_patient_info",
   ],
@@ -62,7 +62,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, readonly PermissionKey[]> 
     "users.read_all",
     "news.moderate",
     "loa.create", "loa.moderate",
-    "missions.create", "missions.view_all",
+    "missions.create", "missions.moderate", "missions.view_all",
     "activity.view",
     "reports.see_patient_info",
   ],
