@@ -71,7 +71,7 @@ router.get("/my", requireAuth, async (req: AuthRequest, res) => {
 // GET /activity/user/:userId - returns activities for a specific user
 router.get("/user/:userId", requireAuth, requireRole("admin", "owner", "sanitaeter_leitung", "sanitaeter_leitung_admin", "teacher"), async (req: AuthRequest, res) => {
   try {
-    const { userId } = req.params;
+    const userId = req.params.userId as string;
 
     const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
     if (!user) {

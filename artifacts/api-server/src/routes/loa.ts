@@ -79,7 +79,7 @@ router.post("/:id/approve", requireAuth, requireRole("admin", "teacher", "sanita
     adminNote: note ?? null,
     reviewedBy: req.user!.userId,
     reviewedAt: new Date(),
-  }).where(eq(loaTable.id, req.params["id"]!)).returning();
+  }).where(eq(loaTable.id, req.params.id as string)).returning();
   if (!r) { res.status(404).json({ error: "Not found" }); return; }
   
   notifyUser(r.userId, {
@@ -103,7 +103,7 @@ router.post("/:id/reject", requireAuth, requireRole("admin", "teacher", "sanitae
     adminNote: reason,
     reviewedBy: req.user!.userId,
     reviewedAt: new Date(),
-  }).where(eq(loaTable.id, req.params["id"]!)).returning();
+  }).where(eq(loaTable.id, req.params.id as string)).returning();
   if (!r) { res.status(404).json({ error: "Not found" }); return; }
   
   notifyUser(r.userId, {
@@ -118,7 +118,7 @@ router.post("/:id/reject", requireAuth, requireRole("admin", "teacher", "sanitae
 
 router.post("/:id/appeal", requireAuth, async (req: AuthRequest, res) => {
   const { userId } = req.user!;
-  const [existing] = await db.select().from(loaTable).where(eq(loaTable.id, req.params["id"]!));
+  const [existing] = await db.select().from(loaTable).where(eq(loaTable.id, req.params.id as string));
   if (!existing) { res.status(404).json({ error: "Not found" }); return; }
   if (existing.userId !== userId) { res.status(403).json({ error: "Forbidden" }); return; }
   const appealNote = req.body.appealNote ?? null;
@@ -129,7 +129,7 @@ router.post("/:id/appeal", requireAuth, async (req: AuthRequest, res) => {
   const [r] = await db.update(loaTable).set({
     status: "appealed",
     appealNote,
-  }).where(eq(loaTable.id, req.params["id"]!)).returning();
+  }).where(eq(loaTable.id, req.params.id as string)).returning();
   res.json(r);
 });
 

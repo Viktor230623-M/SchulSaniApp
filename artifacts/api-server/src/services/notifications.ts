@@ -237,7 +237,7 @@ async function sendExpoPushMessages(messages: any[]): Promise<void> {
         body: JSON.stringify(chunk),
       });
 
-      const result = await response.json();
+      const result = await response.json() as any;
       
       if (result.errors) {
         console.error("[push] Errors sending notifications:", result.errors);

@@ -106,10 +106,10 @@ router.post("/", requireAuth, requireRole("admin", "sanitaeter_leitung", "sanita
 });
 
 router.post("/:id/accept", requireAuth, async (req: AuthRequest, res) => {
-  const [existing] = await db.select().from(missionsTable).where(eq(missionsTable.id, req.params["id"]!));
+  const [existing] = await db.select().from(missionsTable).where(eq(missionsTable.id, req.params.id as string));
   if (!existing) { res.status(404).json({ error: "Not found" }); return; }
   if (existing.status !== "pending") { res.status(400).json({ error: "Mission is not pending" }); return; }
-  const [m] = await db.update(missionsTable).set({ status: "accepted", assignedParamedicId: req.user!.userId }).where(eq(missionsTable.id, req.params["id"]!)).returning();
+  const [m] = await db.update(missionsTable).set({ status: "accepted", assignedParamedicId: req.user!.userId }).where(eq(missionsTable.id, req.params.id as string)).returning();
   
   notifyUser(existing.requestedBy ?? "unknown", {
     type: "mission_assigned",
@@ -124,7 +124,7 @@ router.post("/:id/accept", requireAuth, async (req: AuthRequest, res) => {
 });
 
 router.post("/:id/dismiss", requireAuth, async (req: AuthRequest, res) => {
-  const missionId = req.params["id"]!;
+  const missionId = req.params.id as string;
   await addDismissal(req.user!.userId, missionId);
   const [mission] = await db.select({ title: missionsTable.title }).from(missionsTable).where(eq(missionsTable.id, missionId));
   if (mission) logMissionAction(req.user!.userId, missionId, mission.title, "dismissed").catch(console.error);
@@ -132,13 +132,13 @@ router.post("/:id/dismiss", requireAuth, async (req: AuthRequest, res) => {
 });
 
 router.post("/:id/undismiss", requireAuth, async (req: AuthRequest, res) => {
-  const missionId = req.params["id"]!;
+  const missionId = req.params.id as string;
   await removeDismissal(req.user!.userId, missionId);
   res.json({ success: true, missionId });
 });
 
 router.post("/:id/reject", requireAuth, requireRole("admin", "sanitaeter_leitung", "sanitaeter_leitung_admin", "owner", "teacher"), async (req, res) => {
-  const [m] = await db.update(missionsTable).set({ status: "rejected" }).where(eq(missionsTable.id, req.params["id"]!)).returning();
+  const [m] = await db.update(missionsTable).set({ status: "rejected" }).where(eq(missionsTable.id, req.params.id as string)).returning();
   if (!m) { res.status(404).json({ error: "Not found" }); return; }
   res.json(m);
 });
@@ -149,7 +149,7 @@ router.post("/:id/complete", requireAuth, async (req: AuthRequest, res) => {
     res.status(400).json({ error: "notes max 2000 characters" });
     return;
   }
-  const [existing] = await db.select().from(missionsTable).where(eq(missionsTable.id, req.params["id"]!));
+  const [existing] = await db.select().from(missionsTable).where(eq(missionsTable.id, req.params.id as string));
   if (!existing) { res.status(404).json({ error: "Not found" }); return; }
 
   const userId = req.user!.userId;
@@ -161,7 +161,7 @@ router.post("/:id/complete", requireAuth, async (req: AuthRequest, res) => {
     return;
   }
 
-  const [m] = await db.update(missionsTable).set({ status: "completed", notes }).where(eq(missionsTable.id, req.params["id"]!)).returning();
+  const [m] = await db.update(missionsTable).set({ status: "completed", notes }).where(eq(missionsTable.id, req.params.id as string)).returning();
   if (!m) { res.status(404).json({ error: "Not found" }); return; }
   
   notifyUser(m.assignedParamedicId ?? "unknown", {

@@ -101,6 +101,18 @@ export async function requireAuth(req: AuthRequest, res: Response, next: NextFun
   next();
 }
 
+import { DEFAULT_ROLE_PERMISSIONS, type PermissionKey } from "../lib/permissions";
+
+export function requirePermission(...perms: PermissionKey[]) {
+  return (req: AuthRequest, res: Response, next: NextFunction): void => {
+    if (!req.user) { res.status(403).json({ error: "Forbidden" }); return; }
+    const rolePerms = DEFAULT_ROLE_PERMISSIONS[req.user.role] ?? [];
+    const ok = perms.every((p) => rolePerms.includes(p));
+    if (!ok) { res.status(403).json({ error: "Forbidden - missing permission" }); return; }
+    next();
+  };
+}
+
 export function requireRole(...roles: string[]) {
   return (req: AuthRequest, res: Response, next: NextFunction): void => {
     if (!req.user || !roles.includes(req.user.role)) {

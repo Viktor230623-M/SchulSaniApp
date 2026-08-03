@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { eq } from "drizzle-orm";
 import { db, usersTable, type UserRole } from "@workspace/db";
-import { requireAuth, requireRole, invalidateUserCache, type AuthRequest } from "../middlewares/auth";
+import { requireAuth, requirePermission, requireRole, invalidateUserCache, type AuthRequest } from "../middlewares/auth";
 
 // Quelle der Rollen ist der Aufzaehlungstyp user_role (siehe
 // lib/db/src/schema/index.ts). "cto" fehlt hier: der Wert bleibt im Typ, bis
@@ -36,12 +36,12 @@ function canModifyTarget(requester: string, existingRole: string): boolean {
   return false;
 }
 
-router.get("/", requireAuth, requireRole("admin", "owner", "sanitaeter_leitung_admin", "teacher"), async (_req, res) => {
+router.get("/", requireAuth, requirePermission("users.read_all"), async (_req, res) => {
   const users = await db.select().from(usersTable);
   res.json(users.map(safeUser));
 });
 
-router.get("/pending", requireAuth, requireRole("admin", "owner"), async (_req, res) => {
+router.get("/pending", requireAuth, requirePermission("users.read_all"), async (_req, res) => {
   const users = await db.select().from(usersTable).where(eq(usersTable.isApproved, false));
   res.json(users.map(safeUser));
 });
@@ -59,7 +59,7 @@ router.get("/:id", requireAuth, async (req: AuthRequest, res) => {
     return;
   }
   
-  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, requestedId));
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, requestedId as string));
   if (!user) {
     res.status(404).json({ error: "Not found" });
     return;
@@ -88,7 +88,7 @@ router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
 
 // --- Admin endpoints ---
 
-router.patch("/:id/approve", requireAuth, requireRole("admin", "owner"), async (req: AuthRequest, res) => {
+router.patch("/:id/approve", requireAuth, requirePermission("users.approve"), async (req: AuthRequest, res) => {
   const { id } = req.params as { id: string };
   const { role } = req.body as { role?: string };
 
@@ -115,7 +115,7 @@ router.patch("/:id/approve", requireAuth, requireRole("admin", "owner"), async (
   res.json(safeUser(updated!));
 });
 
-router.patch("/:id/role", requireAuth, requireRole("admin", "owner", "sanitaeter_leitung_admin"), async (req: AuthRequest, res) => {
+router.patch("/:id/role", requireAuth, requirePermission("users.assign_role"), async (req: AuthRequest, res) => {
   const { id } = req.params as { id: string };
   const { role } = req.body as { role: string };
   const requestorRole = req.user!.role;
@@ -145,7 +145,7 @@ router.patch("/:id/role", requireAuth, requireRole("admin", "owner", "sanitaeter
   res.json(safeUser(updated));
 });
 
-router.delete("/:id", requireAuth, requireRole("admin", "owner"), async (req: AuthRequest, res) => {
+router.delete("/:id", requireAuth, requirePermission("users.delete"), async (req: AuthRequest, res) => {
   const { id } = req.params as { id: string };
   if (req.user!.userId === id) { res.status(403).json({ error: "Cannot delete your own account" }); return; }
   const [target] = await db.select({ role: usersTable.role }).from(usersTable).where(eq(usersTable.id, id));
