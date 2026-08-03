@@ -6,7 +6,7 @@ import { requireAuth, requireRole, type AuthRequest } from "../middlewares/auth"
 import { addDismissal, getDismissedFor, removeDismissal } from "../data/dismissals";
 import { notifyOnDutyUsers, notifyUser } from "../services/notifications";
 import { translateToLanguages } from "../services/translator";
-import { canSeePatientInfo } from "../lib/access";
+import { hasPermission } from "../lib/permissions";
 
 async function logMissionAction(
   userId: string,
@@ -35,7 +35,7 @@ const router = Router();
 
 router.get("/", requireAuth, async (req: AuthRequest, res) => {
   const role = req.user!.role;
-  const _canSeePatient = canSeePatientInfo(role);
+  const _canSeePatient = hasPermission(role, "reports.see_patient_info");
 
   // Auto-archive pending/accepted missions from previous calendar days
   const todayStart = new Date();
