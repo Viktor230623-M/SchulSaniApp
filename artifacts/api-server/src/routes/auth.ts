@@ -6,6 +6,7 @@ import jwt from "jsonwebtoken";
 import rateLimit from "express-rate-limit";
 import { eq } from "drizzle-orm";
 import { db, usersTable, userRoleEnum, type UserRole } from "@workspace/db";
+import { permissionsForRole } from "../lib/rolePermissions";
 import { requireAuth, type AuthRequest } from "../middlewares/auth";
 import { createSession, resolveSession, revokeSession } from "../lib/sessions";
 import { config } from "../config";
@@ -202,9 +203,13 @@ async function iServAuth(username: string, password: string): Promise<{ firstNam
 // Baut die Nutzerprojektion, wie sie sowohl Login als auch Sitzungswiederherstellung
 // in der Antwort zurueckgeben. Die Rolle wird hier nicht vorbelegt — das bleibt
 // Sache der Aufrufer, da Login und Session unterschiedliche Standardwerte nutzen.
-function buildUserResponse(user: { id: string; firstName: string | null; lastName: string | null; email: string | null; role: string }) {
+async function buildUserResponse(user: { id: string; firstName: string | null; lastName: string | null; email: string | null; role: string }) {
+  // Die Rechte kommen mit der Anmeldeantwort, damit der Client nicht mehr aus
+  // dem Rollennamen ableiten muss, was sichtbar ist.
+  const permissions = await permissionsForRole(user.role, null);
   return {
     user: { id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email, role: user.role },
+    permissions,
     isTealUnlocked: user.role === "owner",
   };
 }
@@ -293,7 +298,7 @@ router.post("/login", authLimiter, async (req, res) => {
     }
 
     const { role: userRole, id: userId2 } = userValues;
-    res.json({ token, ...buildUserResponse({ id: userId2, firstName, lastName, email, role: userRole }) });
+    res.json({ token, ...(await buildUserResponse({ id: userId2, firstName, lastName, email, role: userRole })) });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Anmeldung fehlgeschlagen";
     console.error("Login error");
@@ -310,7 +315,7 @@ router.post("/logout", requireAuth, async (req, res) => {
 });
 
 router.get("/me", requireAuth, (req: AuthRequest, res) => {
-  res.json({ userId: req.user!.userId, role: req.user!.role });
+  res.json({ userId: req.user!.userId, role: req.user!.role, permissions: req.user!.permissions ?? [] });
 });
 
 /**
@@ -354,7 +359,7 @@ router.get("/session", sessionLimiter, async (req, res) => {
 
   res.json({
     token,
-    ...buildUserResponse({ id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email, role }),
+    ...(await buildUserResponse({ id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email, role })),
   });
 });
 

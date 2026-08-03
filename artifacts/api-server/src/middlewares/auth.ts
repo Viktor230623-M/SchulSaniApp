@@ -2,6 +2,7 @@ import jwt from "jsonwebtoken";
 import type { Request, Response, NextFunction } from "express";
 import { eq } from "drizzle-orm";
 import { db, usersTable } from "@workspace/db";
+import { permissionsForRole } from "../lib/rolePermissions";
 
 const _jwtSecretRaw = process.env["JWT_SECRET"];
 if (!_jwtSecretRaw || _jwtSecretRaw.length < 32) {
@@ -12,6 +13,7 @@ const JWT_SECRET: string = _jwtSecretRaw;
 export interface JwtPayload {
   userId: string;
   role: string;
+  permissions?: string[];
 }
 
 export interface AuthRequest extends Request {
@@ -36,6 +38,7 @@ export function verifyToken(token: string): JwtPayload | null {
 interface LiveUser {
   role: string;
   isApproved: boolean;
+  permissions: string[];
   expires: number;
 }
 
@@ -60,9 +63,11 @@ async function getLiveUser(userId: string): Promise<LiveUser | null> {
     userCache.delete(userId);
     return null;
   }
+  const role = row.role ?? "student_paramedic";
   const entry: LiveUser = {
-    role: row.role ?? "student_paramedic",
+    role,
     isApproved: row.isApproved,
+    permissions: await permissionsForRole(role, null),
     expires: Date.now() + USER_CACHE_TTL_MS,
   };
   userCache.set(userId, entry);
@@ -97,16 +102,18 @@ export async function requireAuth(req: AuthRequest, res: Response, next: NextFun
     res.status(401).json({ error: "Invalid or expired token" });
     return;
   }
-  req.user = { userId: payload.userId, role: live.role };
+  req.user = { userId: payload.userId, role: live.role, permissions: live.permissions };
   next();
 }
 
-import { DEFAULT_ROLE_PERMISSIONS, type PermissionKey } from "../lib/permissions";
+import { type PermissionKey } from "../lib/permissions";
 
 export function requirePermission(...perms: PermissionKey[]) {
   return (req: AuthRequest, res: Response, next: NextFunction): void => {
     if (!req.user) { res.status(403).json({ error: "Forbidden" }); return; }
-    const rolePerms = DEFAULT_ROLE_PERMISSIONS[req.user.role] ?? [];
+    // Quelle ist die Datenbank, aufgeloest in requireAuth und dort
+    // zwischengespeichert.
+    const rolePerms: readonly string[] = req.user.permissions ?? [];
     const ok = perms.every((p) => rolePerms.includes(p));
     if (!ok) { res.status(403).json({ error: "Forbidden - missing permission" }); return; }
     next();

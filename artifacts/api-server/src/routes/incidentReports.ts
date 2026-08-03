@@ -4,7 +4,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { db, incidentReportsTable, missionsTable, usersTable } from "@workspace/db";
 import { requireAuth, type AuthRequest } from "../middlewares/auth";
 import { notifyUser } from "../services/notifications";
-import { hasPermission } from "../lib/permissions";
+
 import { logReportAccess } from "../lib/reportAccessLog";
 import PDFDocument from "pdfkit";
 
@@ -21,9 +21,9 @@ const VALID_AVPU = ["A", "V", "P", "U"] as const;
 function canAccessReport(
   report: typeof incidentReportsTable.$inferSelect,
   userId: string,
-  role: string
+  perms: readonly string[]
 ): boolean {
-  if (hasPermission(role, "reports.read_all")) return true;
+  if (perms.includes("reports.read_all")) return true;
   const responderIds = (report.responderIdsJson as string[] | null) ?? [];
   return report.authorId === userId || responderIds.includes(userId);
 }
@@ -53,7 +53,8 @@ const router = Router();
 
 // GET / — list reports (scope by access)
 router.get("/", requireAuth, async (req: AuthRequest, res) => {
-  const { userId, role } = req.user!;
+  const { userId } = req.user!;
+  const perms: readonly string[] = req.user!.permissions ?? [];
   const { missionId, status, mine } = req.query;
 
   let all = await db
@@ -66,10 +67,10 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
 
   const accessible = all.filter((r) => {
     if (mine === "true") return r.authorId === userId;
-    return canAccessReport(r, userId, role);
+    return canAccessReport(r, userId, perms);
   });
 
-  const showPatient = hasPermission(role, "reports.see_patient_info");
+  const showPatient = perms.includes("reports.see_patient_info");
   const result = accessible.map((r) => {
     const responders = (r.responderIdsJson as string[] | null) ?? [];
     const isAuthorOrResponder = r.authorId === userId || responders.includes(userId);
@@ -88,16 +89,17 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
 
 // GET /:id — single report
 router.get("/:id", requireAuth, async (req: AuthRequest, res) => {
-  const { userId, role } = req.user!;
+  const { userId } = req.user!;
+  const perms: readonly string[] = req.user!.permissions ?? [];
   const [report] = await db
     .select()
     .from(incidentReportsTable)
     .where(eq(incidentReportsTable.id, (req.params.id as string)));
 
   if (!report) { res.status(404).json({ error: "Not found" }); return; }
-  if (!canAccessReport(report, userId, role)) { res.status(403).json({ error: "Forbidden" }); return; }
+  if (!canAccessReport(report, userId, perms)) { res.status(403).json({ error: "Forbidden" }); return; }
 
-  const showPatient = hasPermission(role, "reports.see_patient_info") ||
+  const showPatient = perms.includes("reports.see_patient_info") ||
     report.authorId === userId ||
     ((report.responderIdsJson as string[] | null) ?? []).includes(userId);
 
@@ -171,7 +173,8 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
 
 // PUT /:id — update draft
 router.put("/:id", requireAuth, async (req: AuthRequest, res) => {
-  const { userId, role } = req.user!;
+  const { userId } = req.user!;
+  const perms: readonly string[] = req.user!.permissions ?? [];
   const [existing] = await db
     .select()
     .from(incidentReportsTable)
@@ -181,7 +184,7 @@ router.put("/:id", requireAuth, async (req: AuthRequest, res) => {
   if (existing.status !== "draft") { res.status(400).json({ error: "Report is already submitted and locked" }); return; }
 
   const isAuthor = existing.authorId === userId;
-  const isLeadership = hasPermission(role, "reports.read_all");
+  const isLeadership = perms.includes("reports.read_all");
   if (!isAuthor && !isLeadership) { res.status(403).json({ error: "Forbidden" }); return; }
 
   const body = req.body as Record<string, unknown>;
@@ -227,7 +230,8 @@ router.put("/:id", requireAuth, async (req: AuthRequest, res) => {
 
 // POST /:id/submit — submit and lock
 router.post("/:id/submit", requireAuth, async (req: AuthRequest, res) => {
-  const { userId, role } = req.user!;
+  const { userId } = req.user!;
+  const perms: readonly string[] = req.user!.permissions ?? [];
   const [existing] = await db
     .select()
     .from(incidentReportsTable)
@@ -237,7 +241,7 @@ router.post("/:id/submit", requireAuth, async (req: AuthRequest, res) => {
   if (existing.status !== "draft") { res.status(400).json({ error: "Already submitted" }); return; }
 
   const isAuthor = existing.authorId === userId;
-  const isLeadership = hasPermission(role, "reports.read_all");
+  const isLeadership = perms.includes("reports.read_all");
   if (!isAuthor && !isLeadership) { res.status(403).json({ error: "Forbidden" }); return; }
 
   if (!existing.category) { res.status(400).json({ error: "category is required to submit" }); return; }
@@ -279,14 +283,15 @@ router.post("/:id/submit", requireAuth, async (req: AuthRequest, res) => {
 
 // POST /:id/addendum — add a note after locking
 router.post("/:id/addendum", requireAuth, async (req: AuthRequest, res) => {
-  const { userId, role } = req.user!;
+  const { userId } = req.user!;
+  const perms: readonly string[] = req.user!.permissions ?? [];
   const [existing] = await db
     .select()
     .from(incidentReportsTable)
     .where(eq(incidentReportsTable.id, (req.params.id as string)));
 
   if (!existing) { res.status(404).json({ error: "Not found" }); return; }
-  if (!canAccessReport(existing, userId, role)) { res.status(403).json({ error: "Forbidden" }); return; }
+  if (!canAccessReport(existing, userId, perms)) { res.status(403).json({ error: "Forbidden" }); return; }
 
   const text = typeof req.body["text"] === "string" ? req.body["text"].trim() : "";
   if (!text || text.length > 2000) { res.status(400).json({ error: "text required, max 2000 characters" }); return; }
@@ -308,7 +313,8 @@ router.post("/:id/addendum", requireAuth, async (req: AuthRequest, res) => {
 
 // GET /:id/pdf — render PDF
 router.get("/:id/pdf", requireAuth, async (req: AuthRequest, res) => {
-  const { userId, role } = req.user!;
+  const { userId } = req.user!;
+  const perms: readonly string[] = req.user!.permissions ?? [];
   const lang = (req.query["lang"] === "en" ? "en" : "de") as "de" | "en";
 
   const [report] = await db
@@ -317,9 +323,9 @@ router.get("/:id/pdf", requireAuth, async (req: AuthRequest, res) => {
     .where(eq(incidentReportsTable.id, (req.params.id as string)));
 
   if (!report) { res.status(404).json({ error: "Not found" }); return; }
-  if (!canAccessReport(report, userId, role)) { res.status(403).json({ error: "Forbidden" }); return; }
+  if (!canAccessReport(report, userId, perms)) { res.status(403).json({ error: "Forbidden" }); return; }
 
-  const showPatient = hasPermission(role, "reports.see_patient_info") ||
+  const showPatient = perms.includes("reports.see_patient_info") ||
     report.authorId === userId ||
     ((report.responderIdsJson as string[] | null) ?? []).includes(userId);
 
