@@ -9,8 +9,8 @@ import { translateToLanguages } from "../services/translator";
 const router = Router();
 
 router.get("/", requireAuth, async (req: AuthRequest, res) => {
-  const { role, userId } = req.user!;
-  const canModerate = ["admin", "teacher", "owner"].includes(role);
+  const { userId } = req.user!;
+  const canModerate = (req.user!.permissions ?? []).includes("news.moderate");
   const items = await db.select().from(newsTable).orderBy(desc(newsTable.publishedAt));
   const filtered = items.filter((n) => {
     if (canModerate) return true;
@@ -127,8 +127,8 @@ router.post("/read-all", requireAuth, async (req: AuthRequest, res) => {
 });
 
 router.delete("/:id", requireAuth, async (req: AuthRequest, res) => {
-  const { userId, role } = req.user!;
-  const canModerate = ["admin", "teacher", "owner"].includes(role);
+  const { userId } = req.user!;
+  const canModerate = (req.user!.permissions ?? []).includes("news.moderate");
   const [item] = await db.select().from(newsTable).where(eq(newsTable.id, req.params.id as string));
   if (!item) { res.status(404).json({ error: "Not found" }); return; }
   if (item.authorId !== userId && !canModerate) {
