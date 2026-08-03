@@ -17,36 +17,63 @@ vi.mock("@workspace/db", async () => {
     return { [Symbol.toStringTag]: name } as any;
   }
 
-  const mockSelectChain = (result: any[] = []) => ({
-    from: () => ({
-      where: () => ({
-        limit: () => Promise.resolve(result),
-        groupBy: () => Promise.resolve(result),
-      }),
-      orderBy: () => ({
-        where: () => ({
-          limit: () => Promise.resolve(result),
-        }),
-      }),
-      filter: () => result,
-    }),
-  });
+  // Kettenobjekt, das an jeder Stelle sowohl weitergereicht als auch erwartet
+  // (awaitable) werden kann: die Routen bilden ihre Ketten in verschiedenster
+  // Reihenfolge (from().where(), from().orderBy(), from().where().orderBy(),
+  // from().orderBy() ohne where, from().groupBy(), innerJoin/leftJoin, ...),
+  // und manche brechen die Kette schon nach from() oder where() direkt mit
+  // await ab. Jede Zwischenstufe bekommt deshalb eine then-Methode.
+  function makeSelectChain(result: any[] = []): any {
+    const chain: any = {
+      then: (onFulfilled: any, onRejected?: any) => Promise.resolve(result).then(onFulfilled, onRejected),
+      catch: (onRejected: any) => Promise.resolve(result).catch(onRejected),
+      finally: (onFinally: any) => Promise.resolve(result).finally(onFinally),
+      from: () => makeSelectChain(result),
+      where: () => makeSelectChain(result),
+      orderBy: () => makeSelectChain(result),
+      groupBy: () => makeSelectChain(result),
+      innerJoin: () => makeSelectChain(result),
+      leftJoin: () => makeSelectChain(result),
+      limit: () => makeSelectChain(result),
+      for: () => makeSelectChain(result),
+    };
+    return chain;
+  }
+
+  // Gleiches Prinzip fuer insert/update/delete: values/set/where/
+  // onConflictDoNothing/onConflictDoUpdate/returning sind an jeder Stelle
+  // sowohl weiterfuehrend als auch awaitable.
+  function makeMutationChain(result: any[] = []): any {
+    const chain: any = {
+      then: (onFulfilled: any, onRejected?: any) => Promise.resolve(result).then(onFulfilled, onRejected),
+      catch: (onRejected: any) => Promise.resolve(result).catch(onRejected),
+      finally: (onFinally: any) => Promise.resolve(result).finally(onFinally),
+      values: () => makeMutationChain(result),
+      set: () => makeMutationChain(result),
+      where: () => makeMutationChain(result),
+      onConflictDoNothing: () => makeMutationChain(result),
+      onConflictDoUpdate: () => makeMutationChain(result),
+      // Fixe Beispielzeile: manche Routen (z.B. users.ts /:id/approve) lesen
+      // das Ergebnis von returning() ohne Undefined-Pruefung weiter.
+      returning: () => makeMutationChain([{ id: "test-id", status: "approved" }]),
+    };
+    return chain;
+  }
 
   const dbMock = {
-    select: () => mockSelectChain([]),
-    insert: () => ({ values: () => Promise.resolve([]) }),
-    update: () => ({
-      set: () => ({
-        where: () => ({
-          returning: () => Promise.resolve([{ id: "test-id", status: "approved" }]),
-        }),
-      }),
-    }),
-    delete: () => ({
-      where: () => ({
-        returning: () => Promise.resolve([]),
-      }),
-    }),
+    select: (..._args: any[]) => makeSelectChain([]),
+    insert: (..._args: any[]) => makeMutationChain([]),
+    update: (..._args: any[]) => makeMutationChain([]),
+    delete: (..._args: any[]) => makeMutationChain([]),
+    transaction: async (cb: (tx: any) => Promise<any>) => {
+      const tx = {
+        select: dbMock.select,
+        insert: dbMock.insert,
+        update: dbMock.update,
+        delete: dbMock.delete,
+      };
+      return cb(tx);
+    },
   };
 
   return {
