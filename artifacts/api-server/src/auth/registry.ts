@@ -11,6 +11,8 @@ interface RawIservFormProviderConfig {
   type: "iserv-form";
   iservBaseUrl: string;
   emailDomain: string;
+  /** Gruppe-zu-Rolle-Abbildung dieses Anbieters, siehe ../types.ts (AuthProviderBase). */
+  groupToRoleMap?: Record<string, string>;
 }
 
 interface RawOidcRedirectProviderConfig {
@@ -22,6 +24,8 @@ interface RawOidcRedirectProviderConfig {
   clientSecret?: string;
   redirectUri: string;
   scopes?: string[];
+  /** Gruppe-zu-Rolle-Abbildung dieses Anbieters, siehe ../types.ts (AuthProviderBase). */
+  groupToRoleMap?: Record<string, string>;
 }
 
 interface RawLocalProviderConfig {
@@ -30,6 +34,8 @@ interface RawLocalProviderConfig {
   type: "local";
   /** Ohne Angabe: process.env.SCHOOL_ID, sonst "school" -- wie die uebrigen Anmeldewege. */
   schoolId?: string;
+  /** Gruppe-zu-Rolle-Abbildung dieses Anbieters, siehe ../types.ts (AuthProviderBase). */
+  groupToRoleMap?: Record<string, string>;
 }
 
 type RawProviderConfig = RawIservFormProviderConfig | RawOidcRedirectProviderConfig | RawLocalProviderConfig;
@@ -88,18 +94,23 @@ function defaultProviders(): AuthProvider[] {
 }
 
 function buildProvider(raw: RawProviderConfig): AuthProvider {
+  const groupToRoleMap = raw.groupToRoleMap ?? {};
+
   if (raw.type === "iserv-form") {
     if (!raw.key || !raw.displayName || !raw.iservBaseUrl || !raw.emailDomain) {
       throw new Error(
         `Anmeldeweg "${raw.key ?? "?"}" ist unvollstaendig konfiguriert (key, displayName, iservBaseUrl, emailDomain erforderlich).`,
       );
     }
-    return createIservFormProvider({
-      key: raw.key,
-      displayName: raw.displayName,
-      iservBaseUrl: raw.iservBaseUrl,
-      emailDomain: raw.emailDomain,
-    });
+    return {
+      ...createIservFormProvider({
+        key: raw.key,
+        displayName: raw.displayName,
+        iservBaseUrl: raw.iservBaseUrl,
+        emailDomain: raw.emailDomain,
+      }),
+      groupToRoleMap,
+    };
   }
 
   if (raw.type === "oidc-redirect") {
@@ -108,15 +119,18 @@ function buildProvider(raw: RawProviderConfig): AuthProvider {
         `Anmeldeweg "${raw.key ?? "?"}" ist unvollstaendig konfiguriert (key, displayName, issuerUrl, clientId, redirectUri erforderlich).`,
       );
     }
-    return createOidcRedirectProvider({
-      key: raw.key,
-      displayName: raw.displayName,
-      issuerUrl: raw.issuerUrl,
-      clientId: raw.clientId,
-      clientSecret: raw.clientSecret,
-      redirectUri: raw.redirectUri,
-      scopes: raw.scopes,
-    });
+    return {
+      ...createOidcRedirectProvider({
+        key: raw.key,
+        displayName: raw.displayName,
+        issuerUrl: raw.issuerUrl,
+        clientId: raw.clientId,
+        clientSecret: raw.clientSecret,
+        redirectUri: raw.redirectUri,
+        scopes: raw.scopes,
+      }),
+      groupToRoleMap,
+    };
   }
 
   if (raw.type === "local") {
@@ -125,11 +139,14 @@ function buildProvider(raw: RawProviderConfig): AuthProvider {
         `Anmeldeweg "${raw.key ?? "?"}" ist unvollstaendig konfiguriert (key, displayName erforderlich).`,
       );
     }
-    return createLocalProvider({
-      key: raw.key,
-      displayName: raw.displayName,
-      schoolId: raw.schoolId ?? process.env["SCHOOL_ID"] ?? "school",
-    });
+    return {
+      ...createLocalProvider({
+        key: raw.key,
+        displayName: raw.displayName,
+        schoolId: raw.schoolId ?? process.env["SCHOOL_ID"] ?? "school",
+      }),
+      groupToRoleMap,
+    };
   }
 
   throw new Error(

@@ -15,6 +15,14 @@ export interface AuthProfile {
   lastName: string;
   email: string;
   phone: string;
+  /**
+   * Gruppen aus dem Anmeldeprofil, Grundlage der Gruppe-zu-Rolle-Abbildung
+   * (groupToRoleMap, siehe unten). Woher sie kommen, ist Sache des jeweiligen
+   * Adapters -- bei OIDC der konfigurierte groups-Claim, beim IServ-Formular
+   * und beim lokalen Anbieter bislang keine Quelle (leer). Ohne Eintrag oder
+   * ohne passende Abbildung ergibt sich keine Rolle.
+   */
+  groups?: string[];
 }
 
 /** Ergebnis einer erfolgreichen Anmeldung ueber einen Anbieter. */
@@ -39,6 +47,13 @@ interface AuthProviderBase {
   /** Anzeigename, z. B. fuer eine spaetere Auswahl im Anmeldebildschirm. */
   readonly displayName: string;
   readonly type: AuthProviderType;
+  /**
+   * Gruppe-zu-Rolle-Abbildung dieses Anbieters, aus der Providers-Konfiguration
+   * (siehe ../registry.ts), einmalig beim Start geladen. Schluessel ist der
+   * Gruppenname aus dem Anmeldeprofil, Wert ein Rollenschluessel. Ohne Eintrag:
+   * leere Abbildung, keine Rolle wird automatisch vergeben.
+   */
+  readonly groupToRoleMap?: Record<string, string>;
 }
 
 /**

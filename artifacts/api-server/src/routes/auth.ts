@@ -1,9 +1,8 @@
-import * as fs from "node:fs";
 import { Router } from "express";
 import jwt from "jsonwebtoken";
 import rateLimit from "express-rate-limit";
-import { eq, and } from "drizzle-orm";
-import { db, usersTable, userRoleEnum, type UserRole } from "@workspace/db";
+import { eq, and, isNull } from "drizzle-orm";
+import { db, usersTable, rolesTable, userRoleEnum, type UserRole } from "@workspace/db";
 import { permissionsForRole } from "../lib/rolePermissions";
 import { requireAuth, type AuthRequest } from "../middlewares/auth";
 import { createSession, resolveSession, revokeSession } from "../lib/sessions";
@@ -61,43 +60,36 @@ if (!primaryAuthProvider) {
   throw new Error("Kein passwortbasierter Anmeldeweg konfiguriert.");
 }
 
-// Roles are always resolved from the database after login.
-// There is no hardcoded username→role mapping — all roles are stored in the DB.
-// Use the ROLE_MAP_PATH env var only for bootstrapping a fresh install (file must
-// contain generic role assignments, never real names).
-function loadBootstrapRoleMap(): Record<string, string> {
-  return {};
-}
-
-const BOOTSTRAP_ROLE_MAP = {};
-
 function isUserRole(value: string): value is UserRole {
   return (userRoleEnum.enumValues as readonly string[]).includes(value);
 }
 
-// Gruppe-zu-Rolle-Abbildung kommt je Anbieter aus der Provider-Konfiguration,
-// nicht aus einer zentralen Datei. Unbekannte Gruppe fuehrt zu keiner Rolle.
-// BOOTSTRAP_ROLE_MAP entfernt — siehe R6 (Schritt 8).
-function loadProviderRoleMap(providerKey: string): Record<string, string> {
-  const providerConfigPath = process.env["AUTH_PROVIDERS_PATH"];
-  if (!providerConfigPath) {
-    return {};
-  }
-  try {
-    const rawConfigs: any[] = JSON.parse(
-      fs.readFileSync(providerConfigPath, "utf-8"),
-    ) as any[];
-    const providerConfig = rawConfigs.find((c) => c.key === providerKey);
-    return (providerConfig?.groupToRoleMap ?? {}) as Record<string, string>;
-  } catch {
-    return {};
-  }
-}
+// Gruppe-zu-Rolle-Abbildung kommt je Anbieter aus der Provider-Konfiguration
+// (groupToRoleMap, siehe ../auth/registry), einmalig beim Start geladen und an
+// jedem Provider-Objekt haengend -- keine zentrale Datei, kein erneutes Lesen
+// bei jeder Anmeldung.
+//
+// Unbekannte oder fehlende Gruppe fuehrt zu keiner Rolle (kein Ruckfall mehr
+// auf "sanitaeter"). Der zugeordnete Rollenschluessel muss ausserdem als Rolle
+// in der roles-Tabelle existieren (schulweit oder global) -- ein Schluessel,
+// der nur im Postgres-Enum, aber nicht in der Tabelle steht, zaehlt nicht.
+async function getRoleForUser(groups: string[], providerKey: string, schoolId: string): Promise<UserRole | undefined> {
+  const provider = authProviders.find((p) => p.key === providerKey);
+  const roleMap = provider?.groupToRoleMap ?? {};
 
-function getRoleForUser(username: string, providerKey: string): UserRole {
-  const roleMap = loadProviderRoleMap(providerKey);
-  const mapped = roleMap[username.toLowerCase().trim()];
-  return mapped !== undefined && isUserRole(mapped) ? mapped : "sanitaeter";
+  for (const group of groups) {
+    const mapped = roleMap[group];
+    if (mapped === undefined || !isUserRole(mapped)) continue;
+
+    const roleRows = await db
+      .select({ id: rolesTable.id })
+      .from(rolesTable)
+      .where(and(eq(rolesTable.key, mapped), schoolId ? eq(rolesTable.schoolId, schoolId) : isNull(rolesTable.schoolId)))
+      .limit(1);
+    if (roleRows.length > 0) return mapped;
+  }
+
+  return undefined;
 }
 
 // Baut die Nutzerprojektion, wie sie sowohl Login als auch Sitzungswiederherstellung
@@ -133,6 +125,7 @@ router.post("/login", authLimiter, async (req, res) => {
   let lastName = cleanUsername.split(".").slice(1).join(" ") || "";
   let email = `${cleanUsername}@${config.emailDomain}`;
   let phone = "";
+  let groups: string[] = [];
 
   try {
     const { profile } = await primaryAuthProvider.authenticate({ username: cleanUsername, password });
@@ -140,6 +133,7 @@ router.post("/login", authLimiter, async (req, res) => {
     if (profile.lastName) lastName = profile.lastName;
     if (profile.email) email = profile.email;
     if (profile.phone) phone = profile.phone;
+    if (profile.groups) groups = profile.groups;
   } catch (err: unknown) {
     const msg: string = err instanceof Error ? err.message : "";
     if (msg.includes("Ungültige Zugangsdaten")) {
@@ -158,8 +152,14 @@ router.post("/login", authLimiter, async (req, res) => {
       .where(eq(usersTable.iservUsername, cleanUsername))
       .limit(1);
 
+    const schoolId = process.env["SCHOOL_ID"] ?? "school";
     const userId: string = existing[0]?.id ?? crypto.randomUUID();
-    const role: UserRole = existing[0]?.role ?? getRoleForUser(cleanUsername, primaryAuthProvider?.key ?? "iserv-form");
+    // Ohne passende Gruppe (neues Konto) bleibt "sanitaeter" nur ein Platzhalter
+    // fuer die NOT-NULL-Spalte -- er entfaltet keine Wirkung, solange isApproved
+    // weiter unten false bleibt und die Anmeldung blockiert. Ein Verwalter muss
+    // Rolle und Freischaltung explizit setzen.
+    const resolvedRole = existing[0]?.role ?? (await getRoleForUser(groups, primaryAuthProvider.key, schoolId));
+    const role: UserRole = resolvedRole ?? "sanitaeter";
     const isApproved: boolean = existing[0]?.isApproved ?? false;
 
     const userValues = {
@@ -171,7 +171,7 @@ router.post("/login", authLimiter, async (req, res) => {
       phone,
       role,
       isApproved,
-      schoolId: process.env["SCHOOL_ID"] ?? "school",
+      schoolId,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -323,7 +323,7 @@ router.get("/:provider/callback", authLimiter, async (req, res) => {
     if (typeof v === "string") query[k] = v;
   }
 
-  let authResult: { subject: string; profile: { firstName: string; lastName: string; email: string; phone: string } };
+  let authResult: { subject: string; profile: { firstName: string; lastName: string; email: string; phone: string; groups?: string[] } };
   try {
     authResult = await provider.completeRedirect(query);
   } catch (err) {
@@ -349,7 +349,10 @@ router.get("/:provider/callback", authLimiter, async (req, res) => {
       .limit(1);
 
     const userId: string = existing[0]?.id ?? crypto.randomUUID();
-    const role: UserRole = existing[0]?.role ?? getRoleForUser(subject, provider.key ?? "unknown");
+    // Siehe Kommentar im Formular-Login: "sanitaeter" ist hier nur ein
+    // Platzhalter fuer die Spalte, wirkungslos solange isApproved false bleibt.
+    const resolvedRole = existing[0]?.role ?? (await getRoleForUser(profile.groups ?? [], provider.key, schoolId));
+    const role: UserRole = resolvedRole ?? "sanitaeter";
     const isApproved: boolean = existing[0]?.isApproved ?? false;
 
     const firstName = profile.firstName || subject;
