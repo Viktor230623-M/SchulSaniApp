@@ -22,10 +22,12 @@ const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 20 });
 
 const KEY_PATTERN = /^[a-z][a-z0-9_]{1,49}$/;
 
-// Eine Schule je Installation: die Rollen haengen an schoolId null. Sobald
-// mehrere Mandanten auf einer Instanz laufen, kommt die Kennung aus dem Token.
+// Eine Schule je Installation. Das JWT traegt heute keine Schulkennung, daher
+// dieselbe Quelle wie beim Kontoabgleich in routes/auth.ts: die Umgebung.
+// Sobald mehrere Mandanten auf einer Instanz laufen, kommt die Kennung aus
+// dem Token statt aus der Umgebung.
 function scopeOf(_req: AuthRequest): string | null {
-  return null;
+  return process.env["SCHOOL_ID"] ?? "school";
 }
 
 function scopeCondition(schoolId: string | null) {
