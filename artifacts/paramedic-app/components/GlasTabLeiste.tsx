@@ -163,7 +163,7 @@ function Glasflaeche({
           borderColor: theme.tabBarBorder,
           // Ohne Weichzeichner traegt die Farbe allein und muss deutlich
           // dichter sein, sonst wird die Leiste vor hellem Inhalt unlesbar.
-          backgroundColor: echterWeichzeichner ? "transparent" : mitDeckung(theme.tabBar, 0.72),
+          backgroundColor: echterWeichzeichner ? "transparent" : mitDeckung(theme.card, 0.86),
           shadowColor: dunkel ? "#000" : theme.tabBarBorder,
         },
         style,
@@ -185,7 +185,7 @@ function Glasflaeche({
             pointerEvents="none"
             style={[
               StyleSheet.absoluteFill,
-              { borderRadius: radius, backgroundColor: mitDeckung(theme.tabBar, 0.22) },
+              { borderRadius: radius, backgroundColor: mitDeckung(theme.card, 0.5) },
             ]}
           />
         </>
