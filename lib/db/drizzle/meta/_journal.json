@@ -43,6 +43,13 @@
       "when": 1785839588657,
       "tag": "0005_pflichtwechsel_und_einmalpasswort",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1785850951155,
+      "tag": "0006_rollen_zusammenfuehren",
+      "breakpoints": true
     }
   ]
 }
