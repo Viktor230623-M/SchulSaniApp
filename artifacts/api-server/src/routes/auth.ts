@@ -128,8 +128,11 @@ router.post("/login", authLimiter, async (req, res) => {
   let phone = "";
   let groups: string[] = [];
 
+  let subject = cleanUsername;
+
   try {
-    const { profile } = await primaryAuthProvider.authenticate({ username: cleanUsername, password });
+    const { profile, subject: providerSubject } = await primaryAuthProvider.authenticate({ username: cleanUsername, password });
+    subject = providerSubject;
     if (profile.firstName) firstName = profile.firstName;
     if (profile.lastName) lastName = profile.lastName;
     if (profile.email) email = profile.email;
@@ -147,13 +150,23 @@ router.post("/login", authLimiter, async (req, res) => {
   }
 
   try {
+    const schoolId = process.env["SCHOOL_ID"] ?? "school";
+
+    // Wie im OIDC-Rueckweg: Konto ueber Schule, Anmeldeweg und Subjekt suchen,
+    // nicht ueber den global eindeutigen iserv_username. Sonst bindet eine
+    // gueltige Anmeldung an der einen Schule an die Zeile der anderen, sobald
+    // beide dieselbe Datenbank teilen und denselben Benutzernamen kennen.
     const existing = await db
       .select({ id: usersTable.id, role: usersTable.role, isApproved: usersTable.isApproved })
       .from(usersTable)
-      .where(eq(usersTable.iservUsername, cleanUsername))
+      .where(
+        and(
+          eq(usersTable.schoolId, schoolId),
+          eq(usersTable.authProvider, primaryAuthProvider.key),
+          eq(usersTable.externalSubject, subject),
+        ),
+      )
       .limit(1);
-
-    const schoolId = process.env["SCHOOL_ID"] ?? "school";
     const userId: string = existing[0]?.id ?? crypto.randomUUID();
     // Ohne passende Gruppe (neues Konto) bleibt "sanitaeter" nur ein Platzhalter
     // fuer die NOT-NULL-Spalte -- er entfaltet keine Wirkung, solange isApproved
@@ -166,6 +179,8 @@ router.post("/login", authLimiter, async (req, res) => {
     const userValues = {
       id: userId,
       iservUsername: cleanUsername,
+      authProvider: primaryAuthProvider.key,
+      externalSubject: subject,
       firstName,
       lastName,
       email,

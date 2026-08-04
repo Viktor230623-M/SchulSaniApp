@@ -52,8 +52,11 @@ router.get("/:id", requireAuth, async (req: AuthRequest, res) => {
   const requestingUser = req.user!;
   const requestedId = req.params["id"]!;
   
-  // Allow users to access their own data or allow admins/teachers to access any
-  const canAccessAll = ["admin", "owner", "teacher", "sanitaeter_leitung_admin", "sanitaeter_leitung"].includes(requestingUser.role);
+  // Fremde Profile nur mit users.read_all, eigene immer. Die feste Rollenliste
+  // an dieser Stelle gab sanitaeter_leitung Zugriff, obwohl der Katalog die
+  // Berechtigung nicht vergibt, und ueberlebte einen Entzug im Verwaltungs-
+  // bildschirm.
+  const canAccessAll = (requestingUser.permissions ?? []).includes("users.read_all");
   const isOwnData = requestingUser.userId === requestedId;
   
   if (!canAccessAll && !isOwnData) {
