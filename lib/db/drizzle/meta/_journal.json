@@ -36,6 +36,13 @@
       "when": 1785774725122,
       "tag": "0004_anmeldeweg_und_subjekt",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1785839588657,
+      "tag": "0005_pflichtwechsel_und_einmalpasswort",
+      "breakpoints": true
     }
   ]
 }
