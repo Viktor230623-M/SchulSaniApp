@@ -60,7 +60,7 @@ export default function SaniActivityScreen() {
       const transformedUsers: ActivityUser[] = (data || []).map((u: ActivitySummaryItem) => ({
         userId: u.userId,
         userName: u.userName,
-        role: u.role || "student_paramedic",
+        role: u.role || "sanitaeter",
         totalLogs: u.activityCount || 0,
         lastActivityAt: u.lastActivity,
       }));

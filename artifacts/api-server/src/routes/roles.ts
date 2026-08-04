@@ -22,10 +22,29 @@ const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 20 });
 
 const KEY_PATTERN = /^[a-z][a-z0-9_]{1,49}$/;
 
-// Eine Schule je Installation: die Rollen haengen an schoolId null. Sobald
-// mehrere Mandanten auf einer Instanz laufen, kommt die Kennung aus dem Token.
+// Eine Schule je Installation, und der Rollenbestand liegt ungebunden vor
+// (school_id IS NULL). Wuerde hier SCHOOL_ID stehen, faende scopeCondition
+// keine einzige Rolle: die Rollenliste bliebe leer, der Verwaltungsbildschirm
+// zeigte nichts an, und assertAdminReachable liefe in seine Abkuerzung "keine
+// Rollenzeilen, also nichts zu schuetzen" — die Aussperrsicherung waere still
+// abgeschaltet.
+//
+// Die Rechtepruefung selbst ist davon unberuehrt: permissionsForRole nimmt die
+// Schulkennung der Nutzerzeile und beruecksichtigt schulgebundene wie
+// ungebundene Rollen, wobei die schulgebundene gewinnt. Ein spaeterer Umzug des
+// Bestands auf eine Schulkennung ist damit moeglich, ohne dass hier vorher
+// etwas kaputtgeht. Sobald mehrere Mandanten auf einer Instanz laufen, kommt
+// die Kennung aus dem Token — dann zieht diese Funktion nach.
 function scopeOf(_req: AuthRequest): string | null {
   return null;
+}
+
+// Ohne Argument, also alle Bereiche. Eine ungebundene Rolle geht in die
+// Rechtetabelle jeder Schule ein; nur den eigenen Bereich zu verwerfen liesse
+// die Nutzer bis zum Ablauf der Zwischenspeicherfrist auf dem alten Stand —
+// und "wirkt sofort, ohne Neuanmeldung" ist der Zweck der ganzen Uebung.
+function verwerfeRechte(): void {
+  invalidateRolePermissions();
 }
 
 function scopeCondition(schoolId: string | null) {
@@ -108,7 +127,7 @@ router.post("/", requireAuth, requirePermission("roles.manage"), writeLimiter, a
     isSystem: false,
     sortOrder: typeof sortOrder === "number" ? sortOrder : 999,
   });
-  invalidateRolePermissions(schoolId);
+  verwerfeRechte();
   res.status(201).json({ id: roleId, key });
 });
 
@@ -153,7 +172,7 @@ router.patch("/:id", requireAuth, requirePermission("roles.manage"), writeLimite
   }
 
   await db.update(rolesTable).set(patch).where(eq(rolesTable.id, id));
-  invalidateRolePermissions(schoolId);
+  verwerfeRechte();
   res.json({ id });
 });
 
@@ -188,7 +207,7 @@ router.delete("/:id", requireAuth, requirePermission("roles.manage"), writeLimit
     throw err;
   }
 
-  invalidateRolePermissions(schoolId);
+  verwerfeRechte();
   invalidateAllRoleCaches();
   res.status(204).send();
 });
@@ -254,7 +273,7 @@ router.put("/:id/permissions", requireAuth, requirePermission("roles.manage"), w
   // Beide Zwischenspeicher: die Zuordnung selbst und die daraus abgeleiteten
   // Rechte der angemeldeten Nutzer. Sonst wirkt der Entzug erst nach einer
   // Minute.
-  invalidateRolePermissions(schoolId);
+  verwerfeRechte();
   invalidateRoleCache(role.key);
   res.json({ permissions: requested });
 });

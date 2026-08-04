@@ -25,7 +25,6 @@ const SEED_LABELS: Record<string, SeedLabel> = {
   sanitaeter_leitung: { de: "Sanitaeter Leitung", en: "Head Paramedic", color: "#2563EB", sortOrder: 40 },
   teacher: { de: "Lehrer", en: "Teacher", color: "#EA580C", sortOrder: 50 },
   sanitaeter: { de: "Sanitaeter", en: "Paramedic", color: "#16A34A", sortOrder: 60 },
-  student_paramedic: { de: "Sanitaeter", en: "Paramedic", color: "#16A34A", sortOrder: 70 },
 };
 
 export async function seedRoles(schoolId: string | null): Promise<void> {

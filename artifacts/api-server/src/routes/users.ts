@@ -6,10 +6,8 @@ import { assertAdminReachable, LockoutError } from "../lib/rolePermissions";
 import { logRoleChangeTx } from "../lib/roleChangeLog";
 
 // Quelle der Rollen ist der Aufzaehlungstyp user_role (siehe
-// lib/db/src/schema/index.ts). "cto" fehlt hier: der Wert bleibt im Typ, bis
-// die vorhandenen Zeilen auf "owner" umgestellt sind, wird aber nicht mehr
-// vergeben.
-const VALID_ROLES = ["owner", "admin", "sanitaeter_leitung_admin", "sanitaeter_leitung", "teacher", "sanitaeter", "student_paramedic"] as const satisfies readonly UserRole[];
+// lib/db/src/schema/index.ts).
+const VALID_ROLES = ["owner", "admin", "sanitaeter_leitung_admin", "sanitaeter_leitung", "teacher", "sanitaeter"] as const satisfies readonly UserRole[];
 
 function isValidRole(value: string): value is (typeof VALID_ROLES)[number] {
   return (VALID_ROLES as readonly string[]).includes(value);
@@ -25,8 +23,8 @@ function safeUser(u: typeof usersTable.$inferSelect) {
 // Which roles a requester is permitted to assign. Only the Owner (owner) may grant owner.
 function allowedTargetRoles(requester: string): string[] {
   if (requester === "owner") return [...VALID_ROLES];
-  if (requester === "admin") return ["admin", "sanitaeter_leitung", "sanitaeter", "student_paramedic"];
-  if (requester === "sanitaeter_leitung_admin") return ["admin", "sanitaeter_leitung", "sanitaeter", "student_paramedic"];
+  if (requester === "admin") return ["admin", "sanitaeter_leitung", "sanitaeter"];
+  if (requester === "sanitaeter_leitung_admin") return ["admin", "sanitaeter_leitung", "sanitaeter"];
   return [];
 }
 
@@ -97,6 +95,14 @@ router.patch("/:id/approve", requireAuth, requirePermission("users.approve"), as
   const { id } = req.params as { id: string };
   const { role } = req.body as { role?: string };
 
+  // /role sperrt das eigene Konto als Ziel, weil ein Rollenwechsel an sich
+  // selbst die Rangordnung aushebeln kann (z. B. sanitaeter_leitung_admin auf
+  // admin). Freischalten traegt denselben optionalen Rollenwechsel und braucht
+  // deshalb dieselbe Sperre -- sonst genuegt der Umweg ueber diese Route.
+  if (req.user!.userId === id) {
+    res.status(403).json({ error: "Cannot approve your own account" }); return;
+  }
+
   const [existing] = await db.select().from(usersTable).where(eq(usersTable.id, id));
   if (!existing) { res.status(404).json({ error: "User not found" }); return; }
 
@@ -106,16 +112,43 @@ router.patch("/:id/approve", requireAuth, requirePermission("users.approve"), as
     res.status(403).json({ error: "Insufficient permissions to modify this user" }); return;
   }
 
-  if (role && !allowedTargetRoles(req.user!.role).includes(role)) {
-    res.status(403).json({ error: "Insufficient permissions to assign this role" }); return;
+  if (role) {
+    // Ein Rollenwechsel ist hier derselbe Vorgang wie in /role und verlangt
+    // deshalb dieselbe Berechtigung. Ohne diese Pruefung reicht allein
+    // "users.approve", um jede nach allowedTargetRoles erlaubte Rolle zu
+    // vergeben -- auch ohne "users.assign_role" zu besitzen.
+    const hasAssignPermission = (req.user!.permissions ?? []).includes("users.assign_role");
+    if (!hasAssignPermission || !allowedTargetRoles(req.user!.role).includes(role)) {
+      res.status(403).json({ error: "Insufficient permissions to assign this role" }); return;
+    }
   }
 
   const newRole: UserRole = role && isValidRole(role) ? role : existing.role ?? "sanitaeter";
-  const [updated] = await db
-    .update(usersTable)
-    .set({ isApproved: true, approvedBy: req.user!.userId, role: newRole, updatedAt: new Date() })
-    .where(eq(usersTable.id, id))
-    .returning();
+
+  // Derselbe Rahmen wie in /role: ein Rollenwechsel gehoert ins Protokoll, und
+  // die Aussperrsicherung muss auch hier greifen. Die Route kann ein bereits
+  // freigeschaltetes Konto herabstufen, also auch die letzte Traegerin einer
+  // wesentlichen Berechtigung -- ohne die Pruefung waere sie der Umweg um die
+  // Sperre, die /role durchsetzt.
+  let updated: typeof existing | undefined;
+  try {
+    await db.transaction(async (tx) => {
+      const rows = await tx
+        .update(usersTable)
+        .set({ isApproved: true, approvedBy: req.user!.userId, role: newRole, updatedAt: new Date() })
+        .where(eq(usersTable.id, id))
+        .returning();
+      updated = rows[0];
+      await logRoleChangeTx(tx, {
+        actorId: req.user!.userId, targetUserId: id, action: "approve",
+        before: existing.role, after: newRole,
+      });
+      await assertAdminReachable(tx, null);
+    });
+  } catch (err) {
+    if (err instanceof LockoutError) { res.status(409).json({ error: err.message }); return; }
+    throw err;
+  }
   invalidateUserCache(id);
   res.json(safeUser(updated!));
 });

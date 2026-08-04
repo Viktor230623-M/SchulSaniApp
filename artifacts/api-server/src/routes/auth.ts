@@ -99,10 +99,12 @@ async function getRoleForUser(groups: string[], providerKey: string, schoolId: s
 // Baut die Nutzerprojektion, wie sie sowohl Login als auch Sitzungswiederherstellung
 // in der Antwort zurueckgeben. Die Rolle wird hier nicht vorbelegt — das bleibt
 // Sache der Aufrufer, da Login und Session unterschiedliche Standardwerte nutzen.
-async function buildUserResponse(user: { id: string; firstName: string | null; lastName: string | null; email: string | null; role: string }) {
+async function buildUserResponse(user: { id: string; firstName: string | null; lastName: string | null; email: string | null; role: string; schoolId: string | null }) {
   // Die Rechte kommen mit der Anmeldeantwort, damit der Client nicht mehr aus
-  // dem Rollennamen ableiten muss, was sichtbar ist.
-  const permissions = await permissionsForRole(user.role, null);
+  // dem Rollennamen ableiten muss, was sichtbar ist. Bereich ist die Schule
+  // der Nutzerzeile, nicht der globale Bereich -- sonst ueberschreibt eine
+  // entzogene, schulgebundene Berechtigung nie die globale Voreinstellung.
+  const permissions = await permissionsForRole(user.role, user.schoolId);
   const isOwnerAccount = config.ownerUserId !== undefined && user.id === config.ownerUserId;
   return {
     user: { id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email, role: user.role, isOwnerAccount },
@@ -218,7 +220,7 @@ router.post("/login", authLimiter, async (req, res) => {
     }
 
     const { role: userRole, id: userId2 } = userValues;
-    res.json({ token, ...(await buildUserResponse({ id: userId2, firstName, lastName, email, role: userRole })) });
+    res.json({ token, ...(await buildUserResponse({ id: userId2, firstName, lastName, email, role: userRole, schoolId })) });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Anmeldung fehlgeschlagen";
     console.error("Login error");
@@ -274,12 +276,12 @@ router.get("/session", sessionLimiter, async (req, res) => {
     return;
   }
 
-  const role = user.role ?? "student_paramedic";
+  const role = user.role ?? "sanitaeter";
   const token = jwt.sign({ userId: user.id, role }, JWT_SECRET, { expiresIn: "2h" });
 
   res.json({
     token,
-    ...(await buildUserResponse({ id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email, role })),
+    ...(await buildUserResponse({ id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email, role, schoolId: user.schoolId })),
   });
 });
 

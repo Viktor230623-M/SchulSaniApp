@@ -1,7 +1,7 @@
 // Zuordnung Rolle -> Berechtigungen, aus der Datenbank statt aus der
 // Konstante. permissions.ts bleibt bewusst frei von Datenbankzugriffen, damit
 // der Katalog auch ohne Verbindung nutzbar ist.
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, isNull, or, sql } from "drizzle-orm";
 import { db, rolesTable, rolePermissionsTable, usersTable } from "@workspace/db";
 import { DEFAULT_ROLE_PERMISSIONS, ESSENTIAL_PERMISSIONS } from "./permissions";
 
@@ -34,14 +34,28 @@ export async function loadRolePermissions(schoolId: string | null): Promise<Reco
   const cached = cache.get(key);
   if (cached && cached.expires > Date.now()) return cached.map;
 
+  // Eine schulgebundene Rolle und eine ungebundene mit demselben Schluessel
+  // koennen nebeneinander bestehen (Bestand liegt ungebunden vor, eine neue
+  // Installation kann trotzdem schon schulgebunden anlegen). Beide zaehlen,
+  // die schulgebundene gewinnt bei gleichem Schluessel -- sonst faende eine
+  // Abfrage nur auf die Schul-Kennung null Zeilen und der Rueckfall auf
+  // DEFAULT_ROLE_PERMISSIONS griffe faelschlich weiter.
   const rows = await db
-    .select({ key: rolesTable.key, permission: rolePermissionsTable.permission })
+    .select({ key: rolesTable.key, permission: rolePermissionsTable.permission, rowSchoolId: rolesTable.schoolId })
     .from(rolesTable)
     .innerJoin(rolePermissionsTable, eq(rolePermissionsTable.roleId, rolesTable.id))
-    .where(schoolId ? eq(rolesTable.schoolId, schoolId) : isNull(rolesTable.schoolId));
+    .where(schoolId ? or(eq(rolesTable.schoolId, schoolId), isNull(rolesTable.schoolId)) : isNull(rolesTable.schoolId));
 
-  const out: Record<string, string[]> = {};
-  for (const row of rows) (out[row.key] ??= []).push(row.permission);
+  const global: Record<string, string[]> = {};
+  const scoped: Record<string, string[]> = {};
+  for (const row of rows) {
+    const bucket = schoolId !== null && row.rowSchoolId === schoolId ? scoped : global;
+    (bucket[row.key] ??= []).push(row.permission);
+  }
+  // Schulgebundene Definition ersetzt die ungebundene vollstaendig, nicht nur
+  // ergaenzend -- wer fuer diese Schule eine eigene Rolle "sanitaeter" anlegt,
+  // will genau deren Rechteliste, nicht die Vereinigung mit der globalen.
+  const out: Record<string, string[]> = { ...global, ...scoped };
 
   // Solange keine Rollen eingespielt sind, gilt weiter die Konstante. Ohne
   // diesen Rueckfall waere eine Installation nach dem Aufspielen der Migration
