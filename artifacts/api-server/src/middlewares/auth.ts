@@ -74,8 +74,8 @@ async function getLiveUser(userId: string): Promise<LiveUser | null> {
     return null;
   }
   const role = row.role ?? "sanitaeter";
-  // Bereich ist die Schule der Nutzerzeile -- derselbe Bereich, in dem
-  // routes/roles.ts die Berechtigungen dieser Rolle pflegt.
+  // Bereich ist die Schule der Nutzerzeile. loadRolePermissions nimmt dazu
+  // schulgebundene wie ungebundene Rollen; der Bestand liegt ungebunden vor.
   const entry: LiveUser = {
     role,
     isApproved: row.isApproved,
