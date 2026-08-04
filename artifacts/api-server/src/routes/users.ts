@@ -95,6 +95,14 @@ router.patch("/:id/approve", requireAuth, requirePermission("users.approve"), as
   const { id } = req.params as { id: string };
   const { role } = req.body as { role?: string };
 
+  // /role sperrt das eigene Konto als Ziel, weil ein Rollenwechsel an sich
+  // selbst die Rangordnung aushebeln kann (z. B. sanitaeter_leitung_admin auf
+  // admin). Freischalten traegt denselben optionalen Rollenwechsel und braucht
+  // deshalb dieselbe Sperre -- sonst genuegt der Umweg ueber diese Route.
+  if (req.user!.userId === id) {
+    res.status(403).json({ error: "Cannot approve your own account" }); return;
+  }
+
   const [existing] = await db.select().from(usersTable).where(eq(usersTable.id, id));
   if (!existing) { res.status(404).json({ error: "User not found" }); return; }
 
@@ -104,8 +112,15 @@ router.patch("/:id/approve", requireAuth, requirePermission("users.approve"), as
     res.status(403).json({ error: "Insufficient permissions to modify this user" }); return;
   }
 
-  if (role && !allowedTargetRoles(req.user!.role).includes(role)) {
-    res.status(403).json({ error: "Insufficient permissions to assign this role" }); return;
+  if (role) {
+    // Ein Rollenwechsel ist hier derselbe Vorgang wie in /role und verlangt
+    // deshalb dieselbe Berechtigung. Ohne diese Pruefung reicht allein
+    // "users.approve", um jede nach allowedTargetRoles erlaubte Rolle zu
+    // vergeben -- auch ohne "users.assign_role" zu besitzen.
+    const hasAssignPermission = (req.user!.permissions ?? []).includes("users.assign_role");
+    if (!hasAssignPermission || !allowedTargetRoles(req.user!.role).includes(role)) {
+      res.status(403).json({ error: "Insufficient permissions to assign this role" }); return;
+    }
   }
 
   const newRole: UserRole = role && isValidRole(role) ? role : existing.role ?? "sanitaeter";
