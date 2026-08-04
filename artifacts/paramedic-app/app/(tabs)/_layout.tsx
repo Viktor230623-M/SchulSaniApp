@@ -14,7 +14,6 @@ export default function TabLayout() {
   const lang = useAppStore((s) => s.language);
   const themeKey = useAppStore((s) => s.theme);
   const theme = getTheme(themeKey);
-  const isDark = ["dark", "crimson", "midnight"].includes(themeKey);
 
   return (
     <Tabs
@@ -27,7 +26,6 @@ export default function TabLayout() {
           descriptors={props.descriptors}
           navigation={props.navigation}
           theme={theme}
-          dunkel={isDark}
         />
       )}
       screenOptions={{
