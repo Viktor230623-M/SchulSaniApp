@@ -31,7 +31,7 @@ import ChipTextField from "@/components/ChipTextField";
 import BodyMap, { BODY_REGION_KEYS } from "@/components/BodyMap";
 import { confirmAction, notify } from "@/lib/dialog";
 import ApiService from "@/services/ApiService";
-import { useAppStore } from "@/store/useAppStore";
+import { has, useAppStore } from "@/store/useAppStore";
 
 
 
@@ -44,8 +44,6 @@ const OUTCOMES: IncidentOutcome[] = [
 
 const PATIENT_TYPES: PatientType[] = ["student", "teacher", "visitor", "other"];
 const AVPU: AvpuScore[] = ["A", "V", "P", "U"];
-
-const LEADERSHIP_ROLES = ["admin", "owner", "sanitaeter_leitung", "sanitaeter_leitung_admin"];
 
 export default function ReportScreen() {
   const insets = useSafeAreaInsets();
@@ -60,8 +58,8 @@ export default function ReportScreen() {
   const user = useAppStore((s) => s.user);
   const theme = getTheme(themeKey);
   const isNew = id === "new";
-  const isLeadership = LEADERSHIP_ROLES.includes(user?.role ?? "");
-  const showPatient = LEADERSHIP_ROLES.includes(user?.role ?? "") || user?.role === "teacher";
+  const isLeadership = has("reports.read_all");
+  const showPatient = has("reports.see_patient_info");
 
   const [report, setReport] = useState<IncidentReport | null>(null);
   const [loading, setLoading] = useState(!isNew);

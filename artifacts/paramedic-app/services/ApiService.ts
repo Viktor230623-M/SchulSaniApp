@@ -9,12 +9,21 @@ import type {
   MissionPriority,
   NewsItem,
   NotificationItem,
+  RoleInfo,
   User,
   SqlPreset,
   DbConsoleResult,
+  PermissionDef,
 } from "@/models";
 
 const API_BASE = `https://${process.env["EXPO_PUBLIC_DOMAIN"]}/api`;
+
+/** Anmeldeweg dieser Installation, wie ihn GET /auth/providers liefert. */
+export interface AuthProviderInfo {
+  key: string;
+  displayName: string;
+  type: "iserv-form" | "oidc-redirect";
+}
 
 let authToken: string | null = null;
 
@@ -52,7 +61,8 @@ const ApiService = {
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error ?? "Anmeldung fehlgeschlagen");
     if (data.token) setAuthToken(data.token);
-    return { user: data.user as User, isTealUnlocked: data.isTealUnlocked, token: data.token };
+    const user: User = { ...data.user, permissions: data.permissions ?? [] };
+    return { user, isTealUnlocked: data.isTealUnlocked, token: data.token };
   },
 
   /**
@@ -79,7 +89,8 @@ const ApiService = {
       const data = await resp.json();
       if (!data.token) return null;
       setAuthToken(data.token);
-      return { user: data.user as User, isTealUnlocked: data.isTealUnlocked, token: data.token };
+      const user: User = { ...data.user, permissions: data.permissions ?? [] };
+      return { user, isTealUnlocked: data.isTealUnlocked, token: data.token };
     } catch {
       // Netzwerkfehler oder Abbruch durch das Zeitlimit: als "nicht angemeldet"
       // behandeln, nicht als Absturz.
@@ -87,6 +98,32 @@ const ApiService = {
     } finally {
       clearTimeout(timeout);
     }
+  },
+
+  /**
+   * Anmeldewege dieser Installation. Oeffentlicher Endpunkt, kein Cookie
+   * noetig. Wirft bei Netzfehler oder Zeitlimit -- der Aufrufer entscheidet,
+   * wie der Anmeldebildschirm bei einem Ausfall dieses Abrufs aussieht.
+   */
+  async getAuthProviders(): Promise<AuthProviderInfo[]> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8_000);
+    try {
+      const resp = await fetch(`${API_BASE}/auth/providers`, {
+        headers: { "ngrok-skip-browser-warning": "true" },
+        signal: controller.signal,
+      });
+      if (!resp.ok) throw new Error("Anmeldewege konnten nicht geladen werden");
+      const data = await resp.json();
+      return Array.isArray(data.providers) ? data.providers : [];
+    } finally {
+      clearTimeout(timeout);
+    }
+  },
+
+  /** URL des Weiterleitungsstarts eines Anmeldewegs (GET /auth/:provider/start). */
+  getProviderStartUrl(providerKey: string): string {
+    return `${API_BASE}/auth/${encodeURIComponent(providerKey)}/start`;
   },
 
   async logout(): Promise<void> {
@@ -313,6 +350,72 @@ const ApiService = {
       throw new Error(data.error ?? "Benutzer konnten nicht geladen werden");
     }
     return resp.json();
+  },
+
+  async getRoles(): Promise<RoleInfo[]> {
+    const resp = await apiFetch(`${API_BASE}/roles`, { headers: headers() });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      throw new Error(data.error ?? "Rollen konnten nicht geladen werden");
+    }
+    return resp.json();
+  },
+
+  async getPermissionCatalog(): Promise<PermissionDef[]> {
+    const resp = await apiFetch(`${API_BASE}/roles/permissions`, { headers: headers() });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      throw new Error(data.error ?? "Berechtigungen konnten nicht geladen werden");
+    }
+    return resp.json();
+  },
+
+  async getRolePermissions(roleId: string): Promise<string[]> {
+    const resp = await apiFetch(`${API_BASE}/roles/${roleId}/permissions`, { headers: headers() });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error ?? "Berechtigungen der Rolle konnten nicht geladen werden");
+    return data.permissions ?? [];
+  },
+
+  async setRolePermissions(roleId: string, permissions: string[]): Promise<string[]> {
+    const resp = await apiFetch(`${API_BASE}/roles/${roleId}/permissions`, {
+      method: "PUT",
+      headers: headers(),
+      body: JSON.stringify({ permissions }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error ?? "Berechtigungen konnten nicht gespeichert werden");
+    return data.permissions ?? [];
+  },
+
+  async createRole(input: { key: string; displayName: string; displayNameEn?: string; color?: string }): Promise<{ id: string; key: string }> {
+    const resp = await apiFetch(`${API_BASE}/roles`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify(input),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error ?? "Rolle konnte nicht angelegt werden");
+    return data;
+  },
+
+  async updateRole(id: string, input: { displayName?: string; displayNameEn?: string | null; color?: string | null }): Promise<{ id: string }> {
+    const resp = await apiFetch(`${API_BASE}/roles/${id}`, {
+      method: "PATCH",
+      headers: headers(),
+      body: JSON.stringify(input),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error ?? "Rolle konnte nicht geaendert werden");
+    return data;
+  },
+
+  async deleteRole(id: string): Promise<void> {
+    const resp = await apiFetch(`${API_BASE}/roles/${id}`, { method: "DELETE", headers: headers() });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      throw new Error(data.error ?? "Rolle konnte nicht geloescht werden");
+    }
   },
 
   async getOnDutyUsers(): Promise<User[]> {

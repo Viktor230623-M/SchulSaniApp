@@ -2,15 +2,15 @@ import { randomUUID } from "crypto";
 import { Router } from "express";
 import { desc, eq } from "drizzle-orm";
 import { db, newsTable, usersTable } from "@workspace/db";
-import { requireAuth, requireRole, type AuthRequest } from "../middlewares/auth";
+import { requireAuth, requirePermission, type AuthRequest } from "../middlewares/auth";
 import { notifySanitaeters } from "../services/notifications";
 import { translateToLanguages } from "../services/translator";
 
 const router = Router();
 
 router.get("/", requireAuth, async (req: AuthRequest, res) => {
-  const { role, userId } = req.user!;
-  const canModerate = ["admin", "teacher", "owner"].includes(role);
+  const { userId } = req.user!;
+  const canModerate = (req.user!.permissions ?? []).includes("news.moderate");
   const items = await db.select().from(newsTable).orderBy(desc(newsTable.publishedAt));
   const filtered = items.filter((n) => {
     if (canModerate) return true;
@@ -21,7 +21,7 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
 });
 
 router.post("/", requireAuth, async (req: AuthRequest, res) => {
-  const { userId, role } = req.user!;
+  const { userId } = req.user!;
   const { title, summary, content, category } = req.body;
   if (!title || !content) {
     res.status(400).json({ error: "title and content required" });
@@ -39,7 +39,7 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
     summary: summary ?? (content.length > 80 ? content.substring(0, 80) + "..." : content),
     content,
     category: category ?? "announcement",
-    status: ["admin", "owner"].includes(role) ? "approved" as const : "pending" as const,
+    status: (req.user!.permissions ?? []).includes("news.publish_direct") ? "approved" as const : "pending" as const,
     publishedAt: new Date(),
     author: authorName,
     authorId: userId,
@@ -57,8 +57,8 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
   res.status(201).json(newItem);
 });
 
-router.post("/:id/approve", requireAuth, requireRole("admin", "teacher", "owner"), async (req, res) => {
-  const [item] = await db.update(newsTable).set({ status: "approved" }).where(eq(newsTable.id, req.params["id"]!)).returning();
+router.post("/:id/approve", requireAuth, requirePermission("news.moderate"), async (req, res) => {
+  const [item] = await db.update(newsTable).set({ status: "approved" }).where(eq(newsTable.id, req.params.id as string)).returning();
   if (!item) { res.status(404).json({ error: "Not found" }); return; }
   
   notifySanitaeters({
@@ -71,7 +71,7 @@ router.post("/:id/approve", requireAuth, requireRole("admin", "teacher", "owner"
   res.json(item);
 });
 
-router.post("/:id/reject", requireAuth, requireRole("admin", "teacher", "owner"), async (req, res) => {
+router.post("/:id/reject", requireAuth, requirePermission("news.moderate"), async (req, res) => {
   const { reason } = req.body as { reason?: string };
   if (!reason || !reason.trim()) {
     res.status(400).json({ error: "reason is required" });
@@ -81,14 +81,14 @@ router.post("/:id/reject", requireAuth, requireRole("admin", "teacher", "owner")
     res.status(400).json({ error: "reason max 500 characters" });
     return;
   }
-  const [item] = await db.update(newsTable).set({ status: "rejected", rejectionReason: reason }).where(eq(newsTable.id, req.params["id"]!)).returning();
+  const [item] = await db.update(newsTable).set({ status: "rejected", rejectionReason: reason }).where(eq(newsTable.id, req.params.id as string)).returning();
   if (!item) { res.status(404).json({ error: "Not found" }); return; }
   res.json(item);
 });
 
 router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
   const { userId, role } = req.user!;
-  const [item] = await db.select().from(newsTable).where(eq(newsTable.id, req.params["id"]!));
+  const [item] = await db.select().from(newsTable).where(eq(newsTable.id, req.params.id as string));
   if (!item) { res.status(404).json({ error: "Not found" }); return; }
   if (item.authorId !== userId) { res.status(403).json({ error: "Forbidden" }); return; }
   if (item.status !== "rejected") { res.status(400).json({ error: "Nur abgelehnte News können bearbeitet werden" }); return; }
@@ -111,12 +111,12 @@ router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
     content: content ?? item.content,
     status: "pending",
     rejectionReason: null,
-  }).where(eq(newsTable.id, req.params["id"]!)).returning();
+  }).where(eq(newsTable.id, req.params.id as string)).returning();
   res.json(updated);
 });
 
 router.post("/:id/read", requireAuth, async (req, res) => {
-  await db.update(newsTable).set({ isRead: true }).where(eq(newsTable.id, req.params["id"]!));
+  await db.update(newsTable).set({ isRead: true }).where(eq(newsTable.id, req.params.id as string));
   res.json({ ok: true });
 });
 
@@ -127,14 +127,14 @@ router.post("/read-all", requireAuth, async (req: AuthRequest, res) => {
 });
 
 router.delete("/:id", requireAuth, async (req: AuthRequest, res) => {
-  const { userId, role } = req.user!;
-  const canModerate = ["admin", "teacher", "owner"].includes(role);
-  const [item] = await db.select().from(newsTable).where(eq(newsTable.id, req.params["id"]!));
+  const { userId } = req.user!;
+  const canModerate = (req.user!.permissions ?? []).includes("news.moderate");
+  const [item] = await db.select().from(newsTable).where(eq(newsTable.id, req.params.id as string));
   if (!item) { res.status(404).json({ error: "Not found" }); return; }
   if (item.authorId !== userId && !canModerate) {
     res.status(403).json({ error: "Forbidden" }); return;
   }
-  await db.delete(newsTable).where(eq(newsTable.id, req.params["id"]!));
+  await db.delete(newsTable).where(eq(newsTable.id, req.params.id as string));
   res.json({ ok: true });
 });
 

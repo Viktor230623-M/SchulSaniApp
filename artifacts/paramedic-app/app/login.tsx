@@ -1,7 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import * as Linking from "expo-linking";
 import { router } from "expo-router";
-import React, { useState } from "react";
+import * as WebBrowser from "expo-web-browser";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -17,11 +19,11 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { MedicalCross } from "@/components/MedicalCross";
 import { useTopPad } from "@/hooks/useTopPad";
-import { ISERV_DOMAIN, SCHOOL_NAME } from "@/constants/appConfig";
+import { SCHOOL_NAME } from "@/constants/appConfig";
 import { t } from "@/constants/i18n";
 import { getTheme } from "@/constants/theme";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import ApiService, { setAuthToken } from "@/services/ApiService";
+import ApiService, { setAuthToken, type AuthProviderInfo } from "@/services/ApiService";
 import { useAppStore } from "@/store/useAppStore";
 import type { AppTheme } from "@/models";
 
@@ -39,6 +41,40 @@ export default function LoginScreen() {
   const [error, setError] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
+
+  // Anmeldewege dieser Installation, siehe GET /auth/providers. `null` heisst
+  // "noch am Laden" -- solange davon nichts gerendert, damit bei genau einem
+  // Weg kein kurzes Aufblitzen einer Auswahl vor dem eigentlichen Formular
+  // entsteht.
+  const [providers, setProviders] = useState<AuthProviderInfo[] | null>(null);
+  const [providersFailed, setProvidersFailed] = useState(false);
+  const [selectedProvider, setSelectedProvider] = useState<AuthProviderInfo | null>(null);
+  const [redirecting, setRedirecting] = useState(false);
+  const [redirectError, setRedirectError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await ApiService.getAuthProviders();
+        if (cancelled) return;
+        if (list.length === 0) throw new Error("Keine Anmeldewege konfiguriert");
+        setProviders(list);
+        if (list.length === 1) setSelectedProvider(list[0]);
+      } catch {
+        // Ein Netzfehler beim Start darf niemanden aussperren: der Bildschirm
+        // faellt auf den Formularweg zurueck, ohne einen Anbieternamen zu
+        // erfinden, und zeigt einen Hinweis.
+        if (cancelled) return;
+        setProvidersFailed(true);
+        setProviders([]);
+        setSelectedProvider({ key: "iserv-form", displayName: "", type: "iserv-form" });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function handleLogin() {
     if (!username.trim()) {
@@ -76,7 +112,55 @@ export default function LoginScreen() {
     }
   }
 
+  async function handleRedirect(provider: AuthProviderInfo) {
+    setRedirectError("");
+    setRedirecting(true);
+    const startUrl = ApiService.getProviderStartUrl(provider.key);
+
+    if (Platform.OS === "web") {
+      // Gewoehnlicher Seitenwechsel: der Server setzt das Sitzungscookie und
+      // leitet auf die App-URL zurueck. Beim naechsten Laden holt _layout.tsx
+      // die Sitzung wie gehabt ueber restoreSession() -- kein weiterer Code
+      // noetig, das Cookie liegt schon im selben Browser.
+      window.location.href = startUrl;
+      return;
+    }
+
+    try {
+      // Ruecksprung nativ ueber expo-web-browser: die App oeffnet den
+      // Anmeldedialog im Systembrowser und erhaelt die Kontrolle zurueck,
+      // sobald dieser auf die App-URL (expo-linking) weiterleitet oder
+      // geschlossen wird.
+      const returnUrl = Linking.createURL("login");
+      const result = await WebBrowser.openAuthSessionAsync(startUrl, returnUrl);
+      if (result.type !== "success") {
+        setRedirecting(false);
+        if (result.type !== "cancel" && result.type !== "dismiss") {
+          setRedirectError(t("auth.redirectFailed", lang));
+        }
+        return;
+      }
+
+      const restored = await ApiService.restoreSession();
+      setRedirecting(false);
+      if (!restored) {
+        setRedirectError(t("auth.redirectFailed", lang));
+        return;
+      }
+      setToken(restored.token);
+      login(restored.user);
+      router.replace("/(tabs)/news");
+    } catch {
+      setRedirecting(false);
+      setRedirectError(t("auth.redirectFailed", lang));
+    }
+  }
+
   const topPad = useTopPad();
+  const providerLabel = selectedProvider?.displayName || "";
+  const showProviderList = providers !== null && providers.length > 1 && selectedProvider === null;
+  const showPasswordForm = selectedProvider !== null && selectedProvider.type === "iserv-form";
+  const showRedirectButton = selectedProvider !== null && selectedProvider.type === "oidc-redirect";
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -96,128 +180,227 @@ export default function LoginScreen() {
             <MedicalCross size={64} color={theme.tint} animate />
             <Text style={[styles.appName, { color: theme.text }]}>{SCHOOL_NAME}</Text>
             <Text style={[styles.appSubtitle, { color: theme.textSecondary }]}>
-              {t("auth.adminSystem", lang)} · {ISERV_DOMAIN}
+              {t("auth.adminSystem", lang)}
+              {providerLabel ? ` · ${providerLabel}` : ""}
             </Text>
           </View>
 
-          <View
-            style={[
-              styles.card,
-              { backgroundColor: theme.card, borderColor: theme.cardBorder },
-            ]}
-          >
-            <View style={styles.iservHeader}>
-              <View style={[styles.iservBadge, { backgroundColor: "#EFF6FF" }]}>
-                <Text style={styles.iservBadgeText}>IServ</Text>
-              </View>
-              <Text style={[styles.iservTitle, { color: theme.text }]}>
-                {t("auth.iservLogin", lang)}
-              </Text>
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={[styles.label, { color: theme.textSecondary }]}>
-                {t("auth.username", lang)}
-              </Text>
-              <View
-                style={[
-                  styles.inputWrap,
-                  { backgroundColor: theme.inputBackground, borderColor: theme.inputBorder },
-                ]}
-              >
-                <Ionicons name="person-outline" size={18} color={theme.textTertiary} />
-                <TextInput
-                  value={username}
-                  onChangeText={setUsername}
-                  placeholder={t("auth.username", lang)}
-                  placeholderTextColor={theme.textTertiary}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  autoComplete="username"
-                  style={[styles.input, { color: theme.text }]}
-                  onSubmitEditing={handleLogin}
-                  returnKeyType="next"
-                />
-              </View>
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={[styles.label, { color: theme.textSecondary }]}>
-                {t("auth.password", lang)}
-              </Text>
-              <View
-                style={[
-                  styles.inputWrap,
-                  { backgroundColor: theme.inputBackground, borderColor: theme.inputBorder },
-                ]}
-              >
-                <Ionicons name="lock-closed-outline" size={18} color={theme.textTertiary} />
-                <TextInput
-                  value={password}
-                  onChangeText={setPassword}
-                  placeholder="••••••••"
-                  placeholderTextColor={theme.textTertiary}
-                  secureTextEntry={!showPass}
-                  autoComplete="password"
-                  style={[styles.input, { color: theme.text, flex: 1 }]}
-                  onSubmitEditing={handleLogin}
-                  returnKeyType="done"
-                />
-                <Pressable onPress={() => setShowPass(!showPass)}>
-                  <Ionicons
-                    name={showPass ? "eye-off-outline" : "eye-outline"}
-                    size={18}
-                    color={theme.textTertiary}
-                  />
-                </Pressable>
-              </View>
-            </View>
-
-            <Pressable 
-              onPress={() => setRememberMe(!rememberMe)} 
-              style={styles.rememberMeContainer}
-            >
-              <View style={[
-                styles.checkbox, 
-                { borderColor: rememberMe ? theme.tint : theme.textTertiary },
-                rememberMe && { backgroundColor: theme.tint }
-              ]}>
-                {rememberMe && <Ionicons name="checkmark" size={12} color="#fff" />}
-              </View>
-              <Text style={[styles.rememberMeText, { color: theme.textSecondary }]}>
-                {t("auth.rememberMe", lang)}
-              </Text>
-            </Pressable>
-
-            {!!error && (
-              <View style={styles.errorBox}>
-                <Ionicons name="alert-circle" size={16} color="#EF4444" />
-                <Text style={styles.errorText}>{error}</Text>
-              </View>
-            )}
-
-            <Pressable
-              onPress={handleLogin}
-              disabled={loading}
-              style={({ pressed }) => [
-                styles.loginButton,
-                { backgroundColor: "#005BAA", opacity: loading ? 0.7 : pressed ? 0.9 : 1 },
+          {providersFailed && (
+            <View
+              style={[
+                styles.card,
+                styles.noticeCard,
+                { backgroundColor: theme.card, borderColor: theme.warning, maxWidth: 400, width: "100%" },
               ]}
             >
-              {loading ? (
-                <View style={styles.loadingRow}>
-                  <ActivityIndicator color="#fff" size="small" />
-                  <Text style={styles.loginButtonText}>{t("auth.loginLoading", lang)}</Text>
-                </View>
-              ) : (
-                <Text style={styles.loginButtonText}>{t("auth.loginButton", lang)}</Text>
-              )}
-            </Pressable>
+              <Ionicons name="warning-outline" size={16} color={theme.warning} />
+              <Text style={[styles.noticeText, { color: theme.textSecondary }]}>
+                {t("auth.providersLoadFailed", lang)}
+              </Text>
+            </View>
+          )}
 
-            <Text style={[styles.footerNote, { color: theme.textTertiary }]}>
-              {t("auth.iservNote", lang).replace("{domain}", ISERV_DOMAIN)}
-            </Text>
-          </View>
+          {showProviderList && (
+            <View
+              style={[
+                styles.card,
+                { backgroundColor: theme.card, borderColor: theme.cardBorder },
+              ]}
+            >
+              <Text style={[styles.iservTitle, { color: theme.text, marginBottom: 4 }]}>
+                {t("auth.chooseProvider", lang)}
+              </Text>
+              {providers!.map((provider) => (
+                <Pressable
+                  key={provider.key}
+                  onPress={() => {
+                    if (provider.type === "oidc-redirect") {
+                      handleRedirect(provider);
+                    } else {
+                      setSelectedProvider(provider);
+                    }
+                  }}
+                  style={({ pressed }) => [
+                    styles.providerRow,
+                    { borderColor: theme.inputBorder, backgroundColor: theme.inputBackground, opacity: pressed ? 0.8 : 1 },
+                  ]}
+                >
+                  <Text style={[styles.providerRowText, { color: theme.text }]}>{provider.displayName}</Text>
+                  <Ionicons name="chevron-forward" size={18} color={theme.textTertiary} />
+                </Pressable>
+              ))}
+            </View>
+          )}
+
+          {selectedProvider !== null && (
+            <View
+              style={[
+                styles.card,
+                { backgroundColor: theme.card, borderColor: theme.cardBorder },
+              ]}
+            >
+              {providers !== null && providers.length > 1 && (
+                <Pressable onPress={() => setSelectedProvider(null)} style={styles.backRow}>
+                  <Ionicons name="chevron-back" size={16} color={theme.tint} />
+                  <Text style={[styles.backText, { color: theme.tint }]}>
+                    {t("auth.backToProviders", lang)}
+                  </Text>
+                </Pressable>
+              )}
+
+              <View style={styles.iservHeader}>
+                {providerLabel !== "" && (
+                  <View style={[styles.iservBadge, { backgroundColor: "#EFF6FF" }]}>
+                    <Text style={styles.iservBadgeText}>{providerLabel}</Text>
+                  </View>
+                )}
+                <Text style={[styles.iservTitle, { color: theme.text }]}>
+                  {providerLabel !== ""
+                    ? t("auth.providerLogin", lang).replace("{provider}", providerLabel)
+                    : t("auth.login", lang)}
+                </Text>
+              </View>
+
+              {showRedirectButton && (
+                <>
+                  {!!redirectError && (
+                    <View style={styles.errorBox}>
+                      <Ionicons name="alert-circle" size={16} color="#EF4444" />
+                      <Text style={styles.errorText}>{redirectError}</Text>
+                    </View>
+                  )}
+                  <Pressable
+                    onPress={() => handleRedirect(selectedProvider)}
+                    disabled={redirecting}
+                    style={({ pressed }) => [
+                      styles.loginButton,
+                      { backgroundColor: "#005BAA", opacity: redirecting ? 0.7 : pressed ? 0.9 : 1 },
+                    ]}
+                  >
+                    {redirecting ? (
+                      <View style={styles.loadingRow}>
+                        <ActivityIndicator color="#fff" size="small" />
+                        <Text style={styles.loginButtonText}>{t("auth.redirecting", lang)}</Text>
+                      </View>
+                    ) : (
+                      <Text style={styles.loginButtonText}>
+                        {t("auth.providerLogin", lang).replace("{provider}", providerLabel)}
+                      </Text>
+                    )}
+                  </Pressable>
+                </>
+              )}
+
+              {showPasswordForm && (
+                <>
+                  <View style={styles.inputGroup}>
+                    <Text style={[styles.label, { color: theme.textSecondary }]}>
+                      {t("auth.username", lang)}
+                    </Text>
+                    <View
+                      style={[
+                        styles.inputWrap,
+                        { backgroundColor: theme.inputBackground, borderColor: theme.inputBorder },
+                      ]}
+                    >
+                      <Ionicons name="person-outline" size={18} color={theme.textTertiary} />
+                      <TextInput
+                        value={username}
+                        onChangeText={setUsername}
+                        placeholder={t("auth.username", lang)}
+                        placeholderTextColor={theme.textTertiary}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        autoComplete="username"
+                        style={[styles.input, { color: theme.text }]}
+                        onSubmitEditing={handleLogin}
+                        returnKeyType="next"
+                      />
+                    </View>
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={[styles.label, { color: theme.textSecondary }]}>
+                      {t("auth.password", lang)}
+                    </Text>
+                    <View
+                      style={[
+                        styles.inputWrap,
+                        { backgroundColor: theme.inputBackground, borderColor: theme.inputBorder },
+                      ]}
+                    >
+                      <Ionicons name="lock-closed-outline" size={18} color={theme.textTertiary} />
+                      <TextInput
+                        value={password}
+                        onChangeText={setPassword}
+                        placeholder="••••••••"
+                        placeholderTextColor={theme.textTertiary}
+                        secureTextEntry={!showPass}
+                        autoComplete="password"
+                        style={[styles.input, { color: theme.text, flex: 1 }]}
+                        onSubmitEditing={handleLogin}
+                        returnKeyType="done"
+                      />
+                      <Pressable onPress={() => setShowPass(!showPass)}>
+                        <Ionicons
+                          name={showPass ? "eye-off-outline" : "eye-outline"}
+                          size={18}
+                          color={theme.textTertiary}
+                        />
+                      </Pressable>
+                    </View>
+                  </View>
+
+                  <Pressable
+                    onPress={() => setRememberMe(!rememberMe)}
+                    style={styles.rememberMeContainer}
+                  >
+                    <View style={[
+                      styles.checkbox,
+                      { borderColor: rememberMe ? theme.tint : theme.textTertiary },
+                      rememberMe && { backgroundColor: theme.tint }
+                    ]}>
+                      {rememberMe && <Ionicons name="checkmark" size={12} color="#fff" />}
+                    </View>
+                    <Text style={[styles.rememberMeText, { color: theme.textSecondary }]}>
+                      {t("auth.rememberMe", lang)}
+                    </Text>
+                  </Pressable>
+
+                  {!!error && (
+                    <View style={styles.errorBox}>
+                      <Ionicons name="alert-circle" size={16} color="#EF4444" />
+                      <Text style={styles.errorText}>{error}</Text>
+                    </View>
+                  )}
+
+                  <Pressable
+                    onPress={handleLogin}
+                    disabled={loading}
+                    style={({ pressed }) => [
+                      styles.loginButton,
+                      { backgroundColor: "#005BAA", opacity: loading ? 0.7 : pressed ? 0.9 : 1 },
+                    ]}
+                  >
+                    {loading ? (
+                      <View style={styles.loadingRow}>
+                        <ActivityIndicator color="#fff" size="small" />
+                        <Text style={styles.loginButtonText}>{t("auth.loginLoading", lang)}</Text>
+                      </View>
+                    ) : (
+                      <Text style={styles.loginButtonText}>{t("auth.loginButton", lang)}</Text>
+                    )}
+                  </Pressable>
+
+                  {providerLabel !== "" && (
+                    <Text style={[styles.footerNote, { color: theme.textTertiary }]}>
+                      {t("auth.providerNote", lang).replace("{provider}", providerLabel)}
+                    </Text>
+                  )}
+                </>
+              )}
+            </View>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </View>
@@ -242,7 +425,27 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 16,
     elevation: 4,
+    marginBottom: 16,
   },
+  noticeCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 14,
+  },
+  noticeText: { fontSize: 12, fontFamily: "Inter_400Regular", flex: 1 },
+  providerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  providerRowText: { fontSize: 15, fontFamily: "Inter_500Medium" },
+  backRow: { flexDirection: "row", alignItems: "center", gap: 4, marginBottom: -4 },
+  backText: { fontSize: 13, fontFamily: "Inter_500Medium" },
   iservHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
   iservBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
   iservBadgeText: { fontSize: 12, fontFamily: "Inter_700Bold", color: "#1D4ED8", letterSpacing: 0.5 },

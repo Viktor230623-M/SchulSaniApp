@@ -22,7 +22,7 @@ import { DatePickerField } from "@/components/DatePickerField";
 import type { LOARequest, LOAStatus } from "@/models";
 import { confirmAction, notify } from "@/lib/dialog";
 import ApiService from "@/services/ApiService";
-import { useAppStore } from "@/store/useAppStore";
+import { has, useAppStore } from "@/store/useAppStore";
 import { localized } from "@/utils/localize";
 
 function formatDisplayDate(dateStr: string): string {
@@ -76,9 +76,10 @@ export default function LOAScreen() {
   const [rejectId, setRejectId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
 
-  const role = user?.role ?? "";
-  const canModerate = ["admin", "sanitaeter_leitung", "sanitaeter_leitung_admin", "teacher", "owner"].includes(role);
-  const canCreate = ["student_paramedic", "sanitaeter_leitung", "sanitaeter_leitung_admin", "admin", "owner", "sanitaeter"].includes(role);
+  const canModerate = has("loa.moderate");
+  // Keine Berechtigung im Katalog deckt diese Ausnahme exakt ab — Lehrkraft
+  // hat serverseitig loa.create, darf hier aber bewusst nicht anlegen.
+  const canCreate = ["student_paramedic", "sanitaeter_leitung", "sanitaeter_leitung_admin", "admin", "owner", "sanitaeter"].includes(user?.role ?? "");
   const [tab, setTab] = useState<"mine" | "all">("mine");
   const [segmentWidth, setSegmentWidth] = useState(0);
   const tabAnim = useSharedValue(0);
@@ -124,7 +125,7 @@ export default function LOAScreen() {
         toDate: toYMD(toDate),
         reason,
       });
-      if (role === "owner") {
+      if (has("loa.self_approve")) {
         const approved = await ApiService.approveLOA(req.id, t("loa.autoApproved", lang));
         addLOA(approved);
       } else {

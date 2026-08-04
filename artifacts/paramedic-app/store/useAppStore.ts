@@ -20,6 +20,15 @@ import type {
  */
 export type AuthStatus = "loading" | "authed" | "anon";
 
+/**
+ * Einzige Quelle fuer Sichtbarkeit im Client: die vom Server gelieferte
+ * Berechtigungsliste des angemeldeten Nutzers. Keine eigene Rollenlogik.
+ */
+export function has(permission: string): boolean {
+  const user = useAppStore.getState().user;
+  return (user?.permissions ?? []).includes(permission);
+}
+
 interface AppState {
   user: User | null;
   authStatus: AuthStatus;

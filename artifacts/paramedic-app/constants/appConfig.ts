@@ -52,10 +52,3 @@ export const THEME_COLOR = pflicht(
   "EXPO_PUBLIC_THEME_COLOR",
   process.env["EXPO_PUBLIC_THEME_COLOR"],
 );
-
-/**
- * Konto, dem die SQL-Konsole angezeigt wird. Optional — ohne Angabe blendet
- * die App sie fuer alle aus. Die Entscheidung faellt ohnehin serverseitig,
- * hier geht es nur um die Sichtbarkeit des Eintrags.
- */
-export const OWNER_USER_ID = process.env["EXPO_PUBLIC_OWNER_USER_ID"]?.trim() ?? "";

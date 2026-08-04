@@ -17,6 +17,7 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useTopPad } from "@/hooks/useTopPad";
+import { useRoles } from "@/hooks/useRoles";
 import { MedicalCross } from "@/components/MedicalCross";
 import { t } from "@/constants/i18n";
 import { getTheme } from "@/constants/theme";
@@ -36,6 +37,7 @@ export default function DutyScreen() {
   const setDutyStatus = useAppStore((s) => s.setDutyStatus);
   const setDutyLoading = useAppStore((s) => s.setDutyLoading);
 
+  const roles = useRoles();
   const [onDutyUsers, setOnDutyUsers] = useState<User[]>([]);
   const [listLoading, setListLoading] = useState(false);
 
@@ -79,17 +81,6 @@ export default function DutyScreen() {
     } finally {
       setDutyLoading(false);
     }
-  }
-
-  function roleLabelShort(role: User["role"]) {
-    return {
-      owner: t("roles.owner", lang),
-      student_paramedic: "San.",
-      sanitaeter_leitung: "Ltg.",
-      sanitaeter_leitung_admin: "Ltg.",
-      admin: "Admin",
-      teacher: t("roles.teacher", lang),
-    }[role] ?? role;
   }
 
   const topPad = useTopPad();
@@ -174,7 +165,7 @@ export default function DutyScreen() {
                     {u.firstName && u.lastName ? `${u.firstName.charAt(0).toUpperCase() + u.firstName.slice(1).toLowerCase()} ${u.lastName.charAt(0).toUpperCase() + u.lastName.slice(1).toLowerCase()}` : u.id.replace("iserv-", "")}
                   </Text>
                   <Text style={[styles.userRole, { color: theme.textTertiary }]}>
-                    {roleLabelShort(u.role)}
+                    {roles.displayName(u.role, lang)}
                   </Text>
                 </View>
                 <View style={[styles.onDutyPip, { backgroundColor: theme.tint }]} />

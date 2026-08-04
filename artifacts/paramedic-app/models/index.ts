@@ -17,9 +17,33 @@ export interface User {
   role: UserRole;
   schoolId: string;
   isApproved?: boolean;
+  /** Serverseitig berechnet: Konto mit Zugriff auf die SQL-Konsole. */
+  isOwnerAccount?: boolean;
+  /** Vom Server mit der Anmeldeantwort geliefert; einzige Quelle fuer Sichtbarkeit im Client. */
+  permissions?: string[];
   avatarUri?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+/** Zeile aus GET /roles — Anzeigename und Farbe kommen aus der Datenbank, nicht mehr fest kodiert. */
+export interface RoleInfo {
+  id: string;
+  key: string;
+  displayName: string;
+  displayNameEn: string | null;
+  color: string | null;
+  sortOrder: number;
+  isSystem: boolean;
+  userCount: number;
+}
+
+/** Zeile aus GET /roles/permissions — Berechtigungskatalog mit deutscher Beschreibung. */
+export interface PermissionDef {
+  key: string;
+  description: string;
+  essential: boolean;
+  hiddenFromUi: boolean;
 }
 
 export type MissionStatus = "pending" | "accepted" | "rejected" | "completed" | "archived";

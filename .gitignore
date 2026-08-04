@@ -45,6 +45,7 @@ Thumbs.db
 .cache/
 .local/
 artifacts/api-server/.env
+ecosystem.config.js
 
 # Interne Notizen und Planungsunterlagen
 docs/superpowers/

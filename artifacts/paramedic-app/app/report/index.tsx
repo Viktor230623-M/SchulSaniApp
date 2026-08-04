@@ -18,18 +18,15 @@ import { t } from "@/constants/i18n";
 import { getTheme } from "@/constants/theme";
 import type { IncidentReport } from "@/models";
 import ApiService from "@/services/ApiService";
-import { useAppStore } from "@/store/useAppStore";
-
-const LEADERSHIP_ROLES = ["admin", "owner", "sanitaeter_leitung", "sanitaeter_leitung_admin"];
+import { has, useAppStore } from "@/store/useAppStore";
 
 export default function ReportsIndexScreen() {
   const insets = useSafeAreaInsets();
   const lang = useAppStore((s) => s.language);
   const themeKey = useAppStore((s) => s.theme);
-  const user = useAppStore((s) => s.user);
   const theme = getTheme(themeKey);
 
-  const isLeadership = LEADERSHIP_ROLES.includes(user?.role ?? "");
+  const isLeadership = has("reports.read_all");
   const [reports, setReports] = useState<IncidentReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
