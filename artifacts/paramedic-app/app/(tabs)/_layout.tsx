@@ -3,14 +3,16 @@ import { SymbolView } from "expo-symbols";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import React from "react";
 import { Platform } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { GlasTabLeiste } from "@/components/GlasTabLeiste";
+import { GlasTabLeiste, LEISTE_PLATZ } from "@/components/GlasTabLeiste";
 import { t } from "@/constants/i18n";
 import { getTheme } from "@/constants/theme";
 import { useAppStore } from "@/store/useAppStore";
 
 export default function TabLayout() {
   const isIOS = Platform.OS === "ios";
+  const insets = useSafeAreaInsets();
   const lang = useAppStore((s) => s.language);
   const themeKey = useAppStore((s) => s.theme);
   const theme = getTheme(themeKey);
@@ -32,6 +34,15 @@ export default function TabLayout() {
         tabBarActiveTintColor: theme.tabBarActive,
         tabBarInactiveTintColor: theme.tabBarInactive,
         headerShown: false,
+        // Die Leiste liegt ueber dem Inhalt. Der Platz dafuer wird hier einmal
+        // fuer alle Bildschirme freigehalten, statt in jedem einzeln -- sonst
+        // vergisst ihn der naechste neue Bildschirm. Die Hintergrundfarbe muss
+        // mit, sonst scheint hinter dem Inhalt die weisse Standardfarbe der
+        // Navigation durch.
+        sceneStyle: {
+          backgroundColor: theme.background,
+          paddingBottom: LEISTE_PLATZ + insets.bottom,
+        },
       }}
     >
       <Tabs.Screen
