@@ -274,7 +274,7 @@ router.get("/session", sessionLimiter, async (req, res) => {
     return;
   }
 
-  const role = user.role ?? "student_paramedic";
+  const role = user.role ?? "sanitaeter";
   const token = jwt.sign({ userId: user.id, role }, JWT_SECRET, { expiresIn: "2h" });
 
   res.json({
