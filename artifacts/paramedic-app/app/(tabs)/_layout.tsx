@@ -1,19 +1,16 @@
-import { BlurView } from "expo-blur";
 import { Tabs } from "expo-router";
 import { SymbolView } from "expo-symbols";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import React from "react";
-import { Platform, StyleSheet, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Platform } from "react-native";
 
+import { GlasTabLeiste } from "@/components/GlasTabLeiste";
 import { t } from "@/constants/i18n";
 import { getTheme } from "@/constants/theme";
 import { useAppStore } from "@/store/useAppStore";
 
 export default function TabLayout() {
   const isIOS = Platform.OS === "ios";
-  const isWeb = Platform.OS === "web";
-  const insets = useSafeAreaInsets();
   const lang = useAppStore((s) => s.language);
   const themeKey = useAppStore((s) => s.theme);
   const theme = getTheme(themeKey);
@@ -21,38 +18,22 @@ export default function TabLayout() {
 
   return (
     <Tabs
+      // Die Leiste schwebt jetzt ueber dem Inhalt statt ihn abzuschneiden.
+      // Beschriftungen entfallen: in einer Pille mit sechs Eintraegen bliebe je
+      // Feld weniger als eine Zeile Platz, und die Symbole tragen allein.
+      tabBar={(props) => (
+        <GlasTabLeiste
+          state={props.state}
+          descriptors={props.descriptors}
+          navigation={props.navigation}
+          theme={theme}
+          dunkel={isDark}
+        />
+      )}
       screenOptions={{
         tabBarActiveTintColor: theme.tabBarActive,
         tabBarInactiveTintColor: theme.tabBarInactive,
         headerShown: false,
-        tabBarStyle: {
-          position: "absolute",
-          backgroundColor: isIOS ? "transparent" : theme.tabBar,
-          borderTopWidth: 1,
-          borderTopColor: theme.tabBarBorder,
-          elevation: 0,
-          paddingBottom: insets.bottom,
-          // Im Standalone-Modus liegt unter der Leiste der Home-Indikator; die
-          // feste Hoehe von 84 stammt aus dem Browser und wuerde die Leiste
-          // darunter schieben. Der Inset traegt den Unterschied.
-          ...(isWeb ? { height: 84 + insets.bottom } : {}),
-        },
-        tabBarLabelStyle: {
-          fontSize: 11,
-          fontFamily: "Inter_500Medium",
-        },
-        tabBarBackground: () =>
-          isIOS ? (
-            <BlurView
-              intensity={100}
-              tint={isDark ? "dark" : "light"}
-              style={StyleSheet.absoluteFill}
-            />
-          ) : isWeb ? (
-            <View
-              style={[StyleSheet.absoluteFill, { backgroundColor: theme.tabBar }]}
-            />
-          ) : null,
       }}
     >
       <Tabs.Screen
