@@ -1,7 +1,7 @@
 import { Router } from "express";
 import jwt from "jsonwebtoken";
 import rateLimit from "express-rate-limit";
-import { eq, and, isNull } from "drizzle-orm";
+import { eq, and, or, isNull } from "drizzle-orm";
 import { db, usersTable, rolesTable, userRoleEnum, type UserRole } from "@workspace/db";
 import { permissionsForRole } from "../lib/rolePermissions";
 import { requireAuth, type AuthRequest } from "../middlewares/auth";
@@ -85,7 +85,10 @@ async function getRoleForUser(groups: string[], providerKey: string, schoolId: s
     const roleRows = await db
       .select({ id: rolesTable.id })
       .from(rolesTable)
-      .where(and(eq(rolesTable.key, mapped), schoolId ? eq(rolesTable.schoolId, schoolId) : isNull(rolesTable.schoolId)))
+      // "schulweit oder global": eine Rolle mit school_id der Installation
+      // zaehlt, eine ungebundene (school_id IS NULL) ebenso. Der Bestand liegt
+      // ungebunden vor, eine Abfrage nur auf die Schul-Kennung faende ihn nicht.
+      .where(and(eq(rolesTable.key, mapped), or(eq(rolesTable.schoolId, schoolId), isNull(rolesTable.schoolId))))
       .limit(1);
     if (roleRows.length > 0) return mapped;
   }
