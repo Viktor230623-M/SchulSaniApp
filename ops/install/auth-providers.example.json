@@ -12,8 +12,8 @@
     }
   },
   {
-    "_deaktiviert": true,
-    "_hinweis": "Beispiel fuer einen weiterleitungsbasierten Anmeldeweg. Zum Aktivieren key/type wiederherstellen, Platzhalterwerte ersetzen und diesen Kommentar-Eintrag entfernen.",
+    "enabled": false,
+    "_hinweis": "Beispiel fuer einen weiterleitungsbasierten Anmeldeweg. Solange enabled auf false steht, wird dieser Eintrag nicht gebaut. Zum Aktivieren Platzhalterwerte ersetzen und enabled auf true setzen.",
     "key": "oidc-beispiel",
     "displayName": "Schul-Login (OIDC)",
     "type": "oidc-redirect",

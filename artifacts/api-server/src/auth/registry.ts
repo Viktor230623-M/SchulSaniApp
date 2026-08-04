@@ -144,5 +144,14 @@ export function loadAuthProviders(): AuthProvider[] {
     );
   }
 
-  return raw.map((entry) => buildProvider(entry as RawProviderConfig));
+  // "enabled": false laesst einen Eintrag als Vorlage in der Datei stehen, ohne
+  // ihn zu bauen. Fehlt das Feld, gilt der Eintrag als aktiv.
+  const active = raw.filter((entry) => (entry as { enabled?: boolean }).enabled !== false);
+  if (active.length === 0) {
+    throw new Error(
+      `Alle Anmeldewege in "${providersPath}" sind auf "enabled": false gesetzt. Mindestens einer muss aktiv sein.`,
+    );
+  }
+
+  return active.map((entry) => buildProvider(entry as RawProviderConfig));
 }
