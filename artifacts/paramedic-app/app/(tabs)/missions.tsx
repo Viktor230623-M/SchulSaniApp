@@ -19,8 +19,9 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useTopPad } from "@/hooks/useTopPad";
+import { GlassLoader } from "@/components/GlassLoader";
 import { t } from "@/constants/i18n";
-import { getTheme, type ThemeColors } from "@/constants/theme";
+import { getTheme, type ThemeColors, istDunklesThema } from "@/constants/theme";
 import type { AppLanguage, Mission, MissionPriority, MissionStatus } from "@/models";
 import { confirmAction, notify } from "@/lib/dialog";
 import ApiService from "@/services/ApiService";
@@ -449,7 +450,7 @@ export default function MissionsScreen() {
               <Text style={[styles.emptyDesc, { color: theme.textSecondary }]}>{t("missions.noMissionsDesc", lang)}</Text>
             </View>
           ) : (
-            <ActivityIndicator size="large" color={theme.tint} style={{ marginTop: 60 }} />
+            <View style={{ marginTop: 60, alignItems: "center" }}><GlassLoader size={140} color={theme.tint} dark={istDunklesThema(theme.background)} /></View>
           )
         }
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.tint} />}
