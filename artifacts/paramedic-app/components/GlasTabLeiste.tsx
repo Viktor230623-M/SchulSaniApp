@@ -40,6 +40,30 @@ const SEITENRAND = 16;
 const HOEHE = 62;
 const ABSTAND_ZUM_KNOPF = 10;
 
+/** `#RRGGBB` mit Deckung als `rgba(...)`. Andere Schreibweisen bleiben, wie sie sind. */
+function mitDeckung(farbe: string, deckung: number): string {
+  const treffer = /^#([0-9a-f]{6})$/i.exec(farbe.trim());
+  if (!treffer) return farbe;
+  const wert = parseInt(treffer[1]!, 16);
+  return `rgba(${(wert >> 16) & 255},${(wert >> 8) & 255},${wert & 255},${deckung})`;
+}
+
+/**
+ * Helligkeit nach der Wahrnehmung, nicht nach dem Mittelwert -- Gruen wiegt
+ * schwerer als Blau. Damit erkennt die Leiste ein dunkles Thema selbst, statt
+ * sich auf eine gepflegte Liste von Themennamen zu verlassen, die beim naechsten
+ * neuen Thema wieder falsch waere.
+ */
+function istDunkel(farbe: string): boolean {
+  const treffer = /^#([0-9a-f]{6})$/i.exec(farbe.trim());
+  if (!treffer) return false;
+  const wert = parseInt(treffer[1]!, 16);
+  const r = ((wert >> 16) & 255) / 255;
+  const g = ((wert >> 8) & 255) / 255;
+  const b = (wert & 255) / 255;
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b < 0.5;
+}
+
 /**
  * Schwebende Leiste aus Glas statt der durchgehenden Leiste am unteren Rand.
  *
@@ -59,9 +83,9 @@ export function GlasTabLeiste({
   descriptors,
   navigation,
   theme,
-  dunkel,
-}: TabLeisteProps & { theme: ThemeColors; dunkel: boolean }) {
+}: TabLeisteProps & { theme: ThemeColors }) {
   const insets = useSafeAreaInsets();
+  const dunkel = istDunkel(theme.background);
 
   const inPille = state.routes.slice(0, -1);
   const abgesetzt = state.routes[state.routes.length - 1];
@@ -127,28 +151,37 @@ function Glasflaeche({
         styles.glas,
         {
           borderRadius: radius,
-          borderColor: dunkel ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.55)",
-          // Ohne Weichzeichner traegt die Farbe allein -- dann darf sie nicht so
-          // durchsichtig sein, sonst wird die Leiste vor hellem Inhalt unlesbar.
-          backgroundColor: echterWeichzeichner
-            ? dunkel
-              ? "rgba(255,255,255,0.10)"
-              : "rgba(255,255,255,0.35)"
-            : dunkel
-              ? "rgba(30,30,30,0.82)"
-              : "rgba(255,255,255,0.88)",
-          shadowColor: dunkel ? "#000" : "#0d2626",
+          // Alles aus dem Thema, nichts fest verdrahtet: sonst haengt ueber
+          // jedem Thema dieselbe weisse Leiste.
+          borderColor: theme.tabBarBorder,
+          // Ohne Weichzeichner traegt die Farbe allein und muss deutlich
+          // dichter sein, sonst wird die Leiste vor hellem Inhalt unlesbar.
+          backgroundColor: echterWeichzeichner ? "transparent" : mitDeckung(theme.tabBar, 0.92),
+          shadowColor: dunkel ? "#000" : theme.tabBarBorder,
         },
         style,
       ]}
     >
       {echterWeichzeichner && (
-        <BlurView
-          intensity={dunkel ? 40 : 30}
-          tint={dunkel ? "dark" : "light"}
-          style={[StyleSheet.absoluteFill, { borderRadius: radius }]}
-          pointerEvents="none"
-        />
+        <>
+          <BlurView
+            intensity={dunkel ? 45 : 35}
+            tint={dunkel ? "dark" : "light"}
+            style={[StyleSheet.absoluteFill, { borderRadius: radius }]}
+            pointerEvents="none"
+          />
+          {/* Der Farbton liegt ueber dem Weichzeichner, nicht darunter. Als
+              Hintergrund der Elternflaeche wuerde ihn die BlurView verdecken,
+              die den Untergrund neu zeichnet -- die Leiste saehe in jedem
+              Thema gleich aus. */}
+          <View
+            pointerEvents="none"
+            style={[
+              StyleSheet.absoluteFill,
+              { borderRadius: radius, backgroundColor: mitDeckung(theme.tabBar, 0.45) },
+            ]}
+          />
+        </>
       )}
       {children}
     </View>
