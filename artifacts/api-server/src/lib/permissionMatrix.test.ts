@@ -105,7 +105,7 @@ vi.mock("../middlewares/auth", async () => {
       if (!token || !token.startsWith("mock-token-")) return null;
       const parts = token.split("-");
       const userId = parts.slice(2, -1).join("-") || "test-user";
-      const role = parts[parts.length - 1] || "student_paramedic";
+      const role = parts[parts.length - 1] || "sanitaeter";
       return { userId, role };
     },
     getLiveUser: vi.fn(async (userId: string) => {
@@ -113,7 +113,7 @@ vi.mock("../middlewares/auth", async () => {
       if (entry) {
         return { role: entry.role, isApproved: entry.isApproved, expires: Date.now() + 60000 };
       }
-      return { role: "student_paramedic", isApproved: true, expires: Date.now() + 60000 };
+      return { role: "sanitaeter", isApproved: true, expires: Date.now() + 60000 };
     }),
     requireAuth: vi.fn(async (req: any, res: any, next: any) => {
       const header = req.headers?.authorization || req.get?.("authorization") || "";
@@ -124,8 +124,8 @@ vi.mock("../middlewares/auth", async () => {
       }
       // Token-Parsing direkt aus Mock
       const userId = token.includes("test-user") ? token.split("-").slice(2, -1).join("-") || "test-user" : token.split("-").slice(2, -1).join("-") || "unknown";
-      const role = token.split("-").pop() || "student_paramedic";
-      const mockEntry = mockLiveUsers[userId] || { role: "student_paramedic", isApproved: true };
+      const role = token.split("-").pop() || "sanitaeter";
+      const mockEntry = mockLiveUsers[userId] || { role: "sanitaeter", isApproved: true };
       if (!mockEntry.isApproved) {
         res.status(401).json({ error: "Invalid or expired token" });
         return;
@@ -172,7 +172,6 @@ const ROLES = [
   "sanitaeter_leitung",
   "teacher",
   "sanitaeter",
-  "student_paramedic",
 ] as const;
 
 type RoleKey = (typeof ROLES)[number];
@@ -185,17 +184,17 @@ const EXPECTED: Record<string, string[]> = {
   "PATCH /api/users/test-id/approve": ["admin", "owner"],
   "PATCH /api/users/test-id/role": ["admin", "owner", "sanitaeter_leitung_admin"],
   "DELETE /api/users/test-id": ["admin", "owner"],
-  "GET /api/news": ["owner", "admin", "teacher", "sanitaeter_leitung_admin", "sanitaeter_leitung", "sanitaeter", "student_paramedic"],
+  "GET /api/news": ["owner", "admin", "teacher", "sanitaeter_leitung_admin", "sanitaeter_leitung", "sanitaeter"],
   "POST /api/news/test-id/approve": ["admin", "teacher", "owner"],
   "POST /api/news/test-id/reject": ["admin", "teacher", "owner"],
-  "GET /api/loa": ["owner", "admin", "teacher", "sanitaeter_leitung_admin", "sanitaeter_leitung", "sanitaeter", "student_paramedic"],
+  "GET /api/loa": ["owner", "admin", "teacher", "sanitaeter_leitung_admin", "sanitaeter_leitung", "sanitaeter"],
   "POST /api/loa/test-id/approve": ["admin", "teacher", "sanitaeter_leitung", "sanitaeter_leitung_admin", "owner"],
   "POST /api/loa/test-id/reject": ["admin", "teacher", "sanitaeter_leitung", "sanitaeter_leitung_admin", "owner"],
   "GET /api/activity/users": ["admin", "owner", "sanitaeter_leitung", "sanitaeter_leitung_admin", "teacher"],
   "GET /api/activity/user/test-id": ["admin", "owner", "sanitaeter_leitung", "sanitaeter_leitung_admin", "teacher"],
   "GET /api/activity/my": ROLES.map((r) => r),
-  "GET /api/incident-reports/test-report-id": ["owner", "admin", "sanitaeter_leitung", "sanitaeter_leitung_admin", "teacher", "sanitaeter", "student_paramedic"],
-  "GET /api/incident-reports": ["owner", "admin", "sanitaeter_leitung", "sanitaeter_leitung_admin", "teacher", "sanitaeter", "student_paramedic"],
+  "GET /api/incident-reports/test-report-id": ["owner", "admin", "sanitaeter_leitung", "sanitaeter_leitung_admin", "teacher", "sanitaeter"],
+  "GET /api/incident-reports": ["owner", "admin", "sanitaeter_leitung", "sanitaeter_leitung_admin", "teacher", "sanitaeter"],
 };
 
 const ENDPOINTS = Object.keys(EXPECTED);
@@ -206,7 +205,7 @@ const ENDPOINTS = Object.keys(EXPECTED);
 // ist ein Fixture-Luecke des Testaufbaus, keine Rechtegrenze: die Nutzlast
 // hier deckt nur die Validierung ab, die vor der Rechtepruefung im Code liegt.
 const REQUEST_BODIES: Record<string, Record<string, unknown>> = {
-  "PATCH /api/users/test-id/role": { role: "student_paramedic" },
+  "PATCH /api/users/test-id/role": { role: "sanitaeter" },
   "POST /api/news/test-id/reject": { reason: "Testgrund" },
 };
 
@@ -245,7 +244,7 @@ describe("Permission Matrix — IST-Zustand vor Umbau", () => {
   // Patientendaten-Sichtbarkeit gesondert testen (incidentReports.ts)
   describe("Patientendaten-Sichtbarkeit (incidentReports)", () => {
     const rolesCanSeePatient = ["admin", "owner", "sanitaeter_leitung", "sanitaeter_leitung_admin", "teacher"];
-    const rolesCannotSeePatient = ["sanitaeter", "student_paramedic"];
+    const rolesCannotSeePatient = ["sanitaeter"];
 
     it("erlaubt Patientdaten fuer admin/owner/leitung/teacher", async () => {
       for (const r of rolesCanSeePatient) {
@@ -260,7 +259,7 @@ describe("Permission Matrix — IST-Zustand vor Umbau", () => {
       }
     }, 15000);
 
-    it("beschraenkt Patientdaten fuer sanitaeter/student_paramedic (nur eigene) — 200 mit stripPatient", async () => {
+    it("beschraenkt Patientdaten fuer sanitaeter (nur eigene) — 200 mit stripPatient", async () => {
       for (const r of rolesCannotSeePatient) {
         const t = buildToken(r, `patient-${r}`);
         const result = await fetchStatus("GET", "/api/incident-reports/test-report-id", t);

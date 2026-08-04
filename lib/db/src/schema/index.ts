@@ -13,9 +13,13 @@ export const notificationTypeEnum = pgEnum("notification_type", [
   "mission_assigned", "mission_cancelled", "status_changed", "news", "loa_update",
   "reminder", "high_priority_alert", "mission_completed", "mission_created",
 ]);
+// "cto" und "student_paramedic" sind entfallen. Beide trugen keine Zeile mehr:
+// "cto" war laengst durch "owner" ersetzt, "student_paramedic" hatte dieselben
+// Berechtigungen und denselben Anzeigenamen wie "sanitaeter" und war damit ein
+// Duplikat.
 export const userRoleEnum = pgEnum("user_role", [
-  "cto", "student_paramedic", "sanitaeter_leitung", "admin", "teacher",
-  "sanitaeter_leitung_admin", "sanitaeter", "owner",
+  "sanitaeter", "sanitaeter_leitung", "sanitaeter_leitung_admin",
+  "teacher", "admin", "owner",
 ]);
 
 // Users table
