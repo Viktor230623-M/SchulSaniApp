@@ -40,6 +40,13 @@ const SEITENRAND = 16;
 const HOEHE = 62;
 const ABSTAND_ZUM_KNOPF = 10;
 
+/**
+ * Platz, den ein Bildschirm unten freilassen muss, damit sein letztes Element
+ * nicht unter der schwebenden Leiste verschwindet. Der Sicherheitsabstand des
+ * Geraets kommt beim Verwenden dazu.
+ */
+export const LEISTE_PLATZ = HOEHE + 24;
+
 /** `#RRGGBB` mit Deckung als `rgba(...)`. Andere Schreibweisen bleiben, wie sie sind. */
 function mitDeckung(farbe: string, deckung: number): string {
   const treffer = /^#([0-9a-f]{6})$/i.exec(farbe.trim());
@@ -94,16 +101,7 @@ export function GlasTabLeiste({
   return (
     <View
       pointerEvents="box-none"
-      style={[
-        styles.rahmen,
-        {
-          paddingBottom: Math.max(insets.bottom, 12),
-          // Die Navigation legt hinter die eigene Leiste eine Flaeche in ihrer
-          // Standardfarbe -- Weiss, unabhaengig vom Thema. Sie ist von hier aus
-          // nicht erreichbar, also wird sie ueberdeckt.
-          backgroundColor: theme.background,
-        },
-      ]}
+      style={[styles.rahmen, { paddingBottom: Math.max(insets.bottom, 12) }]}
     >
       <Glasflaeche theme={theme} dunkel={dunkel} radius={HOEHE / 2} style={styles.pille}>
         {inPille.map((route, index) => (
@@ -165,7 +163,7 @@ function Glasflaeche({
           borderColor: theme.tabBarBorder,
           // Ohne Weichzeichner traegt die Farbe allein und muss deutlich
           // dichter sein, sonst wird die Leiste vor hellem Inhalt unlesbar.
-          backgroundColor: echterWeichzeichner ? "transparent" : mitDeckung(theme.tabBar, 0.92),
+          backgroundColor: echterWeichzeichner ? "transparent" : mitDeckung(theme.tabBar, 0.72),
           shadowColor: dunkel ? "#000" : theme.tabBarBorder,
         },
         style,
@@ -187,7 +185,7 @@ function Glasflaeche({
             pointerEvents="none"
             style={[
               StyleSheet.absoluteFill,
-              { borderRadius: radius, backgroundColor: mitDeckung(theme.tabBar, 0.45) },
+              { borderRadius: radius, backgroundColor: mitDeckung(theme.tabBar, 0.22) },
             ]}
           />
         </>
@@ -266,12 +264,15 @@ function Feld({
 }
 
 const styles = StyleSheet.create({
-  // Bewusst nicht absolut gesetzt. Mit einer eigenen `tabBar` misst die
-  // Navigation deren Hoehe und haelt den Inhalt darueber frei; eine absolut
-  // gesetzte Leiste haette die Hoehe null und laege ueber dem letzten Eintrag
-  // jeder Liste. Der schwebende Eindruck entsteht durch die seitlichen
-  // Abstaende und den Schatten, nicht durch die Ueberlagerung.
+  // Absolut gesetzt und ohne eigene Flaeche: die Leiste liegt ueber dem Inhalt,
+  // der ungehindert darunter durchlaeuft. Damit sie das letzte Element einer
+  // Liste nicht verdeckt, gibt der Navigator jedem Bildschirm unten den Platz
+  // aus LEISTE_PLATZ mit -- siehe app/(tabs)/_layout.tsx.
   rahmen: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
     paddingHorizontal: SEITENRAND,
     flexDirection: "row",
     alignItems: "center",
