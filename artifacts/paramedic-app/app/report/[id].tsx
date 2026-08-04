@@ -18,8 +18,9 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useTopPad } from "@/hooks/useTopPad";
+import { GlassLoader } from "@/components/GlassLoader";
 import { t } from "@/constants/i18n";
-import { getTheme } from "@/constants/theme";
+import { getTheme, istDunklesThema } from "@/constants/theme";
 import type {
   AvpuScore,
   IncidentOutcome,
@@ -287,7 +288,7 @@ export default function ReportScreen() {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-          <ActivityIndicator size="large" color={theme.tint} />
+          <GlassLoader size={140} color={theme.tint} dark={istDunklesThema(theme.background)} />
         </View>
       </View>
     );

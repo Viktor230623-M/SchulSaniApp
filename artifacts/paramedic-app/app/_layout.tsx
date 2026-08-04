@@ -9,12 +9,14 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
+import { StyleSheet, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { getTheme } from "@/constants/theme";
+import { GlassLoader } from "@/components/GlassLoader";
+import { getTheme, istDunklesThema } from "@/constants/theme";
 import ApiService, { setAuthToken } from "@/services/ApiService";
 import { registerForPushNotificationsAsync } from "@/services/PushNotificationService";
 import { useAppStore } from "@/store/useAppStore";
@@ -59,12 +61,18 @@ function RootLayoutNav() {
     }
   }, [authStatus]);
 
-  // Solange geprueft wird, nichts rendern. Der Splash-Screen ist zu diesem
-  // Zeitpunkt in aller Regel schon ausgeblendet (das haengt in RootLayout allein
-  // an fontsLoaded/fontError, nicht an authStatus) — es erscheint also kurz eine
-  // leere Flaeche. Bewusst so: ein angemeldeter Nutzer soll dabei nicht kurz den
-  // Login-Screen sehen.
-  if (authStatus === "loading") return null;
+  // Solange die Sitzung geprueft wird, weder Anwendung noch Anmeldung zeigen —
+  // ein angemeldeter Nutzer soll dabei nicht kurz den Login-Bildschirm sehen.
+  // Der Splash-Screen ist zu diesem Zeitpunkt in aller Regel schon ausgeblendet
+  // (das haengt in RootLayout allein an fontsLoaded/fontError), hier lag deshalb
+  // bisher eine leere Flaeche.
+  if (authStatus === "loading") {
+    return (
+      <View style={[styles.laden, { backgroundColor: theme.background }]}>
+        <GlassLoader size={200} color={theme.tint} dark={istDunklesThema(theme.background)} />
+      </View>
+    );
+  }
 
   // Stack.Protected statt eines Redirect: Routen ausserhalb des aktiven Guards
   // werden gar nicht erst gematcht. Ein <Redirect> als Kind eines <Stack> wird
@@ -125,3 +133,11 @@ export default function RootLayout() {
     </SafeAreaProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  laden: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+});

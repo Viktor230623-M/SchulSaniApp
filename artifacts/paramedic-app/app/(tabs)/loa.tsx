@@ -16,8 +16,9 @@ import {
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTopPad } from "@/hooks/useTopPad";
+import { GlassLoader } from "@/components/GlassLoader";
 import { t } from "@/constants/i18n";
-import { getTheme } from "@/constants/theme";
+import { getTheme, istDunklesThema } from "@/constants/theme";
 import { DatePickerField } from "@/components/DatePickerField";
 import type { LOARequest, LOAStatus } from "@/models";
 import { confirmAction, notify } from "@/lib/dialog";
@@ -239,7 +240,7 @@ export default function LOAScreen() {
               <Text style={[styles.emptyTitle, { color: theme.text }]}>{t("loa.noRequests", lang)}</Text>
             </View>
           ) : (
-            <ActivityIndicator size="large" color={theme.tint} style={{ marginTop: 60 }} />
+            <View style={{ marginTop: 60, alignItems: "center" }}><GlassLoader size={140} color={theme.tint} dark={istDunklesThema(theme.background)} /></View>
           )
         }
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.tint} />}

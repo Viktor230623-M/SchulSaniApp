@@ -15,8 +15,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useTopPad } from "@/hooks/useTopPad";
 import { useRoles } from "@/hooks/useRoles";
+import { GlassLoader } from "@/components/GlassLoader";
 import { t } from "@/constants/i18n";
-import { getTheme } from "@/constants/theme";
+import { getTheme, istDunklesThema } from "@/constants/theme";
 import type { ActivitySummary, User } from "@/models";
 
 type ActivitySummaryItem = ActivitySummary;
@@ -174,7 +175,7 @@ export default function SaniActivityScreen() {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
         <View style={{ paddingTop: topPad + 20, alignItems: "center", justifyContent: "center", flex: 1 }}>
-          <ActivityIndicator size="large" color={theme.tint} />
+          <GlassLoader size={140} color={theme.tint} dark={istDunklesThema(theme.background)} />
         </View>
       </View>
     );

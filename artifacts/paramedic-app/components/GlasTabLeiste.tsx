@@ -8,7 +8,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import type { ThemeColors } from "@/constants/theme";
+import { istDunklesThema, type ThemeColors } from "@/constants/theme";
 
 // `@react-navigation/bottom-tabs` haengt nur mittelbar ueber expo-router im
 // Baum und laesst sich aus diesem Paket nicht aufloesen. Die Form, die
@@ -56,22 +56,6 @@ function mitDeckung(farbe: string, deckung: number): string {
 }
 
 /**
- * Helligkeit nach der Wahrnehmung, nicht nach dem Mittelwert -- Gruen wiegt
- * schwerer als Blau. Damit erkennt die Leiste ein dunkles Thema selbst, statt
- * sich auf eine gepflegte Liste von Themennamen zu verlassen, die beim naechsten
- * neuen Thema wieder falsch waere.
- */
-function istDunkel(farbe: string): boolean {
-  const treffer = /^#([0-9a-f]{6})$/i.exec(farbe.trim());
-  if (!treffer) return false;
-  const wert = parseInt(treffer[1]!, 16);
-  const r = ((wert >> 16) & 255) / 255;
-  const g = ((wert >> 8) & 255) / 255;
-  const b = (wert & 255) / 255;
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b < 0.5;
-}
-
-/**
  * Schwebende Leiste aus Glas statt der durchgehenden Leiste am unteren Rand.
  *
  * Aufteilung wie in der Vorlage: die ersten Eintraege liegen in einer Pille,
@@ -92,7 +76,7 @@ export function GlasTabLeiste({
   theme,
 }: TabLeisteProps & { theme: ThemeColors }) {
   const insets = useSafeAreaInsets();
-  const dunkel = istDunkel(theme.background);
+  const dunkel = istDunklesThema(theme.background);
 
   const inPille = state.routes.slice(0, -1);
   const abgesetzt = state.routes[state.routes.length - 1];

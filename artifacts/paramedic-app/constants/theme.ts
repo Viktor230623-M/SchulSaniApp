@@ -240,3 +240,19 @@ export const THEMES: Record<AppTheme, ThemeColors> = {
 export function getTheme(theme: AppTheme): ThemeColors {
   return THEMES[theme] ?? lightTheme;
 }
+
+/**
+ * Helligkeit nach der Wahrnehmung, nicht nach dem Mittelwert -- Gruen wiegt
+ * schwerer als Blau. Damit erkennt eine Komponente ein dunkles Thema selbst,
+ * statt sich auf eine gepflegte Liste von Themennamen zu verlassen, die beim
+ * naechsten neuen Thema wieder falsch waere.
+ */
+export function istDunklesThema(hintergrund: string): boolean {
+  const treffer = /^#([0-9a-f]{6})$/i.exec(hintergrund.trim());
+  if (!treffer) return false;
+  const wert = parseInt(treffer[1]!, 16);
+  const r = ((wert >> 16) & 255) / 255;
+  const g = ((wert >> 8) & 255) / 255;
+  const b = (wert & 255) / 255;
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b < 0.5;
+}

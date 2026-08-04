@@ -14,8 +14,9 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useTopPad } from "@/hooks/useTopPad";
+import { GlassLoader } from "@/components/GlassLoader";
 import { t } from "@/constants/i18n";
-import { getTheme, type ThemeColors } from "@/constants/theme";
+import { getTheme, type ThemeColors, istDunklesThema } from "@/constants/theme";
 import type { AppLanguage, NotificationItem, NotificationType } from "@/models";
 import ApiService from "@/services/ApiService";
 import { useAppStore } from "@/store/useAppStore";
@@ -188,7 +189,7 @@ export default function NotificationsScreen() {
               <Text style={[styles.emptyDesc, { color: theme.textSecondary }]}>{t("notifications.noNotificationsDesc", lang)}</Text>
             </View>
           ) : (
-            <ActivityIndicator size="large" color={theme.tint} style={{ marginTop: 60 }} />
+            <View style={{ marginTop: 60, alignItems: "center" }}><GlassLoader size={140} color={theme.tint} dark={istDunklesThema(theme.background)} /></View>
           )
         }
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.tint} />}

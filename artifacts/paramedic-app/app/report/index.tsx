@@ -14,8 +14,9 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useTopPad } from "@/hooks/useTopPad";
+import { GlassLoader } from "@/components/GlassLoader";
 import { t } from "@/constants/i18n";
-import { getTheme } from "@/constants/theme";
+import { getTheme, istDunklesThema } from "@/constants/theme";
 import type { IncidentReport } from "@/models";
 import ApiService from "@/services/ApiService";
 import { has, useAppStore } from "@/store/useAppStore";
@@ -124,7 +125,7 @@ export default function ReportsIndexScreen() {
         }
         ListEmptyComponent={
           loading ? (
-            <ActivityIndicator size="large" color={theme.tint} style={{ marginTop: 60 }} />
+            <View style={{ marginTop: 60, alignItems: "center" }}><GlassLoader size={140} color={theme.tint} dark={istDunklesThema(theme.background)} /></View>
           ) : (
             <View style={styles.empty}>
               <Ionicons name="document-text-outline" size={52} color={theme.textTertiary} />
