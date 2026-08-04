@@ -124,11 +124,31 @@ router.patch("/:id/approve", requireAuth, requirePermission("users.approve"), as
   }
 
   const newRole: UserRole = role && isValidRole(role) ? role : existing.role ?? "sanitaeter";
-  const [updated] = await db
-    .update(usersTable)
-    .set({ isApproved: true, approvedBy: req.user!.userId, role: newRole, updatedAt: new Date() })
-    .where(eq(usersTable.id, id))
-    .returning();
+
+  // Derselbe Rahmen wie in /role: ein Rollenwechsel gehoert ins Protokoll, und
+  // die Aussperrsicherung muss auch hier greifen. Die Route kann ein bereits
+  // freigeschaltetes Konto herabstufen, also auch die letzte Traegerin einer
+  // wesentlichen Berechtigung -- ohne die Pruefung waere sie der Umweg um die
+  // Sperre, die /role durchsetzt.
+  let updated: typeof existing | undefined;
+  try {
+    await db.transaction(async (tx) => {
+      const rows = await tx
+        .update(usersTable)
+        .set({ isApproved: true, approvedBy: req.user!.userId, role: newRole, updatedAt: new Date() })
+        .where(eq(usersTable.id, id))
+        .returning();
+      updated = rows[0];
+      await logRoleChangeTx(tx, {
+        actorId: req.user!.userId, targetUserId: id, action: "approve",
+        before: existing.role, after: newRole,
+      });
+      await assertAdminReachable(tx, null);
+    });
+  } catch (err) {
+    if (err instanceof LockoutError) { res.status(409).json({ error: err.message }); return; }
+    throw err;
+  }
   invalidateUserCache(id);
   res.json(safeUser(updated!));
 });
