@@ -64,7 +64,7 @@ async function getLiveUser(userId: string): Promise<LiveUser | null> {
   if (cached && cached.expires > Date.now()) return cached;
 
   const rows = await db
-    .select({ role: usersTable.role, isApproved: usersTable.isApproved })
+    .select({ role: usersTable.role, isApproved: usersTable.isApproved, schoolId: usersTable.schoolId })
     .from(usersTable)
     .where(eq(usersTable.id, userId))
     .limit(1);
@@ -74,10 +74,12 @@ async function getLiveUser(userId: string): Promise<LiveUser | null> {
     return null;
   }
   const role = row.role ?? "sanitaeter";
+  // Bereich ist die Schule der Nutzerzeile -- derselbe Bereich, in dem
+  // routes/roles.ts die Berechtigungen dieser Rolle pflegt.
   const entry: LiveUser = {
     role,
     isApproved: row.isApproved,
-    permissions: await permissionsForRole(role, null),
+    permissions: await permissionsForRole(role, row.schoolId),
     expires: Date.now() + USER_CACHE_TTL_MS,
   };
   userCache.set(userId, entry);
