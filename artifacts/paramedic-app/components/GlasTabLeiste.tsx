@@ -94,7 +94,16 @@ export function GlasTabLeiste({
   return (
     <View
       pointerEvents="box-none"
-      style={[styles.rahmen, { paddingBottom: Math.max(insets.bottom, 12) }]}
+      style={[
+        styles.rahmen,
+        {
+          paddingBottom: Math.max(insets.bottom, 12),
+          // Die Navigation legt hinter die eigene Leiste eine Flaeche in ihrer
+          // Standardfarbe -- Weiss, unabhaengig vom Thema. Sie ist von hier aus
+          // nicht erreichbar, also wird sie ueberdeckt.
+          backgroundColor: theme.background,
+        },
+      ]}
     >
       <Glasflaeche theme={theme} dunkel={dunkel} radius={HOEHE / 2} style={styles.pille}>
         {inPille.map((route, index) => (
@@ -266,7 +275,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: SEITENRAND,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "transparent",
   },
   glas: {
     borderWidth: 1,
