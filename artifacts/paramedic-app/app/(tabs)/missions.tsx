@@ -24,10 +24,8 @@ import { getTheme, type ThemeColors } from "@/constants/theme";
 import type { AppLanguage, Mission, MissionPriority, MissionStatus } from "@/models";
 import { confirmAction, notify } from "@/lib/dialog";
 import ApiService from "@/services/ApiService";
-import { useAppStore } from "@/store/useAppStore";
+import { has, useAppStore } from "@/store/useAppStore";
 import { localized } from "@/utils/localize";
-
-const CREATE_ROLES = ["owner", "admin", "sanitaeter_leitung_admin", "sanitaeter_leitung", "teacher"];
 
 function PriorityBadge({ priority, lang }: { priority: MissionPriority; lang: AppLanguage }) {
   const cfg = {
@@ -59,8 +57,6 @@ function StatusBadge({ status, lang }: { status: MissionStatus; lang: AppLanguag
   );
 }
 
-const LEADERSHIP_ROLES = ["admin", "owner", "sanitaeter_leitung", "sanitaeter_leitung_admin", "teacher"];
-
 interface MissionCardProps {
   mission: Mission;
   onAccept: () => Promise<void>;
@@ -68,10 +64,10 @@ interface MissionCardProps {
   theme: ThemeColors;
   lang: AppLanguage;
   currentUserId?: string;
-  currentUserRole?: string;
+  canViewAllMissions: boolean;
 }
 
-function MissionCard({ mission, onAccept, onReject, theme, lang, currentUserId, currentUserRole }: MissionCardProps) {
+function MissionCard({ mission, onAccept, onReject, theme, lang, currentUserId, canViewAllMissions }: MissionCardProps) {
   const [loading, setLoading] = useState(false);
 
   async function doAccept() {
@@ -165,7 +161,7 @@ function MissionCard({ mission, onAccept, onReject, theme, lang, currentUserId, 
       )}
 
       {mission.status === "accepted" && (
-        (mission.assignedParamedicId === currentUserId || LEADERSHIP_ROLES.includes(currentUserRole ?? ""))
+        (mission.assignedParamedicId === currentUserId || canViewAllMissions)
       ) && (
         <Pressable
           onPress={() => {
@@ -366,7 +362,8 @@ export default function MissionsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
 
-  const canCreate = CREATE_ROLES.includes(user?.role ?? "");
+  const canCreate = has("missions.create");
+  const canViewAllMissions = has("missions.view_all");
 
   useEffect(() => { load(); }, []);
 
@@ -476,7 +473,7 @@ export default function MissionsScreen() {
             theme={theme}
             lang={lang}
             currentUserId={user?.id}
-            currentUserRole={user?.role}
+            canViewAllMissions={canViewAllMissions}
           />
         )}
         showsVerticalScrollIndicator={false}

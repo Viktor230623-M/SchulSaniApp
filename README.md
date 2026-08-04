@@ -112,7 +112,19 @@ die als automatisierter Job umgesetzt sind (`artifacts/api-server/src/lib/retent
 Entwürfe nach 30 Tagen, Sitzungen nach Widerruf, Zugriffs- und Konsolenprotokolle
 nach 12 Monaten.
 
+## Anmeldewege
+
+Eine Installation kann mehrere Anmeldewege gleichzeitig anbieten:
+`iserv-form` (Formularanmeldung gegen eine bestehende IServ-Instanz),
+`oidc-redirect` (Authorization Code mit PKCE gegen einen beliebigen
+OIDC-Anbieter) und `local` (Passwort-Hash in der eigenen Datenbank, als
+Rückfallebene für Schulen ohne nutzbaren Identitätsdienst). Welche Wege
+aktiv sind, legt eine Konfigurationsdatei je Installation fest, die nicht
+Teil dieses Repositories ist. Ohne diese Datei ist kein Anmeldeweg aktiv.
+
 ## Status
 
-Privates Projekt für den Schulsanitätsdienst einer einzelnen Schule. Kein
-öffentlicher Support, keine Garantie auf Weiterentwicklung oder Kompatibilität.
+Privates Projekt für den Schulsanitätsdienst einer einzelnen Schule. Es wird
+aktiv weiterentwickelt, aber ohne öffentlichen Support und ohne Zusage zu
+Kompatibilität zwischen Versionen — Änderungen an Datenmodell, Konfiguration
+oder Verhalten können ohne Ankündigung erfolgen.

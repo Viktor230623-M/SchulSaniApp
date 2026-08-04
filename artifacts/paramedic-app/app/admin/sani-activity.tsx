@@ -14,13 +14,14 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useTopPad } from "@/hooks/useTopPad";
+import { useRoles } from "@/hooks/useRoles";
 import { t } from "@/constants/i18n";
 import { getTheme } from "@/constants/theme";
 import type { ActivitySummary, User } from "@/models";
 
 type ActivitySummaryItem = ActivitySummary;
 import ApiService from "@/services/ApiService";
-import { useAppStore } from "@/store/useAppStore";
+import { has, useAppStore } from "@/store/useAppStore";
 
 interface ActivityUser {
   userId: string;
@@ -29,15 +30,6 @@ interface ActivityUser {
   totalLogs: number;
   lastActivityAt: string;
 }
-
-const ROLE_CONFIG: Record<User["role"], { label: string; bg: string; text: string }> = {
-  owner: { label: "Owner", bg: "#CCFBF1", text: "#0F766E" },
-  admin: { label: "Administrator", bg: "#FEF2F2", text: "#DC2626" },
-  sanitaeter_leitung_admin: { label: "Head Admin", bg: "#EFF6FF", text: "#2563EB" },
-  sanitaeter_leitung: { label: "Head Paramedic", bg: "#EFF6FF", text: "#2563EB" },
-  teacher: { label: "Teacher", bg: "#FFF7ED", text: "#EA580C" },
-  student_paramedic: { label: "Paramedic", bg: "#F0FDF4", text: "#16A34A" },
-};
 
 const ACTION_CONFIG: Record<string, { icon: string; color: string }> = {
   accepted: { icon: "checkmark-circle", color: "#22C55E" },
@@ -51,7 +43,7 @@ export default function SaniActivityScreen() {
   const lang = useAppStore((s) => s.language);
   const themeKey = useAppStore((s) => s.theme);
   const theme = getTheme(themeKey);
-  const user = useAppStore((s) => s.user);
+  const roles = useRoles();
 
   const [users, setUsers] = useState<ActivityUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,9 +52,7 @@ export default function SaniActivityScreen() {
   const [userActivities, setUserActivities] = useState<ActivitySummary[]>([]);
   const [loadingActivities, setLoadingActivities] = useState(false);
 
-  const canView = ["owner", "admin", "sanitaeter_leitung", "sanitaeter_leitung_admin"].includes(
-    user?.role || ""
-  );
+  const canView = has("activity.view");
 
   const loadUsers = async () => {
     try {
@@ -231,7 +221,7 @@ export default function SaniActivityScreen() {
           </View>
         ) : (
           users.map((activityUser) => {
-            const cfg = ROLE_CONFIG[activityUser.role] || ROLE_CONFIG.student_paramedic;
+            const cfg = roles.colors(activityUser.role);
             const isExpanded = selectedUser === activityUser.userId;
 
             return (
@@ -255,7 +245,7 @@ export default function SaniActivityScreen() {
                         {activityUser.userName}
                       </Text>
                       <View style={[styles.roleBadge, { backgroundColor: cfg.bg }]}>
-                        <Text style={[styles.roleText, { color: cfg.text }]}>{t(`roles.${activityUser.role}`, lang)}</Text>
+                        <Text style={[styles.roleText, { color: cfg.text }]}>{roles.displayName(activityUser.role, lang)}</Text>
                       </View>
                     </View>
                   </View>

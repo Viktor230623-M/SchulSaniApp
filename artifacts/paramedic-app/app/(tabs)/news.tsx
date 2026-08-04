@@ -21,7 +21,7 @@ import { getTheme, type ThemeColors } from "@/constants/theme";
 import type { AppLanguage, NewsItem, NewsStatus } from "@/models";
 import { confirmAction, notify } from "@/lib/dialog";
 import ApiService from "@/services/ApiService";
-import { useAppStore } from "@/store/useAppStore";
+import { has, useAppStore } from "@/store/useAppStore";
 import { localized } from "@/utils/localize";
 
 type Filter = "all" | NewsStatus;
@@ -196,7 +196,7 @@ export default function NewsScreen() {
   const [rejectNewsId, setRejectNewsId] = useState<string | null>(null);
   const [rejectNewsReason, setRejectNewsReason] = useState("");
 
-  const canModerate = ["admin", "teacher", "owner"].includes(user?.role ?? "");
+  const canModerate = has("news.moderate");
 
   useEffect(() => { load(); }, []);
 

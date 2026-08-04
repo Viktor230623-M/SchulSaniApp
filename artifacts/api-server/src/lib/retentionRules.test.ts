@@ -26,6 +26,10 @@ describe("computeCutoffs", () => {
     expect(cutoffs.accessLog.toISOString()).toBe("2025-07-19T10:00:00.000Z");
   });
 
+  it("loescht das Protokoll der Rollenaenderungen nach 12 Monaten", () => {
+    expect(cutoffs.roleChangeLog.toISOString()).toBe("2025-07-19T10:00:00.000Z");
+  });
+
   it("haelt Abwesenheitsantraege und Einsatzhistorie 24 Monate", () => {
     expect(cutoffs.loa.toISOString()).toBe("2024-07-19T10:00:00.000Z");
     expect(cutoffs.activityLogAnonymize.toISOString()).toBe("2024-07-19T10:00:00.000Z");

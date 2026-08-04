@@ -2,11 +2,11 @@ import { randomUUID } from "crypto";
 import { Router } from "express";
 import { desc, eq, inArray, lt, sql } from "drizzle-orm";
 import { db, missionsTable, missionActivityLogTable, usersTable } from "@workspace/db";
-import { requireAuth, requireRole, type AuthRequest } from "../middlewares/auth";
+import { requireAuth, requirePermission, type AuthRequest } from "../middlewares/auth";
 import { addDismissal, getDismissedFor, removeDismissal } from "../data/dismissals";
 import { notifyOnDutyUsers, notifyUser } from "../services/notifications";
 import { translateToLanguages } from "../services/translator";
-import { canSeePatientInfo } from "../lib/access";
+
 
 async function logMissionAction(
   userId: string,
@@ -34,8 +34,7 @@ async function logMissionAction(
 const router = Router();
 
 router.get("/", requireAuth, async (req: AuthRequest, res) => {
-  const role = req.user!.role;
-  const _canSeePatient = canSeePatientInfo(role);
+  const _canSeePatient = (req.user!.permissions ?? []).includes("reports.see_patient_info");
 
   // Auto-archive pending/accepted missions from previous calendar days
   const todayStart = new Date();
@@ -54,7 +53,7 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
   res.json(visible);
 });
 
-router.post("/", requireAuth, requireRole("admin", "sanitaeter_leitung", "sanitaeter_leitung_admin", "owner", "teacher"), async (req, res) => {
+router.post("/", requireAuth, requirePermission("missions.create"), async (req, res) => {
   const { title, description, location, priority, scheduledFor, patientInfo } = req.body;
   if (!title || !location) {
     res.status(400).json({ error: "title and location required" });
@@ -106,10 +105,10 @@ router.post("/", requireAuth, requireRole("admin", "sanitaeter_leitung", "sanita
 });
 
 router.post("/:id/accept", requireAuth, async (req: AuthRequest, res) => {
-  const [existing] = await db.select().from(missionsTable).where(eq(missionsTable.id, req.params["id"]!));
+  const [existing] = await db.select().from(missionsTable).where(eq(missionsTable.id, req.params.id as string));
   if (!existing) { res.status(404).json({ error: "Not found" }); return; }
   if (existing.status !== "pending") { res.status(400).json({ error: "Mission is not pending" }); return; }
-  const [m] = await db.update(missionsTable).set({ status: "accepted", assignedParamedicId: req.user!.userId }).where(eq(missionsTable.id, req.params["id"]!)).returning();
+  const [m] = await db.update(missionsTable).set({ status: "accepted", assignedParamedicId: req.user!.userId }).where(eq(missionsTable.id, req.params.id as string)).returning();
   
   notifyUser(existing.requestedBy ?? "unknown", {
     type: "mission_assigned",
@@ -124,7 +123,7 @@ router.post("/:id/accept", requireAuth, async (req: AuthRequest, res) => {
 });
 
 router.post("/:id/dismiss", requireAuth, async (req: AuthRequest, res) => {
-  const missionId = req.params["id"]!;
+  const missionId = req.params.id as string;
   await addDismissal(req.user!.userId, missionId);
   const [mission] = await db.select({ title: missionsTable.title }).from(missionsTable).where(eq(missionsTable.id, missionId));
   if (mission) logMissionAction(req.user!.userId, missionId, mission.title, "dismissed").catch(console.error);
@@ -132,13 +131,13 @@ router.post("/:id/dismiss", requireAuth, async (req: AuthRequest, res) => {
 });
 
 router.post("/:id/undismiss", requireAuth, async (req: AuthRequest, res) => {
-  const missionId = req.params["id"]!;
+  const missionId = req.params.id as string;
   await removeDismissal(req.user!.userId, missionId);
   res.json({ success: true, missionId });
 });
 
-router.post("/:id/reject", requireAuth, requireRole("admin", "sanitaeter_leitung", "sanitaeter_leitung_admin", "owner", "teacher"), async (req, res) => {
-  const [m] = await db.update(missionsTable).set({ status: "rejected" }).where(eq(missionsTable.id, req.params["id"]!)).returning();
+router.post("/:id/reject", requireAuth, requirePermission("missions.moderate"), async (req, res) => {
+  const [m] = await db.update(missionsTable).set({ status: "rejected" }).where(eq(missionsTable.id, req.params.id as string)).returning();
   if (!m) { res.status(404).json({ error: "Not found" }); return; }
   res.json(m);
 });
@@ -149,19 +148,18 @@ router.post("/:id/complete", requireAuth, async (req: AuthRequest, res) => {
     res.status(400).json({ error: "notes max 2000 characters" });
     return;
   }
-  const [existing] = await db.select().from(missionsTable).where(eq(missionsTable.id, req.params["id"]!));
+  const [existing] = await db.select().from(missionsTable).where(eq(missionsTable.id, req.params.id as string));
   if (!existing) { res.status(404).json({ error: "Not found" }); return; }
 
   const userId = req.user!.userId;
-  const role = req.user!.role;
-  const isLeadership = ["admin", "sanitaeter_leitung", "sanitaeter_leitung_admin", "owner", "teacher"].includes(role);
+  const isLeadership = (req.user!.permissions ?? []).includes("missions.view_all");
   const isAssignedResponder = existing.assignedParamedicId === userId;
   if (!isLeadership && !isAssignedResponder) {
     res.status(403).json({ error: "Forbidden – only the assigned responder or leadership can complete this mission" });
     return;
   }
 
-  const [m] = await db.update(missionsTable).set({ status: "completed", notes }).where(eq(missionsTable.id, req.params["id"]!)).returning();
+  const [m] = await db.update(missionsTable).set({ status: "completed", notes }).where(eq(missionsTable.id, req.params.id as string)).returning();
   if (!m) { res.status(404).json({ error: "Not found" }); return; }
   
   notifyUser(m.assignedParamedicId ?? "unknown", {

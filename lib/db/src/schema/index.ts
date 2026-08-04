@@ -19,9 +19,18 @@ export const userRoleEnum = pgEnum("user_role", [
 ]);
 
 // Users table
+//
+// authProvider/externalSubject bilden den Anmeldeweg ab (R6): woher ein Konto
+// stammt (z. B. "iserv-form", spaeter "oidc") und das Merkmal, mit dem der
+// Anbieter den Menschen wiedererkennt (bei IServ der Benutzername, bei OIDC
+// der sub-Claim). Eindeutig ist nur das Tripel aus Schule, Anbieter und
+// Subjekt — derselbe Benutzername kann in zwei Schulen unabhaengig vergeben
+// sein, deshalb kein globaler Unique-Index mehr auf iserv_username allein.
 export const usersTable = pgTable("users", {
   id: text("id").primaryKey(),
-  iservUsername: text("iserv_username").unique(),
+  iservUsername: text("iserv_username"),
+  authProvider: text("auth_provider"),
+  externalSubject: text("external_subject"),
   firstName: text("first_name"),
   lastName: text("last_name"),
   email: text("email").unique(),
@@ -29,11 +38,22 @@ export const usersTable = pgTable("users", {
   role: userRoleEnum("role").default("sanitaeter").notNull(),
   schoolId: text("school_id"),
   passwordHash: text("password_hash").default(""),
+  // Lokale Konten (R6, Schritt 6): erzwingt einen Passwortwechsel, solange das
+  // aktuelle Passwort ein von einem Verwalter vergebenes Einmal-Passwort ist
+  // (Einladung oder Zuruecksetzen). Bleibt fuer alle anderen Anmeldewege false.
+  mustChangePassword: boolean("must_change_password").default(false).notNull(),
+  // Ablauf des Einmal-Passworts. Nur gesetzt, waehrend mustChangePassword
+  // greift; danach (nach erfolgreichem Wechsel) wieder null.
+  oneTimePasswordExpiresAt: timestamp("one_time_password_expires_at"),
   isApproved: boolean("is_approved").default(false).notNull(),
   approvedBy: text("approved_by"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (t) => [
+  unique("users_school_id_auth_provider_external_subject_key").on(
+    t.schoolId, t.authProvider, t.externalSubject,
+  ),
+]);
 
 // News table
 export const newsTable = pgTable("news", {
@@ -201,6 +221,23 @@ export const dbConsoleLogTable = pgTable("db_console_log", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Wer hat wann welche Rolle oder welche Rollenberechtigung geaendert.
+// Erforderlich fuer den Rechenschaftsnachweis nach Art. 5 Abs. 2 DSGVO: eine
+// solche Aenderung steuert faktisch den Zugriff auf Gesundheitsdaten.
+// Aufbewahrung 12 Monate, wie report_access_log.
+export const roleChangeLogTable = pgTable("role_change_log", {
+  id: text("id").primaryKey(),
+  actorId: text("actor_id").notNull(),
+  actorName: text("actor_name"),
+  roleId: text("role_id"),
+  roleKey: text("role_key"),
+  targetUserId: text("target_user_id"),
+  action: text("action").notNull(), // create | rename | delete | set_permissions | assign_role | delete_user
+  permissionsBefore: json("permissions_before"),
+  permissionsAfter: json("permissions_after"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (t) => [index("role_change_log_created_idx").on(t.createdAt)]);
+
 // Wer hat wann welches Einsatzprotokoll gelesen. Erforderlich fuer den
 // Rechenschaftsnachweis nach Art. 5 Abs. 2 DSGVO. Aufbewahrung 12 Monate.
 export const reportAccessLogTable = pgTable("report_access_log", {
@@ -253,5 +290,29 @@ export type DbConsoleLog = typeof dbConsoleLogTable.$inferSelect;
 export type NewDbConsoleLog = typeof dbConsoleLogTable.$inferInsert;
 export type ReportAccessLog = typeof reportAccessLogTable.$inferSelect;
 export type NewReportAccessLog = typeof reportAccessLogTable.$inferInsert;
+export const rolesTable = pgTable("roles", {
+  id: text("id").primaryKey(),
+  schoolId: text("school_id"),
+  key: text("key").notNull(),
+  displayName: text("display_name").notNull(),
+  displayNameEn: text("display_name_en"),
+  color: text("color"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  isSystem: boolean("is_system").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => [unique("roles_school_id_key_key").on(t.schoolId, t.key)]);
+
+export const rolePermissionsTable = pgTable("role_permissions", {
+  id: text("id").primaryKey(),
+  roleId: text("role_id").notNull().references(() => rolesTable.id, { onDelete: "cascade" }),
+  permission: text("permission").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [unique("role_permissions_role_id_permission_key").on(t.roleId, t.permission)]);
+
+export type Role = typeof rolesTable.$inferSelect;
+export type NewRole = typeof rolesTable.$inferInsert;
+export type RolePermission = typeof rolePermissionsTable.$inferSelect;
+
 export type Session = typeof sessionsTable.$inferSelect;
 export type NewSession = typeof sessionsTable.$inferInsert;

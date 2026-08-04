@@ -11,7 +11,7 @@ import { Feather, Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import Constants from "expo-constants";
-import { ISERV_DOMAIN, OWNER_USER_ID, SCHOOL_NAME } from "@/constants/appConfig";
+import { ISERV_DOMAIN, SCHOOL_NAME } from "@/constants/appConfig";
 import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
@@ -26,55 +26,19 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useTopPad } from "@/hooks/useTopPad";
+import { useRoles } from "@/hooks/useRoles";
 import { t } from "@/constants/i18n";
 import { getTheme, type ThemeColors } from "@/constants/theme";
 import type { AppLanguage, AppTheme, User, Mission, LOARequest } from "@/models";
 import { confirmAction, notify } from "@/lib/dialog";
 import ApiService from "@/services/ApiService";
 import { enableWebPush, webPushState } from "@/services/WebPushService";
-import { useAppStore } from "@/store/useAppStore";
+import { has, useAppStore } from "@/store/useAppStore";
 
-const ROLE_CONFIG: Record<User["role"], { label: string; bg: string; text: string; icon: string }> = {
-  owner: { label: "Owner", bg: "#CCFBF1", text: "#0F766E", icon: "" },
-  admin: { label: "Administrator", bg: "#FEF2F2", text: "#DC2626", icon: "" },
-  sanitaeter_leitung_admin: { label: "Head Admin", bg: "#EFF6FF", text: "#2563EB", icon: "" },
-  sanitaeter_leitung: { label: "Head Paramedic", bg: "#EFF6FF", text: "#2563EB", icon: "" },
-  teacher: { label: "Teacher", bg: "#FFF7ED", text: "#EA580C", icon: "" },
-  sanitaeter: { label: "Paramedic", bg: "#F0FDF4", text: "#16A34A", icon: "" },
-  student_paramedic: { label: "Paramedic", bg: "#F0FDF4", text: "#16A34A", icon: "" },
-};
-
-const ROLE_PROTECTED_FROM: Record<string, string[]> = {
-  admin: ["owner", "teacher", "sanitaeter_leitung_admin"],
-  sanitaeter_leitung_admin: ["owner", "teacher"],
-};
-
-function canEditUserRole(requestorRole: string, targetRole: string): boolean {
-  if (requestorRole === "owner") return true;
-  const blocked = ROLE_PROTECTED_FROM[requestorRole] ?? [];
-  return blocked.length > 0 && !blocked.includes(targetRole);
-}
-
-function getAllowedRoles(requestorRole: string): { key: string }[] {
-  const all = [
-    { key: "sanitaeter" },
-    { key: "sanitaeter_leitung" },
-    { key: "sanitaeter_leitung_admin" },
-    { key: "teacher" },
-    { key: "admin" },
-  ];
-  if (requestorRole === "owner") return all;
-  if (requestorRole === "admin") return all.filter((r) => ["sanitaeter", "sanitaeter_leitung"].includes(r.key));
-  if (requestorRole === "sanitaeter_leitung_admin") return all.filter((r) => ["sanitaeter", "sanitaeter_leitung", "admin"].includes(r.key));
-  return [];
-}
-
-function RoleBadgeLarge({ role, theme, lang }: { role: User["role"]; theme: ThemeColors; lang: AppLanguage }) {
-  const cfg = ROLE_CONFIG[role];
-  const label = t(`roles.${role}`, lang);
+function RoleBadgeLarge({ label, bg, text }: { label: string; bg: string; text: string }) {
   return (
-    <View style={[styles.roleBadgeLarge, { backgroundColor: cfg.bg, borderColor: cfg.text + "30" }]}>
-      <Text style={[styles.roleBadgeLargeText, { color: cfg.text }]}>{label}</Text>
+    <View style={[styles.roleBadgeLarge, { backgroundColor: bg, borderColor: text + "30" }]}>
+      <Text style={[styles.roleBadgeLargeText, { color: text }]}>{label}</Text>
     </View>
   );
 }
@@ -91,6 +55,7 @@ export default function SettingsScreen() {
   const setLanguage = useAppStore((s) => s.setLanguage);
   const setAvatarUri = useAppStore((s) => s.setAvatarUri);
   const logout = useAppStore((s) => s.logout);
+  const roles = useRoles();
 
   const avatarUri = user ? (avatarUriMap[user.id] ?? null) : null;
 
@@ -101,7 +66,7 @@ export default function SettingsScreen() {
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [showUsers, setShowUsers] = useState(false);
-  const canSeeAllUsers = ["admin", "owner", "sanitaeter_leitung_admin", "teacher"].includes(user?.role ?? "");
+  const canSeeAllUsers = has("users.read_all");
 
   const [showActivityLog, setShowActivityLog] = useState(false);
   const [activityLogData, setActivityLogData] = useState<(Mission | LOARequest & { type: string })[]>([]);
@@ -111,10 +76,13 @@ export default function SettingsScreen() {
   const [saniActivityData, setSaniActivityData] = useState<(Mission & { assignedUser: User | null })[]>([]);
   const [loadingSaniActivity, setLoadingSaniActivity] = useState(false);
 
-  const isAdmin = ["admin", "owner"].includes(user?.role ?? "");
+  const isAdmin = has("users.read_pending");
   // The database console is bound to one account, not to a role.
-  const isOwner = user?.id === OWNER_USER_ID;
-  const canManageRoles = ["admin", "owner", "sanitaeter_leitung_admin"].includes(user?.role ?? "");
+  const isOwner = user?.isOwnerAccount ?? false;
+  const canAssignRole = has("users.assign_role");
+  const canDeleteUsers = has("users.delete");
+  const canManageRoleCatalog = has("roles.manage");
+  const canManageRoles = canAssignRole || canDeleteUsers || isAdmin || canManageRoleCatalog;
   const [showAdmin, setShowAdmin] = useState(false);
   const [pendingUsers, setPendingUsers] = useState<User[]>([]);
   const [loadingPending, setLoadingPending] = useState(false);
@@ -343,7 +311,12 @@ export default function SettingsScreen() {
           <Text style={[styles.rankLabel, { color: theme.textTertiary }]}>
             {t("settings.myRank", lang)}
           </Text>
-          {user && <RoleBadgeLarge role={user.role} theme={theme} lang={lang} />}
+          {user && (
+            <RoleBadgeLarge
+              label={roles.displayName(user.role, lang)}
+              {...roles.colors(user.role)}
+            />
+          )}
         </View>
       </View>
 
@@ -500,7 +473,7 @@ export default function SettingsScreen() {
               <ActivityIndicator color={theme.tint} />
             ) : (
               allUsers.map((u) => {
-                const cfg = ROLE_CONFIG[u.role] ?? { label: u.role, bg: "#F3F4F6", text: "#6B7280", icon: "" };
+                const cfg = roles.colors(u.role);
                 return (
                   <View key={u.id} style={[styles.userRow, { borderTopColor: theme.cardBorder }]}>
                     <View style={[styles.userAvatar, { backgroundColor: cfg.bg }]}>
@@ -515,7 +488,7 @@ export default function SettingsScreen() {
                       <Text style={[styles.userEmail, { color: theme.textTertiary }]}>{u.email}</Text>
                     </View>
                     <View style={[styles.smallRoleBadge, { backgroundColor: cfg.bg }]}>
-                      <Text style={[styles.smallRoleText, { color: cfg.text }]}>{t(`roles.${u.role}`, lang)}</Text>
+                      <Text style={[styles.smallRoleText, { color: cfg.text }]}>{roles.displayName(u.role, lang)}</Text>
                     </View>
                   </View>
                 );
@@ -586,6 +559,22 @@ export default function SettingsScreen() {
             </Pressable>
           )}
 
+          {canManageRoleCatalog && (
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push("/admin/roles");
+              }}
+              style={styles.sectionHeaderRow}
+            >
+              <View style={styles.adminHeaderLeft}>
+                <Ionicons name="key-outline" size={13} color={theme.textTertiary} />
+                <Text style={[styles.sectionTitle, { color: theme.textTertiary }]}>Rollen</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={theme.textTertiary} />
+            </Pressable>
+          )}
+
           <Pressable
             onPress={() => {
               setShowAdmin((v) => !v);
@@ -634,7 +623,7 @@ export default function SettingsScreen() {
                 </View>
               ) : (
                 pendingUsers.map((u) => {
-                  const pendingRoleBtns = getAllowedRoles(user?.role ?? "");
+                  const pendingRoleBtns = roles.roles;
                   const selectedRole = pendingRoles[u.id] ?? "sanitaeter";
                   const isProcessing = adminProcessing === u.id;
                   return (
@@ -672,7 +661,7 @@ export default function SettingsScreen() {
                                 },
                               ]}
                             >
-                              <Text style={[styles.roleChipText, { color: selected ? "#fff" : theme.textSecondary }]}>{t(`rolesShort.${r.key}`, lang)}</Text>
+                              <Text style={[styles.roleChipText, { color: selected ? "#fff" : theme.textSecondary }]}>{roles.displayName(r.key, lang)}</Text>
                             </Pressable>
                           );
                         })}
@@ -712,10 +701,11 @@ export default function SettingsScreen() {
                 </View>
               ) : (
                 allUsers.map((u) => {
-                  const cfg = ROLE_CONFIG[u.role] ?? { label: u.role, bg: "#F3F4F6", text: "#6B7280", icon: "" };
+                  const cfg = roles.colors(u.role);
                   const isCurrentUser = u.id === user?.id;
-                  const roleManageBtns = getAllowedRoles(user?.role ?? "");
-                  const canEdit = !isCurrentUser && canEditUserRole(user?.role ?? "", u.role);
+                  const roleManageBtns = roles.roles;
+                  const canEditRole = !isCurrentUser && canAssignRole;
+                  const canRemove = !isCurrentUser && canDeleteUsers;
                   return (
                     <View key={u.id} style={[styles.adminCard, { borderColor: theme.cardBorder }]}>
                       <View style={styles.adminCardHeader}>
@@ -727,10 +717,10 @@ export default function SettingsScreen() {
                         <View style={{ flex: 1 }}>
                           <Text style={[styles.userName, { color: theme.text }]}>{formatFullName(u.firstName, u.lastName)}</Text>
                           <View style={[styles.smallRoleBadge, { backgroundColor: cfg.bg, alignSelf: "flex-start", marginTop: 2 }]}>
-                            <Text style={[styles.smallRoleText, { color: cfg.text }]}>{t(`roles.${u.role}`, lang)}</Text>
+                            <Text style={[styles.smallRoleText, { color: cfg.text }]}>{roles.displayName(u.role, lang)}</Text>
                           </View>
                         </View>
-                        {!isCurrentUser && canEdit ? (
+                        {canRemove ? (
                           <Pressable
                             onPress={() => handleDeleteUser(u.id, formatFullName(u.firstName, u.lastName))}
                             style={({ pressed }) => [styles.deleteBtn, { opacity: pressed ? 0.5 : 1 }]}
@@ -743,7 +733,7 @@ export default function SettingsScreen() {
                           </View>
                         )}
                       </View>
-                      {canEdit && (
+                      {canEditRole && (
                         <View style={styles.rolePicker}>
                           {roleManageBtns.map((r) => {
                             const selected = u.role === r.key;
@@ -760,7 +750,7 @@ export default function SettingsScreen() {
                                   },
                                 ]}
                               >
-                                <Text style={[styles.roleChipText, { color: selected ? "#fff" : theme.textSecondary }]}>{t(`rolesShort.${r.key}`, lang)}</Text>
+                                <Text style={[styles.roleChipText, { color: selected ? "#fff" : theme.textSecondary }]}>{roles.displayName(r.key, lang)}</Text>
                               </Pressable>
                             );
                           })}
@@ -833,7 +823,7 @@ const styles = StyleSheet.create({
   adminEmptyRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8 },
   adminEmptyIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: "#DCFCE7", alignItems: "center", justifyContent: "center" },
   pendingCard: { borderRadius: 12, borderWidth: 1.5, padding: 12, gap: 10 },
-  pendingStatusPill: { backgroundColor: "#FEF3C7", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+  pendingStatusPill: { backgroundColor: "#FEF3C7", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: "#F59E0B33" },
   pendingStatusText: { fontSize: 10, fontFamily: "Inter_600SemiBold", color: "#B45309" },
   adminCard: { borderRadius: 12, borderWidth: 1, padding: 12, gap: 10 },
   adminCardHeader: { flexDirection: "row", alignItems: "center", gap: 10 },

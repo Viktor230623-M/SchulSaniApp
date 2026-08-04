@@ -15,6 +15,34 @@
       "when": 1785627617855,
       "tag": "0001_sicht_und_kommentare",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785759908047,
+      "tag": "0002_rollen_und_rechte",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1785774524198,
+      "tag": "0003_rollenprotokoll_migration",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1785774725122,
+      "tag": "0004_anmeldeweg_und_subjekt",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1785839588657,
+      "tag": "0005_pflichtwechsel_und_einmalpasswort",
+      "breakpoints": true
     }
   ]
 }
