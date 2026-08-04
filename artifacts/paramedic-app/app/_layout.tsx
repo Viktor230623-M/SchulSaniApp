@@ -14,6 +14,7 @@ import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { getTheme } from "@/constants/theme";
 import ApiService, { setAuthToken } from "@/services/ApiService";
 import { registerForPushNotificationsAsync } from "@/services/PushNotificationService";
 import { useAppStore } from "@/store/useAppStore";
@@ -28,6 +29,7 @@ function RootLayoutNav() {
   const setAuthStatus = useAppStore((s) => s.setAuthStatus);
   const login = useAppStore((s) => s.login);
   const setToken = useAppStore((s) => s.setToken);
+  const theme = getTheme(useAppStore((s) => s.theme));
 
   useEffect(() => {
     if (token) setAuthToken(token);
@@ -68,7 +70,15 @@ function RootLayoutNav() {
   // werden gar nicht erst gematcht. Ein <Redirect> als Kind eines <Stack> wird
   // dagegen nie gemountet — genau daran scheiterte der Guard bisher.
   return (
-    <Stack screenOptions={{ headerBackTitle: "Zurück" }}>
+    <Stack
+      screenOptions={{
+        headerBackTitle: "Zurück",
+        // Ohne diese Angabe malt die Navigation ihre eigene Standardfarbe --
+        // Weiss, in jedem Thema. Sichtbar wird sie ueberall dort, wo ein
+        // Bildschirm nicht selbst deckt, etwa im Sicherheitsabstand unten.
+        contentStyle: { backgroundColor: theme.background },
+      }}
+    >
       <Stack.Protected guard={authStatus === "authed"}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="report/index" options={{ headerShown: false }} />
