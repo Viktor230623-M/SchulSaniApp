@@ -1,7 +1,6 @@
 export type UserRole =
   | "owner"
   | "sanitaeter"
-  | "student_paramedic"
   | "sanitaeter_leitung"
   | "sanitaeter_leitung_admin"
   | "admin"

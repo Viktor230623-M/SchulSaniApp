@@ -5,7 +5,11 @@ export interface PermissionDef {
   hiddenFromUi: boolean;
 }
 
-export const PERMISSIONS: readonly PermissionDef[] = [
+// Keine Typangabe an dieser Stelle: `readonly PermissionDef[]` wuerde die
+// Literale zu `string` verbreitern, PermissionKey saehe damit jede Zeichenkette
+// als gueltig an und isValidPermission waere als Type Guard wirkungslos. Das
+// `satisfies` unten prueft die Form, ohne die Schluessel zu verlieren.
+export const PERMISSIONS = [
   { key: "users.read_all", description: "Alle Nutzerkonten der Schule einsehen", essential: false, hiddenFromUi: false },
   { key: "users.read_pending", description: "Warteliste noch nicht freigeschalteter Konten einsehen", essential: false, hiddenFromUi: false },
   { key: "users.approve", description: "Neue Nutzer freischalten", essential: false, hiddenFromUi: false },
@@ -25,7 +29,7 @@ export const PERMISSIONS: readonly PermissionDef[] = [
   { key: "reports.read_all", description: "Alle Einsatzprotokolle lesen, nicht nur eigene", essential: false, hiddenFromUi: false },
   { key: "reports.see_patient_info", description: "Patientendaten in Einsatzprotokollen sehen", essential: false, hiddenFromUi: false },
   { key: "roles.manage", description: "Rollen anlegen, umbenennen, loeschen und ihre Berechtigungen setzen", essential: true, hiddenFromUi: true },
-] as const;
+] as const satisfies readonly PermissionDef[];
 
 export type PermissionKey = (typeof PERMISSIONS)[number]["key"];
 
@@ -67,6 +71,5 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, readonly PermissionKey[]> 
     "reports.see_patient_info",
   ],
   sanitaeter: ["loa.create", "missions.receive_alerts"],
-  student_paramedic: ["loa.create", "missions.receive_alerts"],
 };
 export function hasPermission(role: string, perm: string): boolean { return (DEFAULT_ROLE_PERMISSIONS[role] ?? []).includes(perm as any); }

@@ -6,10 +6,8 @@ import { assertAdminReachable, LockoutError } from "../lib/rolePermissions";
 import { logRoleChangeTx } from "../lib/roleChangeLog";
 
 // Quelle der Rollen ist der Aufzaehlungstyp user_role (siehe
-// lib/db/src/schema/index.ts). "cto" fehlt hier: der Wert bleibt im Typ, bis
-// die vorhandenen Zeilen auf "owner" umgestellt sind, wird aber nicht mehr
-// vergeben.
-const VALID_ROLES = ["owner", "admin", "sanitaeter_leitung_admin", "sanitaeter_leitung", "teacher", "sanitaeter", "student_paramedic"] as const satisfies readonly UserRole[];
+// lib/db/src/schema/index.ts).
+const VALID_ROLES = ["owner", "admin", "sanitaeter_leitung_admin", "sanitaeter_leitung", "teacher", "sanitaeter"] as const satisfies readonly UserRole[];
 
 function isValidRole(value: string): value is (typeof VALID_ROLES)[number] {
   return (VALID_ROLES as readonly string[]).includes(value);
@@ -25,8 +23,8 @@ function safeUser(u: typeof usersTable.$inferSelect) {
 // Which roles a requester is permitted to assign. Only the Owner (owner) may grant owner.
 function allowedTargetRoles(requester: string): string[] {
   if (requester === "owner") return [...VALID_ROLES];
-  if (requester === "admin") return ["admin", "sanitaeter_leitung", "sanitaeter", "student_paramedic"];
-  if (requester === "sanitaeter_leitung_admin") return ["admin", "sanitaeter_leitung", "sanitaeter", "student_paramedic"];
+  if (requester === "admin") return ["admin", "sanitaeter_leitung", "sanitaeter"];
+  if (requester === "sanitaeter_leitung_admin") return ["admin", "sanitaeter_leitung", "sanitaeter"];
   return [];
 }
 

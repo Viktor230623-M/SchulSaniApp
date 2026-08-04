@@ -79,7 +79,7 @@ export default function LOAScreen() {
   const canModerate = has("loa.moderate");
   // Keine Berechtigung im Katalog deckt diese Ausnahme exakt ab — Lehrkraft
   // hat serverseitig loa.create, darf hier aber bewusst nicht anlegen.
-  const canCreate = ["student_paramedic", "sanitaeter_leitung", "sanitaeter_leitung_admin", "admin", "owner", "sanitaeter"].includes(user?.role ?? "");
+  const canCreate = ["sanitaeter", "sanitaeter_leitung", "sanitaeter_leitung_admin", "admin", "owner"].includes(user?.role ?? "");
   const [tab, setTab] = useState<"mine" | "all">("mine");
   const [segmentWidth, setSegmentWidth] = useState(0);
   const tabAnim = useSharedValue(0);

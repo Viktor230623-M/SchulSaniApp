@@ -73,7 +73,7 @@ async function getLiveUser(userId: string): Promise<LiveUser | null> {
     userCache.delete(userId);
     return null;
   }
-  const role = row.role ?? "student_paramedic";
+  const role = row.role ?? "sanitaeter";
   const entry: LiveUser = {
     role,
     isApproved: row.isApproved,
