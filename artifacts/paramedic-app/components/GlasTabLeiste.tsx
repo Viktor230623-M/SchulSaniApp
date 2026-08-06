@@ -171,6 +171,7 @@ function Glasflaeche({
           cornerRadius={radius}
           dark={dunkel}
           style={StyleSheet.absoluteFill}
+          pointerEvents="none"
         />
       )}
 
@@ -227,11 +228,11 @@ function Glasflaeche({
           bleibt er aus -- der Glass-Effekt bringt seinen eigenen Glanz mit. */}
       {!nativ && (
         <LinearGradient
-        colors={
-          dunkel
-            ? ["rgba(255,255,255,0.10)", "rgba(255,255,255,0.02)", "rgba(255,255,255,0)"]
-            : ["rgba(255,255,255,0.18)", "rgba(255,255,255,0.04)", "rgba(255,255,255,0)"]
-        }
+          colors={
+            dunkel
+              ? ["rgba(255,255,255,0.10)", "rgba(255,255,255,0.02)", "rgba(255,255,255,0)"]
+              : ["rgba(255,255,255,0.18)", "rgba(255,255,255,0.04)", "rgba(255,255,255,0)"]
+          }
           start={{ x: 0, y: 0 }}
           end={{ x: 0.7, y: 1 }}
           style={[StyleSheet.absoluteFill, { borderRadius: radius }]}
