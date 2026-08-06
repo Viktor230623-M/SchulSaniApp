@@ -1,6 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import request from "supertest";
-import { vi } from "vitest";
 
 // Der komplette Router-Baum (routes/index.ts) haengt beim Import von "../app"
 // mit im Graph, auch wenn ein einzelner Testfall nur eine Route anspricht --
