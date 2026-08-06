@@ -52,11 +52,11 @@ function headers() {
 }
 
 const ApiService = {
-  async login(credentials: { username: string; password: string }, rememberMe?: boolean): Promise<{ user: User; isTealUnlocked: boolean; token: string }> {
+  async login(credentials: { username: string; password: string; providerKey: string }, rememberMe?: boolean): Promise<{ user: User; isTealUnlocked: boolean; token: string }> {
     const resp = await apiFetch(`${API_BASE}/auth/login`, {
       method: "POST",
       headers: headers(),
-      body: JSON.stringify({ username: credentials.username.trim(), password: credentials.password, rememberMe }),
+      body: JSON.stringify({ providerKey: credentials.providerKey, username: credentials.username.trim(), password: credentials.password, rememberMe }),
     });
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error ?? "Anmeldung fehlgeschlagen");
