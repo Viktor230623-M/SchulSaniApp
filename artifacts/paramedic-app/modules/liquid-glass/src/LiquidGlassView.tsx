@@ -7,6 +7,7 @@ export interface LiquidGlassViewProps {
   cornerRadius?: number;
   /** Dunkles Material fuer dunkle Themen. */
   dark?: boolean;
+  pointerEvents?: "box-none" | "none" | "box-only" | "auto";
   style?: StyleProp<ViewStyle>;
 }
 
