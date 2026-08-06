@@ -1,11 +1,6 @@
 import { describe, expect, it, vi, beforeAll, afterAll, beforeEach } from "vitest";
 import { randomUUID } from "node:crypto";
 
-// Testzeilen je Nutzer-ID. Die Filterung in select()/update() liest die
-// tatsaechliche ID aus dem Drizzle-Vergleichsobjekt (eq(usersTable.id, ...)
-// liefert ein SQL-Objekt mit queryChunks, darin ein Param-Chunk mit dem
-// Wert) -- so laeuft requireAuth hier mit seiner echten Logik, nicht als
-// Attrappe, und die Sperre in der Middleware wird tatsaechlich gepruft.
 interface FakeUserRow {
   id: string;
   role: string;
@@ -28,20 +23,39 @@ function extractEqId(cond: any): string | undefined {
 }
 
 vi.mock("@workspace/db", async () => {
+  // usersTable braucht echte Drizzle-Spalten, sonst liefert eq(usersTable.id,
+  // ...) im Routencode kein auswertbares SQL-Objekt (usersTable.id waere
+  // schlicht undefined) -- Symbol.toStringTag-Attrappen wie bei den uebrigen
+  // Tabellen reichen hier nicht, weil requireAuth und die Korrekturroute
+  // echt nach ID filtern muessen, nicht nur "irgendeine Zeile" bekommen.
+  const { pgTable, text } = await import("drizzle-orm/pg-core");
+  const usersTableMock = pgTable("users", {
+    id: text("id"),
+    role: text("role"),
+    isApproved: text("is_approved"),
+    schoolId: text("school_id"),
+    profileConfirmedAt: text("profile_confirmed_at"),
+    firstName: text("first_name"),
+    lastName: text("last_name"),
+    email: text("email"),
+    passwordHash: text("password_hash"),
+  });
+
   function createMockTable(name: string) {
     return { [Symbol.toStringTag]: name } as any;
   }
+  const profileChangeLogTableMock = createMockTable("profile_change_log");
 
   function makeSelectChain(): any {
-    let table = "";
+    let isUsers = false;
     let whereId: string | undefined;
     const resolve = () => {
-      if (table !== "users") return Promise.resolve([]);
+      if (!isUsers) return Promise.resolve([]);
       if (whereId !== undefined) return Promise.resolve(fakeUsers[whereId] ? [fakeUsers[whereId]] : []);
       return Promise.resolve(Object.values(fakeUsers));
     };
     const chain: any = {
-      from: (t: any) => { table = t[Symbol.toStringTag]; return chain; },
+      from: (t: any) => { isUsers = t === usersTableMock; return chain; },
       innerJoin: () => chain,
       where: (cond: any) => { whereId = extractEqId(cond); return chain; },
       limit: () => chain,
@@ -51,14 +65,14 @@ vi.mock("@workspace/db", async () => {
     return chain;
   }
 
-  function makeUpdateChain(table: string): any {
+  function makeUpdateChain(isUsers: boolean): any {
     let whereId: string | undefined;
     let patch: Record<string, unknown> = {};
     const chain: any = {
       set: (p: Record<string, unknown>) => { patch = p; return chain; },
       where: (cond: any) => { whereId = extractEqId(cond); return chain; },
       returning: () => {
-        if (table === "users" && whereId && fakeUsers[whereId]) {
+        if (isUsers && whereId && fakeUsers[whereId]) {
           fakeUsers[whereId] = { ...fakeUsers[whereId], ...patch };
           return Promise.resolve([fakeUsers[whereId]]);
         }
@@ -70,10 +84,10 @@ vi.mock("@workspace/db", async () => {
 
   const dbMock: any = {
     select: () => makeSelectChain(),
-    update: (t: any) => makeUpdateChain(t[Symbol.toStringTag]),
+    update: (t: any) => makeUpdateChain(t === usersTableMock),
     insert: (t: any) => ({
       values: (v: Record<string, unknown>) => {
-        if (t[Symbol.toStringTag] === "profile_change_log") {
+        if (t === profileChangeLogTableMock) {
           profileChangeEntries.push(v as any);
         }
         return Promise.resolve();
@@ -86,7 +100,7 @@ vi.mock("@workspace/db", async () => {
   return {
     db: dbMock,
     pool: { query: () => Promise.resolve({ rows: [] }) },
-    usersTable: createMockTable("users"),
+    usersTable: usersTableMock,
     newsTable: createMockTable("news"),
     loaTable: createMockTable("loa"),
     missionsTable: createMockTable("missions"),
@@ -103,7 +117,7 @@ vi.mock("@workspace/db", async () => {
     rolePermissionsTable: createMockTable("role_permissions"),
     sessionsTable: createMockTable("sessions"),
     roleChangeLogTable: createMockTable("role_change_log"),
-    profileChangeLogTable: createMockTable("profile_change_log"),
+    profileChangeLogTable: profileChangeLogTableMock,
     userRoleEnum: { enumValues: ["owner", "admin", "sanitaeter_leitung_admin", "sanitaeter_leitung", "teacher", "sanitaeter"] },
   };
 });

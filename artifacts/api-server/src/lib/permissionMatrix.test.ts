@@ -147,6 +147,28 @@ vi.mock("../middlewares/auth", async () => {
         next();
       };
     },
+    // Dieselbe Authentifizierung wie requireAuth, ohne die Namenssperre --
+    // in dieser Matrix nicht unter Test, aber /auth/logout und /auth/profile
+    // haengen an dieser Funktion und muessten sonst schon beim Modulimport
+    // scheitern.
+    requireAuthAllowUnconfirmedProfile: vi.fn(async (req: any, res: any, next: any) => {
+      const header = req.headers?.authorization || req.get?.("authorization") || "";
+      const token = header?.startsWith("Bearer ") ? header.slice(7) : header || "";
+      if (!token) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+      const userId = token.split("-").slice(2, -1).join("-") || "unknown";
+      const role = token.split("-").pop() || "sanitaeter";
+      const mockEntry = mockLiveUsers[userId] || { role: "sanitaeter", isApproved: true };
+      if (!mockEntry.isApproved) {
+        res.status(401).json({ error: "Invalid or expired token" });
+        return;
+      }
+      req.user = { userId, role: mockEntry.role };
+      next();
+    }),
+    invalidateUserCache: vi.fn(),
   };
 });
 
