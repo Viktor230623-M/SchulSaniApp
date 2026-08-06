@@ -51,7 +51,7 @@ export interface LocalProviderConfig {
 /**
  * Lokaler Anmeldeweg als Adapter.
  *
- * `authenticate` sucht das Konto ueber (Schule, Anbieter="local", Subjekt),
+ * `authenticate` sucht das Konto ueber (Schule, Anbieterschluessel, Subjekt),
  * prueft das Passwort per bcrypt und meldet ueber `mustChangePassword`, ob das
  * gerade gepruefte Passwort ein noch nicht gewechseltes Einmal-Passwort ist.
  * Ein abgelaufenes Einmal-Passwort gilt als ungueltiges Passwort -- die
@@ -74,7 +74,7 @@ export function createLocalProvider(cfg: LocalProviderConfig): PasswordAuthProvi
         .where(
           and(
             eq(usersTable.schoolId, schoolId),
-            eq(usersTable.authProvider, "local"),
+            eq(usersTable.authProvider, key),
             eq(usersTable.externalSubject, username),
           ),
         )

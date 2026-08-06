@@ -8,7 +8,6 @@ import { requireAuth, requireAuthAllowUnconfirmedProfile, invalidateUserCache, t
 import { createSession, resolveSession, revokeSession } from "../lib/sessions";
 import { config } from "../config";
 import { loadAuthProviders } from "../auth/registry";
-import type { PasswordAuthProvider } from "../auth/types";
 import { validateProfileName } from "../lib/profileName";
 
 const router = Router();
@@ -58,17 +57,13 @@ if (JWT_SECRET.length < 32) {
   throw new Error("JWT_SECRET must be at least 32 characters long");
 }
 
-// Anmeldewege dieser Installation, siehe ../auth/registry. Kein Anmeldeweg ist
-// mehr still voreingestellt: fehlt AUTH_PROVIDERS_PATH oder ist die Datei
-// unvollstaendig, bricht loadAuthProviders() den Start mit einer erklaerenden
-// Meldung ab, statt stillschweigend ohne Anmeldeweg hochzufahren.
+// Anmeldewege dieser Installation, siehe ../auth/registry. Der Start bricht
+// nur ab, wenn gar keiner konfiguriert ist -- ob ein passwortbasierter Weg
+// existiert, entscheidet der Login, nicht der Start: der waehlt den Anbieter
+// ueber den providerKey aus dem Rumpf. Ein stiller Vorgabeweg wuerde
+// Anmeldedaten an den falschen Dienst schicken, sobald eine Installation
+// mehrere Wege kennt.
 const authProviders = loadAuthProviders();
-const primaryAuthProvider = authProviders.find(
-  (p): p is PasswordAuthProvider => p.type === "iserv-form",
-);
-if (!primaryAuthProvider) {
-  throw new Error("Kein passwortbasierter Anmeldeweg konfiguriert.");
-}
 
 function isUserRole(value: string): value is UserRole {
   return (userRoleEnum.enumValues as readonly string[]).includes(value);
@@ -126,7 +121,17 @@ async function buildUserResponse(user: { id: string; firstName: string | null; l
 }
 
 router.post("/login", authLimiter, async (req, res) => {
-  const { username, password, rememberMe } = req.body as { username: string; password: string; rememberMe?: boolean };
+  const { providerKey, username, password, rememberMe } = req.body as { providerKey?: string; username: string; password: string; rememberMe?: boolean };
+  const provider = authProviders.find((p) => p.key === providerKey);
+  if (!provider || provider.type === "oidc-redirect") {
+    // Wie bei den Weiterleitungs-Routen: 404 ohne Hinweis, ob der Schluessel
+    // existiert. Der Formular-Login gehoert nur zu einem passwortbasierten
+    // Weg -- ein unbekannter Schluessel darf die Eingabe nicht an einen
+    // anderen Anbieter weiterreichen.
+    res.status(404).json({ error: "Anmeldeweg nicht gefunden." });
+    return;
+  }
+
   if (!username?.trim() || !password?.trim()) {
     res.status(400).json({ error: "Benutzername und Passwort erforderlich" });
     return;
@@ -148,7 +153,7 @@ router.post("/login", authLimiter, async (req, res) => {
   let subject = cleanUsername;
 
   try {
-    const { profile, subject: providerSubject } = await primaryAuthProvider.authenticate({ username: cleanUsername, password });
+    const { profile, subject: providerSubject } = await provider.authenticate({ username: cleanUsername, password });
     subject = providerSubject;
     if (profile.firstName) firstName = profile.firstName;
     if (profile.lastName) lastName = profile.lastName;
@@ -161,7 +166,7 @@ router.post("/login", authLimiter, async (req, res) => {
       res.status(401).json({ error: "Ungültige Zugangsdaten" });
       return;
     }
-    console.error("IServ auth unavailable — denying login");
+    console.error(`Anmeldeweg "${provider.key}" nicht erreichbar -- Anmeldung abgelehnt`);
     res.status(503).json({ error: "Anmeldedienst nicht erreichbar. Bitte später erneut versuchen." });
     return;
   }
@@ -179,7 +184,7 @@ router.post("/login", authLimiter, async (req, res) => {
       .where(
         and(
           eq(usersTable.schoolId, schoolId),
-          eq(usersTable.authProvider, primaryAuthProvider.key),
+          eq(usersTable.authProvider, provider.key),
           eq(usersTable.externalSubject, subject),
         ),
       )
@@ -189,14 +194,14 @@ router.post("/login", authLimiter, async (req, res) => {
     // fuer die NOT-NULL-Spalte -- er entfaltet keine Wirkung, solange isApproved
     // weiter unten false bleibt und die Anmeldung blockiert. Ein Verwalter muss
     // Rolle und Freischaltung explizit setzen.
-    const resolvedRole = existing[0]?.role ?? (await getRoleForUser(groups, primaryAuthProvider.key, schoolId));
+    const resolvedRole = existing[0]?.role ?? (await getRoleForUser(groups, provider.key, schoolId));
     const role: UserRole = resolvedRole ?? "sanitaeter";
     const isApproved: boolean = existing[0]?.isApproved ?? false;
 
     const userValues = {
       id: userId,
       iservUsername: cleanUsername,
-      authProvider: primaryAuthProvider.key,
+      authProvider: provider.key,
       externalSubject: subject,
       firstName,
       lastName,
