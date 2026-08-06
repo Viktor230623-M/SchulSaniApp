@@ -1,4 +1,5 @@
-import { describe, expect, it, vi, beforeAll, afterAll, beforeEach } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
+import request from "supertest";
 import { randomUUID } from "node:crypto";
 
 interface FakeUserRow {
@@ -133,7 +134,6 @@ vi.mock("../lib/sessions", () => ({
 }));
 
 import app from "../app";
-import type { Server } from "http";
 import { signToken, invalidateAllRoleCaches } from "../middlewares/auth";
 import { invalidateRolePermissions } from "../lib/rolePermissions";
 
@@ -157,22 +157,6 @@ function tokenFor(user: FakeUserRow): string {
 }
 
 describe("Namensbestaetigung -- Sperre, Endpunkt, Verwalter-Korrektur", () => {
-  let server: Server;
-  let port: number;
-
-  beforeAll(async () => {
-    await new Promise<void>((resolve) => {
-      server = app.listen(0, () => {
-        port = (server.address() as import("net").AddressInfo).port;
-        resolve();
-      });
-    });
-  }, 10000);
-
-  afterAll(async () => {
-    await new Promise<void>((resolve) => server.close(() => resolve()));
-  });
-
   beforeEach(() => {
     fakeUsers = {};
     profileChangeEntries = [];
@@ -180,20 +164,17 @@ describe("Namensbestaetigung -- Sperre, Endpunkt, Verwalter-Korrektur", () => {
     invalidateRolePermissions();
   });
 
-  async function call(method: string, path: string, token: string, body?: Record<string, unknown>) {
-    const res = await fetch(`http://localhost:${port}${path}`, {
-      method,
-      headers: { "Content-Type": "application/json", authorization: `Bearer ${token}` },
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    });
-    return { status: res.status, body: await res.json().catch(() => ({})) };
+  async function call(method: "GET" | "PATCH", path: string, token: string, body?: Record<string, unknown>) {
+    const req = request(app)
+      [method === "GET" ? "get" : "patch"](path)
+      .set("authorization", `Bearer ${token}`);
+    const res = body !== undefined ? await req.send(body) : await req;
+    return { status: res.status, body: res.body };
   }
 
   async function callWithSessionCookie(userId: string) {
-    const res = await fetch(`http://localhost:${port}/api/auth/session`, {
-      headers: { cookie: `sani-session=gueltig:${userId}` },
-    });
-    return { status: res.status, body: await res.json().catch(() => ({})) };
+    const res = await request(app).get("/api/auth/session").set("Cookie", `sani-session=gueltig:${userId}`);
+    return { status: res.status, body: res.body };
   }
 
   it("sperrt eine beliebige geschuetzte Route, solange der Name nicht bestaetigt ist", async () => {
