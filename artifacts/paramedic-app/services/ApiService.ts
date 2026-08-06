@@ -22,7 +22,7 @@ const API_BASE = `https://${process.env["EXPO_PUBLIC_DOMAIN"]}/api`;
 export interface AuthProviderInfo {
   key: string;
   displayName: string;
-  type: "iserv-form" | "oidc-redirect";
+  type: "iserv-form" | "oidc-redirect" | "local";
 }
 
 let authToken: string | null = null;
@@ -124,6 +124,18 @@ const ApiService = {
   /** URL des Weiterleitungsstarts eines Anmeldewegs (GET /auth/:provider/start). */
   getProviderStartUrl(providerKey: string): string {
     return `${API_BASE}/auth/${encodeURIComponent(providerKey)}/start`;
+  },
+
+  /** Setzt einmalig den bestaetigten Namen fuer das eigene Konto (PATCH /auth/profile). */
+  async confirmProfile(firstName: string, lastName: string): Promise<User> {
+    const resp = await apiFetch(`${API_BASE}/auth/profile`, {
+      method: "PATCH",
+      headers: headers(),
+      body: JSON.stringify({ firstName, lastName }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error ?? "Bestaetigung fehlgeschlagen");
+    return { ...data.user, permissions: data.permissions ?? [] };
   },
 
   async logout(): Promise<void> {
@@ -487,6 +499,18 @@ const ApiService = {
       throw new Error(data.error ?? "Rolle konnte nicht geändert werden");
     }
     return resp.json();
+  },
+
+  /** Korrigiert einen falsch eingegebenen Namen fremder Konten (PATCH /users/:id/profile, users.correct_profile). */
+  async correctUserProfile(id: string, firstName: string, lastName: string): Promise<User> {
+    const resp = await apiFetch(`${API_BASE}/users/${id}/profile`, {
+      method: "PATCH",
+      headers: headers(),
+      body: JSON.stringify({ firstName, lastName }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error ?? "Name konnte nicht korrigiert werden");
+    return data;
   },
 
   async deleteUser(id: string): Promise<void> {
