@@ -28,6 +28,8 @@ function RootLayoutNav() {
   const setAuthStatus = useAppStore((s) => s.setAuthStatus);
   const login = useAppStore((s) => s.login);
   const setToken = useAppStore((s) => s.setToken);
+  const profileConfirmedAt = useAppStore((s) => s.user?.profileConfirmedAt);
+  const needsProfileConfirmation = authStatus === "authed" && profileConfirmedAt === null;
 
   useEffect(() => {
     if (token) setAuthToken(token);
@@ -69,7 +71,7 @@ function RootLayoutNav() {
   // dagegen nie gemountet — genau daran scheiterte der Guard bisher.
   return (
     <Stack screenOptions={{ headerBackTitle: "Zurück" }}>
-      <Stack.Protected guard={authStatus === "authed"}>
+      <Stack.Protected guard={authStatus === "authed" && !needsProfileConfirmation}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="report/index" options={{ headerShown: false }} />
         <Stack.Screen name="report/[id]" options={{ headerShown: false }} />
@@ -77,6 +79,9 @@ function RootLayoutNav() {
         <Stack.Screen name="admin/sani-activity" options={{ headerShown: false }} />
         <Stack.Screen name="admin/roles" options={{ headerShown: false }} />
         <Stack.Screen name="activity-log" />
+      </Stack.Protected>
+      <Stack.Protected guard={needsProfileConfirmation}>
+        <Stack.Screen name="name-bestaetigen" options={{ headerShown: false }} />
       </Stack.Protected>
       <Stack.Protected guard={authStatus === "anon"}>
         <Stack.Screen name="login" options={{ headerShown: false }} />
