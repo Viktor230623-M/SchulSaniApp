@@ -29,7 +29,8 @@ function RootLayoutNav() {
   const login = useAppStore((s) => s.login);
   const setToken = useAppStore((s) => s.setToken);
   const profileConfirmedAt = useAppStore((s) => s.user?.profileConfirmedAt);
-  const needsProfileConfirmation = authStatus === "authed" && profileConfirmedAt === null;
+  const mustChangePassword = useAppStore((s) => s.user?.mustChangePassword === true);
+  const needsProfileConfirmation = authStatus === "authed" && profileConfirmedAt === null && !mustChangePassword;
 
   useEffect(() => {
     if (token) setAuthToken(token);
@@ -80,6 +81,9 @@ function RootLayoutNav() {
         <Stack.Screen name="admin/roles" options={{ headerShown: false }} />
         <Stack.Screen name="activity-log" />
       </Stack.Protected>
+      <Stack.Protected guard={authStatus === "authed" && mustChangePassword}>
+        <Stack.Screen name="passwort-wechseln" options={{ headerShown: false }} />
+      </Stack.Protected>
       <Stack.Protected guard={needsProfileConfirmation}>
         <Stack.Screen name="name-bestaetigen" options={{ headerShown: false }} />
       </Stack.Protected>
@@ -111,7 +115,7 @@ export default function RootLayout() {
       <ErrorBoundary>
         <QueryClientProvider client={queryClient}>
           <GestureHandlerRootView style={{ flex: 1 }}>
-            <KeyboardProvider style={{ flex: 1 }}>
+            <KeyboardProvider>
               <RootLayoutNav />
             </KeyboardProvider>
           </GestureHandlerRootView>

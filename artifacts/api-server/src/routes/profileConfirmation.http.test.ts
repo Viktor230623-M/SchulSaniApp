@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import request from "supertest";
 import { randomUUID } from "node:crypto";
+import bcrypt from "bcryptjs";
 
 interface FakeUserRow {
   id: string;
@@ -8,6 +9,8 @@ interface FakeUserRow {
   isApproved: boolean;
   schoolId: string | null;
   profileConfirmedAt: Date | null;
+  mustChangePassword: boolean;
+  passwordHash: string;
   firstName: string | null;
   lastName: string | null;
   email: string | null;
@@ -36,6 +39,9 @@ vi.mock("@workspace/db", async () => {
     isApproved: text("is_approved"),
     schoolId: text("school_id"),
     profileConfirmedAt: text("profile_confirmed_at"),
+    mustChangePassword: text("must_change_password"),
+    passwordHash: text("password_hash"),
+    oneTimePasswordExpiresAt: text("one_time_password_expires_at"),
     firstName: text("first_name"),
     lastName: text("last_name"),
     email: text("email"),
@@ -60,6 +66,7 @@ vi.mock("@workspace/db", async () => {
       innerJoin: () => chain,
       where: (cond: any) => { whereId = extractEqId(cond); return chain; },
       limit: () => chain,
+      for: () => chain,
       then: (onFulfilled: any, onRejected?: any) => resolve().then(onFulfilled, onRejected),
       catch: (onRejected: any) => resolve().catch(onRejected),
     };
@@ -145,6 +152,8 @@ function makeUser(overrides: Partial<FakeUserRow> = {}): FakeUserRow {
     isApproved: true,
     schoolId: null,
     profileConfirmedAt: null,
+    mustChangePassword: false,
+    passwordHash: bcrypt.hashSync("Einmalpasswort", 4),
     firstName: "Vorschlag",
     lastName: "Nachname",
     email: `${id}@vitest.beispiel.invalid`,
@@ -172,6 +181,13 @@ describe("Namensbestaetigung -- Sperre, Endpunkt, Verwalter-Korrektur", () => {
     return { status: res.status, body: res.body };
   }
 
+  async function changePassword(user: FakeUserRow, body: Record<string, unknown>) {
+    return request(app)
+      .post("/api/auth/password/change")
+      .set("authorization", `Bearer ${tokenFor(user)}`)
+      .send(body);
+  }
+
   async function callWithSessionCookie(userId: string) {
     const res = await request(app).get("/api/auth/session").set("Cookie", `sani-session=gueltig:${userId}`);
     return { status: res.status, body: res.body };
@@ -185,6 +201,16 @@ describe("Namensbestaetigung -- Sperre, Endpunkt, Verwalter-Korrektur", () => {
 
     expect(result.status).toBe(403);
     expect(result.body.code).toBe("PROFILE_NOT_CONFIRMED");
+  });
+
+  it("sperrt erzwungene Passwortwechsel vor jeder anderen geschuetzten Route", async () => {
+    const user = makeUser({ mustChangePassword: true });
+    fakeUsers[user.id] = user;
+
+    const result = await call("GET", `/api/users/${user.id}`, tokenFor(user));
+
+    expect(result.status).toBe(403);
+    expect(result.body.code).toBe("PASSWORD_CHANGE_REQUIRED");
   });
 
   it("laesst PATCH /auth/profile trotz Sperre zu", async () => {
@@ -236,6 +262,36 @@ describe("Namensbestaetigung -- Sperre, Endpunkt, Verwalter-Korrektur", () => {
     const result = await call("PATCH", "/api/auth/profile", tokenFor(user), { firstName: "a".repeat(101), lastName: "Krause" });
 
     expect(result.status).toBe(400);
+  });
+
+  it("laesst nur erzwungenen Konten den Passwortwechsel zu", async () => {
+    const user = makeUser({ mustChangePassword: true });
+    fakeUsers[user.id] = user;
+
+    const result = await changePassword(user, { currentPassword: "Einmalpasswort", newPassword: "Ein-neues-sicheres-Passwort" });
+
+    expect(result.status).toBe(200);
+    expect(fakeUsers[user.id]!.mustChangePassword).toBe(false);
+    expect(fakeUsers[user.id]!.oneTimePasswordExpiresAt).toBeNull();
+  });
+
+  it("weist ein falsches aktuelles Passwort ab", async () => {
+    const user = makeUser({ mustChangePassword: true });
+    fakeUsers[user.id] = user;
+
+    const result = await changePassword(user, { currentPassword: "falsch", newPassword: "Ein-neues-sicheres-Passwort" });
+
+    expect(result.status).toBe(401);
+    expect(fakeUsers[user.id]!.mustChangePassword).toBe(true);
+  });
+
+  it("weist den Passwortwechsel fuer normale Konten ab", async () => {
+    const user = makeUser();
+    fakeUsers[user.id] = user;
+
+    const result = await changePassword(user, { currentPassword: "Einmalpasswort", newPassword: "Ein-neues-sicheres-Passwort" });
+
+    expect(result.status).toBe(409);
   });
 
   it("weist einen zweiten Aufruf bei bereits bestaetigtem Konto mit 409 ab", async () => {

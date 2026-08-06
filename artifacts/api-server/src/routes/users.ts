@@ -224,27 +224,46 @@ router.patch("/:id/profile", requireAuth, requirePermission("users.correct_profi
     return;
   }
 
-  const [existing] = await db.select().from(usersTable).where(eq(usersTable.id, id));
-  if (!existing) {
-    res.status(404).json({ error: "User not found" });
-    return;
-  }
-
-  let updated: typeof existing | undefined;
+  let existing: typeof usersTable.$inferSelect | undefined;
+  let correctionError: "not_found" | "forbidden" | undefined;
+  let updated: typeof usersTable.$inferSelect | undefined;
   await db.transaction(async (tx) => {
+    const [locked] = await tx
+      .select()
+      .from(usersTable)
+      .where(eq(usersTable.id, id))
+      .for("update");
+    existing = locked;
+    if (!locked) {
+      correctionError = "not_found";
+      return;
+    }
+    if (!canModifyTarget(req.user!.role, locked.role ?? "sanitaeter")) {
+      correctionError = "forbidden";
+      return;
+    }
+
     const rows = await tx
       .update(usersTable)
       .set({ firstName: cleanFirstName, lastName: cleanLastName, profileConfirmedAt: new Date(), updatedAt: new Date() })
       .where(eq(usersTable.id, id))
       .returning();
     updated = rows[0];
-    if (existing.firstName !== cleanFirstName) {
-      await logProfileChangeTx(tx, { actorId: req.user!.userId, targetUserId: id, field: "first_name", before: existing.firstName, after: cleanFirstName });
+    if (locked.firstName !== cleanFirstName) {
+      await logProfileChangeTx(tx, { actorId: req.user!.userId, targetUserId: id, field: "first_name", before: locked.firstName, after: cleanFirstName });
     }
-    if (existing.lastName !== cleanLastName) {
-      await logProfileChangeTx(tx, { actorId: req.user!.userId, targetUserId: id, field: "last_name", before: existing.lastName, after: cleanLastName });
+    if (locked.lastName !== cleanLastName) {
+      await logProfileChangeTx(tx, { actorId: req.user!.userId, targetUserId: id, field: "last_name", before: locked.lastName, after: cleanLastName });
     }
   });
+  if (correctionError === "not_found") {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+  if (correctionError === "forbidden") {
+    res.status(403).json({ error: "Insufficient permissions to correct this user" });
+    return;
+  }
   invalidateUserCache(id);
   res.json(safeUser(updated!));
 });
