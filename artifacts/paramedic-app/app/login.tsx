@@ -27,6 +27,29 @@ import ApiService, { setAuthToken, type AuthProviderInfo } from "@/services/ApiS
 import { useAppStore } from "@/store/useAppStore";
 import type { AppTheme } from "@/models";
 
+// Symbol und Farbe je Anbieter, im Client abgeleitet -- der Server liefert nur
+// Schluessel und Typ, keine Gestaltung. Google, Microsoft und Apple bekommen
+// ihr eigenes Zeichen; alles andere ein neutrales nach Typ. Apples Knopf folgt
+// den Human Interface Guidelines erst in Stueck 3, die Zuordnung entsteht hier.
+function providerVisual(provider: AuthProviderInfo): { icon: keyof typeof Ionicons.glyphMap; color: string } {
+  switch (provider.key) {
+    case "google":
+      return { icon: "logo-google", color: "#EA4335" };
+    case "microsoft":
+      return { icon: "logo-microsoft", color: "#00A4EF" };
+    case "apple":
+      return { icon: "logo-apple", color: "#000000" };
+  }
+  switch (provider.type) {
+    case "local":
+      return { icon: "key-outline", color: "#6B7280" };
+    case "iserv-form":
+      return { icon: "business-outline", color: "#1D4ED8" };
+    case "oidc-redirect":
+      return { icon: "arrow-forward-circle-outline", color: "#6B7280" };
+  }
+}
+
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
   const login = useAppStore((s) => s.login);
@@ -103,7 +126,7 @@ export default function LoginScreen() {
       } else if (isTealUnlocked) {
         setTheme("teal");
       }
-      router.replace("/(tabs)/news");
+      router.replace(user.profileConfirmedAt === null ? "/name-bestaetigen" : "/(tabs)/news");
     } catch (err) {
       const message = err instanceof Error ? err.message : t("auth.loginFailed", lang);
       setError(message);
@@ -149,7 +172,7 @@ export default function LoginScreen() {
       }
       setToken(restored.token);
       login(restored.user);
-      router.replace("/(tabs)/news");
+      router.replace(restored.user.profileConfirmedAt === null ? "/name-bestaetigen" : "/(tabs)/news");
     } catch {
       setRedirecting(false);
       setRedirectError(t("auth.redirectFailed", lang));
@@ -159,8 +182,11 @@ export default function LoginScreen() {
   const topPad = useTopPad();
   const providerLabel = selectedProvider?.displayName || "";
   const showProviderList = providers !== null && providers.length > 1 && selectedProvider === null;
-  const showPasswordForm = selectedProvider !== null && selectedProvider.type === "iserv-form";
+  const isIservForm = selectedProvider?.type === "iserv-form";
+  const isLocal = selectedProvider?.type === "local";
+  const showPasswordForm = isIservForm || isLocal;
   const showRedirectButton = selectedProvider !== null && selectedProvider.type === "oidc-redirect";
+  const brandColor = isIservForm ? "#005BAA" : theme.tint;
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -210,25 +236,29 @@ export default function LoginScreen() {
               <Text style={[styles.iservTitle, { color: theme.text, marginBottom: 4 }]}>
                 {t("auth.chooseProvider", lang)}
               </Text>
-              {providers!.map((provider) => (
-                <Pressable
-                  key={provider.key}
-                  onPress={() => {
-                    if (provider.type === "oidc-redirect") {
-                      handleRedirect(provider);
-                    } else {
-                      setSelectedProvider(provider);
-                    }
-                  }}
-                  style={({ pressed }) => [
-                    styles.providerRow,
-                    { borderColor: theme.inputBorder, backgroundColor: theme.inputBackground, opacity: pressed ? 0.8 : 1 },
-                  ]}
-                >
-                  <Text style={[styles.providerRowText, { color: theme.text }]}>{provider.displayName}</Text>
-                  <Ionicons name="chevron-forward" size={18} color={theme.textTertiary} />
-                </Pressable>
-              ))}
+              {providers!.map((provider) => {
+                const visual = providerVisual(provider);
+                return (
+                  <Pressable
+                    key={provider.key}
+                    onPress={() => {
+                      if (provider.type === "oidc-redirect") {
+                        handleRedirect(provider);
+                      } else {
+                        setSelectedProvider(provider);
+                      }
+                    }}
+                    style={({ pressed }) => [
+                      styles.providerRow,
+                      { borderColor: theme.inputBorder, backgroundColor: theme.inputBackground, opacity: pressed ? 0.8 : 1 },
+                    ]}
+                  >
+                    <Ionicons name={visual.icon} size={18} color={visual.color} />
+                    <Text style={[styles.providerRowText, { color: theme.text, flex: 1 }]}>{provider.displayName}</Text>
+                    <Ionicons name="chevron-forward" size={18} color={theme.textTertiary} />
+                  </Pressable>
+                );
+              })}
             </View>
           )}
 
@@ -249,7 +279,7 @@ export default function LoginScreen() {
               )}
 
               <View style={styles.iservHeader}>
-                {providerLabel !== "" && (
+                {isIservForm && providerLabel !== "" && (
                   <View style={[styles.iservBadge, { backgroundColor: "#EFF6FF" }]}>
                     <Text style={styles.iservBadgeText}>{providerLabel}</Text>
                   </View>
@@ -274,7 +304,7 @@ export default function LoginScreen() {
                     disabled={redirecting}
                     style={({ pressed }) => [
                       styles.loginButton,
-                      { backgroundColor: "#005BAA", opacity: redirecting ? 0.7 : pressed ? 0.9 : 1 },
+                      { backgroundColor: brandColor, opacity: redirecting ? 0.7 : pressed ? 0.9 : 1 },
                     ]}
                   >
                     {redirecting ? (
@@ -295,7 +325,7 @@ export default function LoginScreen() {
                 <>
                   <View style={styles.inputGroup}>
                     <Text style={[styles.label, { color: theme.textSecondary }]}>
-                      {t("auth.username", lang)}
+                      {t(isLocal ? "auth.email" : "auth.username", lang)}
                     </Text>
                     <View
                       style={[
@@ -303,15 +333,16 @@ export default function LoginScreen() {
                         { backgroundColor: theme.inputBackground, borderColor: theme.inputBorder },
                       ]}
                     >
-                      <Ionicons name="person-outline" size={18} color={theme.textTertiary} />
+                      <Ionicons name={isLocal ? "mail-outline" : "person-outline"} size={18} color={theme.textTertiary} />
                       <TextInput
                         value={username}
                         onChangeText={setUsername}
-                        placeholder={t("auth.username", lang)}
+                        placeholder={t(isLocal ? "auth.email" : "auth.username", lang)}
                         placeholderTextColor={theme.textTertiary}
                         autoCapitalize="none"
                         autoCorrect={false}
-                        autoComplete="username"
+                        autoComplete={isLocal ? "email" : "username"}
+                        keyboardType={isLocal ? "email-address" : "default"}
                         style={[styles.input, { color: theme.text }]}
                         onSubmitEditing={handleLogin}
                         returnKeyType="next"
@@ -351,21 +382,32 @@ export default function LoginScreen() {
                     </View>
                   </View>
 
-                  <Pressable
-                    onPress={() => setRememberMe(!rememberMe)}
-                    style={styles.rememberMeContainer}
-                  >
-                    <View style={[
-                      styles.checkbox,
-                      { borderColor: rememberMe ? theme.tint : theme.textTertiary },
-                      rememberMe && { backgroundColor: theme.tint }
-                    ]}>
-                      {rememberMe && <Ionicons name="checkmark" size={12} color="#fff" />}
-                    </View>
-                    <Text style={[styles.rememberMeText, { color: theme.textSecondary }]}>
-                      {t("auth.rememberMe", lang)}
-                    </Text>
-                  </Pressable>
+                  <View style={styles.rememberRow}>
+                    <Pressable
+                      onPress={() => setRememberMe(!rememberMe)}
+                      style={styles.rememberMeContainer}
+                    >
+                      <View style={[
+                        styles.checkbox,
+                        { borderColor: rememberMe ? theme.tint : theme.textTertiary },
+                        rememberMe && { backgroundColor: theme.tint }
+                      ]}>
+                        {rememberMe && <Ionicons name="checkmark" size={12} color="#fff" />}
+                      </View>
+                      <Text style={[styles.rememberMeText, { color: theme.textSecondary }]}>
+                        {t("auth.rememberMe", lang)}
+                      </Text>
+                    </Pressable>
+
+                    {isLocal && (
+                      // Fuehrt noch nirgends hin -- Registrierung und Zuruecksetzen
+                      // kommen erst in Stueck 2. Die Zeile steht schon, damit sie
+                      // dort nicht nachtraeglich ins Layout gequetscht werden muss.
+                      <Text style={[styles.forgotPasswordText, { color: theme.textTertiary }]}>
+                        {t("auth.forgotPassword", lang)}
+                      </Text>
+                    )}
+                  </View>
 
                   {!!error && (
                     <View style={styles.errorBox}>
@@ -379,7 +421,7 @@ export default function LoginScreen() {
                     disabled={loading}
                     style={({ pressed }) => [
                       styles.loginButton,
-                      { backgroundColor: "#005BAA", opacity: loading ? 0.7 : pressed ? 0.9 : 1 },
+                      { backgroundColor: brandColor, opacity: loading ? 0.7 : pressed ? 0.9 : 1 },
                     ]}
                   >
                     {loading ? (
@@ -475,7 +517,9 @@ const styles = StyleSheet.create({
   loadingRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   loginButtonText: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: "#fff" },
   footerNote: { fontSize: 11, fontFamily: "Inter_400Regular", textAlign: "center" },
-  rememberMeContainer: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 4 },
+  rememberRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 4 },
+  rememberMeContainer: { flexDirection: "row", alignItems: "center", gap: 10 },
   checkbox: { width: 20, height: 20, borderRadius: 6, borderWidth: 2, alignItems: "center", justifyContent: "center" },
   rememberMeText: { fontSize: 14, fontFamily: "Inter_400Regular" },
+  forgotPasswordText: { fontSize: 13, fontFamily: "Inter_500Medium" },
 });
