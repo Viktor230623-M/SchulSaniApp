@@ -15,6 +15,7 @@ export const PERMISSIONS = [
   { key: "users.approve", description: "Neue Nutzer freischalten", essential: false, hiddenFromUi: false },
   { key: "users.assign_role", description: "Nutzern eine Rolle zuweisen", essential: true, hiddenFromUi: false },
   { key: "users.delete", description: "Nutzerkonten loeschen", essential: false, hiddenFromUi: false },
+  { key: "users.correct_profile", description: "Einen falsch eingegebenen Namen korrigieren", essential: false, hiddenFromUi: false },
   { key: "news.moderate", description: "Nachrichten freigeben oder ablehnen", essential: false, hiddenFromUi: false },
   { key: "news.publish_direct", description: "Nachrichten ohne Freigabe direkt veroeffentlichen", essential: false, hiddenFromUi: false },
   { key: "loa.create", description: "Einen eigenen Abwesenheitsantrag stellen", essential: false, hiddenFromUi: false },
@@ -43,7 +44,7 @@ export const ESSENTIAL_PERMISSIONS: readonly PermissionKey[] =
 export const DEFAULT_ROLE_PERMISSIONS: Record<string, readonly PermissionKey[]> = {
   owner: PERMISSIONS.map((p) => p.key),
   admin: [
-    "users.read_all", "users.read_pending", "users.approve", "users.assign_role", "users.delete",
+    "users.read_all", "users.read_pending", "users.approve", "users.assign_role", "users.delete", "users.correct_profile",
     "news.moderate", "news.publish_direct", "loa.create", "loa.moderate",
     "missions.create", "missions.moderate", "missions.view_all",
     "activity.view", "notifications.view_all",

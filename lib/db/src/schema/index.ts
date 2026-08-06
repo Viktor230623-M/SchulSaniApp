@@ -51,6 +51,11 @@ export const usersTable = pgTable("users", {
   oneTimePasswordExpiresAt: timestamp("one_time_password_expires_at"),
   isApproved: boolean("is_approved").default(false).notNull(),
   approvedBy: text("approved_by"),
+  // Leer heisst "Name nie bestaetigt" -- der Anbieterwert ist nur ein
+  // Vorschlag, verbindlich wird er erst durch die Bestaetigung des Nutzers.
+  // Ein Zeitstempel statt eines Wahrheitswerts, weil er zusaetzlich belegt,
+  // wann es geschah.
+  profileConfirmedAt: timestamp("profile_confirmed_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (t) => [
@@ -242,6 +247,20 @@ export const roleChangeLogTable = pgTable("role_change_log", {
   createdAt: timestamp("created_at").defaultNow(),
 }, (t) => [index("role_change_log_created_idx").on(t.createdAt)]);
 
+// Korrekturen an bestaetigten Namen durch einen Verwalter -- der Nutzer selbst
+// kann seinen Namen nur einmal setzen (PATCH /auth/profile), danach nur noch
+// ueber diesen Weg. Aufbewahrung 12 Monate, wie role_change_log: alte Namen
+// sind personenbezogene Daten.
+export const profileChangeLogTable = pgTable("profile_change_log", {
+  id: text("id").primaryKey(),
+  actorId: text("actor_id").notNull(),
+  targetUserId: text("target_user_id").notNull(),
+  field: text("field").notNull(), // first_name | last_name
+  before: text("before"),
+  after: text("after"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (t) => [index("profile_change_log_created_idx").on(t.createdAt)]);
+
 // Wer hat wann welches Einsatzprotokoll gelesen. Erforderlich fuer den
 // Rechenschaftsnachweis nach Art. 5 Abs. 2 DSGVO. Aufbewahrung 12 Monate.
 export const reportAccessLogTable = pgTable("report_access_log", {
@@ -294,6 +313,8 @@ export type DbConsoleLog = typeof dbConsoleLogTable.$inferSelect;
 export type NewDbConsoleLog = typeof dbConsoleLogTable.$inferInsert;
 export type ReportAccessLog = typeof reportAccessLogTable.$inferSelect;
 export type NewReportAccessLog = typeof reportAccessLogTable.$inferInsert;
+export type ProfileChangeLog = typeof profileChangeLogTable.$inferSelect;
+export type NewProfileChangeLog = typeof profileChangeLogTable.$inferInsert;
 export const rolesTable = pgTable("roles", {
   id: text("id").primaryKey(),
   schoolId: text("school_id"),

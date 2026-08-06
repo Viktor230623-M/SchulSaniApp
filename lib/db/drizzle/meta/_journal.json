@@ -50,6 +50,13 @@
       "when": 1785850951155,
       "tag": "0006_rollen_zusammenfuehren",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1786039911234,
+      "tag": "0007_namensbestaetigung",
+      "breakpoints": true
     }
   ]
 }

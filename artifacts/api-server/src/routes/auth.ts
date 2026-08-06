@@ -2,13 +2,20 @@ import { Router } from "express";
 import jwt from "jsonwebtoken";
 import rateLimit from "express-rate-limit";
 import { eq, and, or, isNull } from "drizzle-orm";
-import { db, usersTable, rolesTable, userRoleEnum, type UserRole } from "@workspace/db";
+import { db, usersTable, rolesTable, sessionsTable, userRoleEnum, type UserRole } from "@workspace/db";
 import { permissionsForRole } from "../lib/rolePermissions";
-import { requireAuth, type AuthRequest } from "../middlewares/auth";
+import {
+  requireAuth,
+  requireAuthAllowUnconfirmedProfile,
+  requireAuthForPasswordChange,
+  requireAuthForLogout,
+  invalidateUserCache,
+  type AuthRequest,
+} from "../middlewares/auth";
 import { createSession, resolveSession, revokeSession } from "../lib/sessions";
 import { config } from "../config";
 import { loadAuthProviders } from "../auth/registry";
-import type { PasswordAuthProvider } from "../auth/types";
+import { validateProfileName } from "../lib/profileName";
 
 const router = Router();
 
@@ -25,6 +32,20 @@ const authLimiter = rateLimit({
 const sessionLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 30,
+  message: { error: "Zu viele Anfragen, bitte kurz warten." },
+});
+
+// Lockerer als authLimiter: der Bestaetigungsbildschirm ruft einmal auf, ein
+// Tippfehler kostet einen zweiten -- fuenf pro Minute waeren hier zu knapp.
+const profileLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  message: { error: "Zu viele Anfragen, bitte kurz warten." },
+});
+
+const passwordChangeLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,
   message: { error: "Zu viele Anfragen, bitte kurz warten." },
 });
 
@@ -49,17 +70,13 @@ if (JWT_SECRET.length < 32) {
   throw new Error("JWT_SECRET must be at least 32 characters long");
 }
 
-// Anmeldewege dieser Installation, siehe ../auth/registry. Kein Anmeldeweg ist
-// mehr still voreingestellt: fehlt AUTH_PROVIDERS_PATH oder ist die Datei
-// unvollstaendig, bricht loadAuthProviders() den Start mit einer erklaerenden
-// Meldung ab, statt stillschweigend ohne Anmeldeweg hochzufahren.
+// Anmeldewege dieser Installation, siehe ../auth/registry. Der Start bricht
+// nur ab, wenn gar keiner konfiguriert ist -- ob ein passwortbasierter Weg
+// existiert, entscheidet der Login, nicht der Start: der waehlt den Anbieter
+// ueber den providerKey aus dem Rumpf. Ein stiller Vorgabeweg wuerde
+// Anmeldedaten an den falschen Dienst schicken, sobald eine Installation
+// mehrere Wege kennt.
 const authProviders = loadAuthProviders();
-const primaryAuthProvider = authProviders.find(
-  (p): p is PasswordAuthProvider => p.type === "iserv-form",
-);
-if (!primaryAuthProvider) {
-  throw new Error("Kein passwortbasierter Anmeldeweg konfiguriert.");
-}
 
 function isUserRole(value: string): value is UserRole {
   return (userRoleEnum.enumValues as readonly string[]).includes(value);
@@ -99,7 +116,7 @@ async function getRoleForUser(groups: string[], providerKey: string, schoolId: s
 // Baut die Nutzerprojektion, wie sie sowohl Login als auch Sitzungswiederherstellung
 // in der Antwort zurueckgeben. Die Rolle wird hier nicht vorbelegt — das bleibt
 // Sache der Aufrufer, da Login und Session unterschiedliche Standardwerte nutzen.
-async function buildUserResponse(user: { id: string; firstName: string | null; lastName: string | null; email: string | null; role: string; schoolId: string | null }) {
+async function buildUserResponse(user: { id: string; firstName: string | null; lastName: string | null; email: string | null; role: string; schoolId: string | null; profileConfirmedAt: Date | null; mustChangePassword: boolean }) {
   // Die Rechte kommen mit der Anmeldeantwort, damit der Client nicht mehr aus
   // dem Rollennamen ableiten muss, was sichtbar ist. Bereich ist die Schule
   // der Nutzerzeile, nicht der globale Bereich -- sonst ueberschreibt eine
@@ -107,14 +124,28 @@ async function buildUserResponse(user: { id: string; firstName: string | null; l
   const permissions = await permissionsForRole(user.role, user.schoolId);
   const isOwnerAccount = config.ownerUserId !== undefined && user.id === config.ownerUserId;
   return {
-    user: { id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email, role: user.role, isOwnerAccount },
+    user: {
+      id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email, role: user.role, isOwnerAccount,
+      profileConfirmedAt: user.profileConfirmedAt ? user.profileConfirmedAt.toISOString() : null,
+      mustChangePassword: user.mustChangePassword,
+    },
     permissions,
     isTealUnlocked: user.role === "owner",
   };
 }
 
 router.post("/login", authLimiter, async (req, res) => {
-  const { username, password, rememberMe } = req.body as { username: string; password: string; rememberMe?: boolean };
+  const { providerKey, username, password, rememberMe } = req.body as { providerKey?: string; username: string; password: string; rememberMe?: boolean };
+  const provider = authProviders.find((p) => p.key === providerKey);
+  if (!provider || provider.type === "oidc-redirect") {
+    // Wie bei den Weiterleitungs-Routen: 404 ohne Hinweis, ob der Schluessel
+    // existiert. Der Formular-Login gehoert nur zu einem passwortbasierten
+    // Weg -- ein unbekannter Schluessel darf die Eingabe nicht an einen
+    // anderen Anbieter weiterreichen.
+    res.status(404).json({ error: "Anmeldeweg nicht gefunden." });
+    return;
+  }
+
   if (!username?.trim() || !password?.trim()) {
     res.status(400).json({ error: "Benutzername und Passwort erforderlich" });
     return;
@@ -135,8 +166,11 @@ router.post("/login", authLimiter, async (req, res) => {
 
   let subject = cleanUsername;
 
+  let mustChangePassword = false;
   try {
-    const { profile, subject: providerSubject } = await primaryAuthProvider.authenticate({ username: cleanUsername, password });
+    const authResult = await provider.authenticate({ username: cleanUsername, password });
+    const { profile, subject: providerSubject } = authResult;
+    mustChangePassword = authResult.mustChangePassword ?? false;
     subject = providerSubject;
     if (profile.firstName) firstName = profile.firstName;
     if (profile.lastName) lastName = profile.lastName;
@@ -149,7 +183,7 @@ router.post("/login", authLimiter, async (req, res) => {
       res.status(401).json({ error: "Ungültige Zugangsdaten" });
       return;
     }
-    console.error("IServ auth unavailable — denying login");
+    console.error(`Anmeldeweg "${provider.key}" nicht erreichbar -- Anmeldung abgelehnt`);
     res.status(503).json({ error: "Anmeldedienst nicht erreichbar. Bitte später erneut versuchen." });
     return;
   }
@@ -162,12 +196,19 @@ router.post("/login", authLimiter, async (req, res) => {
     // gueltige Anmeldung an der einen Schule an die Zeile der anderen, sobald
     // beide dieselbe Datenbank teilen und denselben Benutzernamen kennen.
     const existing = await db
-      .select({ id: usersTable.id, role: usersTable.role, isApproved: usersTable.isApproved })
+      .select({
+        id: usersTable.id,
+        role: usersTable.role,
+        isApproved: usersTable.isApproved,
+        mustChangePassword: usersTable.mustChangePassword,
+        oneTimePasswordExpiresAt: usersTable.oneTimePasswordExpiresAt,
+        profileConfirmedAt: usersTable.profileConfirmedAt,
+      })
       .from(usersTable)
       .where(
         and(
           eq(usersTable.schoolId, schoolId),
-          eq(usersTable.authProvider, primaryAuthProvider.key),
+          eq(usersTable.authProvider, provider.key),
           eq(usersTable.externalSubject, subject),
         ),
       )
@@ -177,14 +218,14 @@ router.post("/login", authLimiter, async (req, res) => {
     // fuer die NOT-NULL-Spalte -- er entfaltet keine Wirkung, solange isApproved
     // weiter unten false bleibt und die Anmeldung blockiert. Ein Verwalter muss
     // Rolle und Freischaltung explizit setzen.
-    const resolvedRole = existing[0]?.role ?? (await getRoleForUser(groups, primaryAuthProvider.key, schoolId));
+    const resolvedRole = existing[0]?.role ?? (await getRoleForUser(groups, provider.key, schoolId));
     const role: UserRole = resolvedRole ?? "sanitaeter";
     const isApproved: boolean = existing[0]?.isApproved ?? false;
 
     const userValues = {
       id: userId,
       iservUsername: cleanUsername,
-      authProvider: primaryAuthProvider.key,
+      authProvider: provider.key,
       externalSubject: subject,
       firstName,
       lastName,
@@ -220,7 +261,19 @@ router.post("/login", authLimiter, async (req, res) => {
     }
 
     const { role: userRole, id: userId2 } = userValues;
-    res.json({ token, ...(await buildUserResponse({ id: userId2, firstName, lastName, email, role: userRole, schoolId })) });
+    res.json({
+      token,
+      ...(await buildUserResponse({
+        id: userId2,
+        firstName,
+        lastName,
+        email,
+        role: userRole,
+        schoolId,
+        profileConfirmedAt: existing[0]?.profileConfirmedAt ?? null,
+        mustChangePassword: existing[0]?.mustChangePassword ?? mustChangePassword,
+      })),
+    });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Anmeldung fehlgeschlagen";
     console.error("Login error");
@@ -228,12 +281,116 @@ router.post("/login", authLimiter, async (req, res) => {
   }
 });
 
-router.post("/logout", requireAuth, async (req, res) => {
+router.post("/password/change", passwordChangeLimiter, requireAuthForPasswordChange, async (req: AuthRequest, res) => {
+  const { currentPassword, newPassword } = req.body as { currentPassword?: unknown; newPassword?: unknown };
+  if (typeof currentPassword !== "string" || typeof newPassword !== "string") {
+    res.status(400).json({ error: "Aktuelles und neues Passwort erforderlich" });
+    return;
+  }
+  if (newPassword.length < 10 || newPassword.length > 200) {
+    res.status(400).json({ error: "Das neue Passwort muss 10 bis 200 Zeichen lang sein" });
+    return;
+  }
+  if (currentPassword.length > 500 || currentPassword === newPassword) {
+    res.status(400).json({ error: "Neues Passwort muss sich vom aktuellen unterscheiden" });
+    return;
+  }
+
+  const [user] = await db
+    .select({ passwordHash: usersTable.passwordHash })
+    .from(usersTable)
+    .where(eq(usersTable.id, req.user!.userId))
+    .limit(1);
+  if (!user?.passwordHash) {
+    res.status(401).json({ error: "Ungültige Zugangsdaten" });
+    return;
+  }
+
+  const bcrypt = await import("bcryptjs");
+  if (!(await bcrypt.default.compare(currentPassword, user.passwordHash))) {
+    res.status(401).json({ error: "Ungültige Zugangsdaten" });
+    return;
+  }
+
+  const newHash = await bcrypt.default.hash(newPassword, 12);
+  const updated = await db.transaction(async (tx) => {
+    const [changed] = await tx
+      .update(usersTable)
+      .set({ passwordHash: newHash, mustChangePassword: false, oneTimePasswordExpiresAt: null, updatedAt: new Date() })
+      .where(eq(usersTable.id, req.user!.userId))
+      .returning({ id: usersTable.id });
+    if (!changed) return undefined;
+    await tx
+      .update(sessionsTable)
+      .set({ revokedAt: new Date() })
+      .where(and(eq(sessionsTable.userId, req.user!.userId), isNull(sessionsTable.revokedAt)));
+    return changed;
+  });
+  if (!updated) {
+    res.status(404).json({ error: "Konto nicht gefunden" });
+    return;
+  }
+  invalidateUserCache(req.user!.userId);
+  res.json({ ok: true });
+});
+
+router.post("/logout", requireAuthForLogout, async (req, res) => {
   const rawToken = req.cookies?.[SESSION_COOKIE];
   if (rawToken) await revokeSession(rawToken);
   res.clearCookie(SESSION_COOKIE, { path: "/" });
   res.clearCookie("sani-token");
   res.json({ message: "Logged out" });
+});
+
+/**
+ * Bestaetigt den einmal vom Nutzer gesetzten Namen. Kein Ziel im Rumpf --
+ * die Sitzung bestimmt allein, wessen Konto betroffen ist. Ein zweiter Aufruf
+ * durch ein bereits bestaetigtes Konto ist kein Erfolg mehr, sondern 409: der
+ * Name ist danach nur noch ueber die Verwalter-Korrektur aenderbar (PATCH
+ * /users/:id/profile), damit sich die Zuordnung an Einsatzprotokollen nicht
+ * nachtraeglich verwischen laesst.
+ */
+router.patch("/profile", profileLimiter, requireAuthAllowUnconfirmedProfile, async (req: AuthRequest, res) => {
+  const { firstName, lastName } = req.body as { firstName?: unknown; lastName?: unknown };
+  const cleanFirstName = validateProfileName(firstName);
+  const cleanLastName = validateProfileName(lastName);
+  if (!cleanFirstName || !cleanLastName) {
+    res.status(400).json({ error: "Vor- und Nachname erforderlich, bis zu 100 Zeichen, ohne Steuerzeichen oder reine Ziffern." });
+    return;
+  }
+
+  const userId = req.user!.userId;
+  const [existing] = await db
+    .select({ role: usersTable.role, schoolId: usersTable.schoolId, profileConfirmedAt: usersTable.profileConfirmedAt })
+    .from(usersTable)
+    .where(eq(usersTable.id, userId))
+    .limit(1);
+  if (!existing) {
+    res.status(404).json({ error: "Konto nicht gefunden" });
+    return;
+  }
+  if (existing.profileConfirmedAt) {
+    res.status(409).json({ error: "Name bereits bestaetigt" });
+    return;
+  }
+
+  const [updated] = await db
+    .update(usersTable)
+    .set({ firstName: cleanFirstName, lastName: cleanLastName, profileConfirmedAt: new Date(), updatedAt: new Date() })
+    .where(eq(usersTable.id, userId))
+    .returning();
+  invalidateUserCache(userId);
+
+  res.json(
+    await buildUserResponse({
+      id: userId, firstName: updated!.firstName, lastName: updated!.lastName, email: updated!.email,
+      role: updated!.role,
+      schoolId: updated!.schoolId,
+      profileConfirmedAt: updated!.profileConfirmedAt,
+      mustChangePassword: updated!.mustChangePassword,
+
+    }),
+  );
 });
 
 router.get("/me", requireAuth, (req: AuthRequest, res) => {
@@ -281,7 +438,16 @@ router.get("/session", sessionLimiter, async (req, res) => {
 
   res.json({
     token,
-    ...(await buildUserResponse({ id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email, role, schoolId: user.schoolId })),
+    ...(await buildUserResponse({
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      role,
+      schoolId: user.schoolId,
+      profileConfirmedAt: user.profileConfirmedAt,
+      mustChangePassword: user.mustChangePassword,
+    })),
   });
 });
 

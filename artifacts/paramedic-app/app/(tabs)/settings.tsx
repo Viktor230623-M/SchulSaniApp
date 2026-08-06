@@ -21,6 +21,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -82,12 +83,18 @@ export default function SettingsScreen() {
   const canAssignRole = has("users.assign_role");
   const canDeleteUsers = has("users.delete");
   const canManageRoleCatalog = has("roles.manage");
-  const canManageRoles = canAssignRole || canDeleteUsers || isAdmin || canManageRoleCatalog;
+  const canCorrectProfile = has("users.correct_profile");
+  const canManageRoles = canAssignRole || canDeleteUsers || isAdmin || canManageRoleCatalog || canCorrectProfile;
   const [showAdmin, setShowAdmin] = useState(false);
   const [pendingUsers, setPendingUsers] = useState<User[]>([]);
   const [loadingPending, setLoadingPending] = useState(false);
   const [pendingRoles, setPendingRoles] = useState<Record<string, string>>({});
   const [adminProcessing, setAdminProcessing] = useState<string | null>(null);
+
+  const [correctingId, setCorrectingId] = useState<string | null>(null);
+  const [correctFirstName, setCorrectFirstName] = useState("");
+  const [correctLastName, setCorrectLastName] = useState("");
+  const [correctBusy, setCorrectBusy] = useState(false);
 
   useEffect(() => {
     webPushState().then(setPushState);
@@ -213,6 +220,40 @@ export default function SettingsScreen() {
       try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning); } catch {}
     } catch (err) {
       await notify(t("common.error", lang), err instanceof Error ? err.message : t("common.error", lang));
+    }
+  }
+
+  function startCorrect(u: User) {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setCorrectingId(u.id);
+    setCorrectFirstName(u.firstName);
+    setCorrectLastName(u.lastName);
+  }
+
+  async function handleCorrect(u: User) {
+    const firstName = correctFirstName.trim();
+    const lastName = correctLastName.trim();
+    if (!firstName || !lastName) return;
+    const confirmed = await confirmAction({
+      title: t("settings.correctNameTitle", lang),
+      message: t("settings.correctNameConfirm", lang)
+        .replace("{name}", formatFullName(u.firstName, u.lastName))
+        .replace("{firstName}", firstName)
+        .replace("{lastName}", lastName),
+      confirmLabel: t("common.save", lang),
+      cancelLabel: t("common.cancel", lang),
+    });
+    if (!confirmed) return;
+    setCorrectBusy(true);
+    try {
+      const updated = await ApiService.correctUserProfile(u.id, firstName, lastName);
+      setAllUsers((prev) => prev.map((x) => (x.id === u.id ? { ...x, ...updated } : x)));
+      setCorrectingId(null);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (err) {
+      await notify(t("common.error", lang), err instanceof Error ? err.message : t("settings.correctNameFailed", lang));
+    } finally {
+      setCorrectBusy(false);
     }
   }
 
@@ -720,19 +761,59 @@ export default function SettingsScreen() {
                             <Text style={[styles.smallRoleText, { color: cfg.text }]}>{roles.displayName(u.role, lang)}</Text>
                           </View>
                         </View>
-                        {canRemove ? (
-                          <Pressable
-                            onPress={() => handleDeleteUser(u.id, formatFullName(u.firstName, u.lastName))}
-                            style={({ pressed }) => [styles.deleteBtn, { opacity: pressed ? 0.5 : 1 }]}
-                          >
-                            <Ionicons name="trash-outline" size={16} color={theme.danger} />
-                          </Pressable>
-                        ) : (
-                          <View style={styles.selfTag}>
-                            <Text style={[styles.selfTagText, { color: theme.textTertiary }]}>{isCurrentUser ? t("common.you", lang) : ""}</Text>
-                          </View>
-                        )}
+                        <View style={styles.rowRight}>
+                          {canCorrectProfile && !isCurrentUser && (
+                            <Pressable
+                              onPress={() => startCorrect(u)}
+                              style={({ pressed }) => [styles.deleteBtn, { opacity: pressed ? 0.5 : 1 }]}
+                            >
+                              <Ionicons name="pencil-outline" size={16} color={theme.textSecondary} />
+                            </Pressable>
+                          )}
+                          {canRemove ? (
+                            <Pressable
+                              onPress={() => handleDeleteUser(u.id, formatFullName(u.firstName, u.lastName))}
+                              style={({ pressed }) => [styles.deleteBtn, { opacity: pressed ? 0.5 : 1 }]}
+                            >
+                              <Ionicons name="trash-outline" size={16} color={theme.danger} />
+                            </Pressable>
+                          ) : (
+                            <View style={styles.selfTag}>
+                              <Text style={[styles.selfTagText, { color: theme.textTertiary }]}>{isCurrentUser ? t("common.you", lang) : ""}</Text>
+                            </View>
+                          )}
+                        </View>
                       </View>
+                      {correctingId === u.id && (
+                        <View style={styles.correctBox}>
+                          <TextInput
+                            value={correctFirstName}
+                            onChangeText={setCorrectFirstName}
+                            placeholder={t("common.firstName", lang)}
+                            placeholderTextColor={theme.textTertiary}
+                            style={[styles.input, { backgroundColor: theme.background, borderColor: theme.cardBorder, color: theme.text }]}
+                          />
+                          <TextInput
+                            value={correctLastName}
+                            onChangeText={setCorrectLastName}
+                            placeholder={t("common.lastName", lang)}
+                            placeholderTextColor={theme.textTertiary}
+                            style={[styles.input, { backgroundColor: theme.background, borderColor: theme.cardBorder, color: theme.text }]}
+                          />
+                          <View style={styles.editActions}>
+                            <Pressable onPress={() => setCorrectingId(null)} style={[styles.secondaryBtn, { borderColor: theme.cardBorder }]}>
+                              <Text style={[styles.secondaryBtnText, { color: theme.textSecondary }]}>{t("common.cancel", lang)}</Text>
+                            </Pressable>
+                            <Pressable
+                              onPress={() => handleCorrect(u)}
+                              disabled={correctBusy || !correctFirstName.trim() || !correctLastName.trim()}
+                              style={[styles.primaryBtn, { backgroundColor: theme.tint, opacity: correctBusy || !correctFirstName.trim() || !correctLastName.trim() ? 0.5 : 1 }]}
+                            >
+                              {correctBusy ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.primaryBtnText}>{t("common.save", lang)}</Text>}
+                            </Pressable>
+                          </View>
+                        </View>
+                      )}
                       {canEditRole && (
                         <View style={styles.rolePicker}>
                           {roleManageBtns.map((r) => {
@@ -827,6 +908,13 @@ const styles = StyleSheet.create({
   pendingStatusText: { fontSize: 10, fontFamily: "Inter_600SemiBold", color: "#B45309" },
   adminCard: { borderRadius: 12, borderWidth: 1, padding: 12, gap: 10 },
   adminCardHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
+  correctBox: { gap: 8, marginTop: 4 },
+  input: { borderWidth: 1, borderRadius: 10, padding: 10, fontSize: 14, fontFamily: "Inter_400Regular" },
+  editActions: { flexDirection: "row", gap: 10, justifyContent: "flex-end" },
+  secondaryBtn: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 9 },
+  secondaryBtnText: { fontSize: 13, fontFamily: "Inter_500Medium" },
+  primaryBtn: { borderRadius: 10, paddingHorizontal: 16, paddingVertical: 9, minWidth: 90, alignItems: "center" },
+  primaryBtnText: { color: "#fff", fontSize: 13, fontFamily: "Inter_600SemiBold" },
   rolePicker: { flexDirection: "row", gap: 6, flexWrap: "wrap" },
   roleChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, borderWidth: 1 },
   roleChipText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
