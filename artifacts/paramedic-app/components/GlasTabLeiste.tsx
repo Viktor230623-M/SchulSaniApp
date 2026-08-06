@@ -4,6 +4,7 @@ import React from "react";
 import { Platform, Pressable, StyleSheet, View } from "react-native";
 import Animated, {
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
   withSpring,
   withTiming,
@@ -260,10 +261,17 @@ function Feld({
   const { options } = descriptors[route.key]!;
   const druck = useSharedValue(0);
   const hebung = useSharedValue(aktiv ? 1 : 0);
+  const reduziert = useReducedMotion();
 
   React.useEffect(() => {
+    // Bei Reduced Motion bleibt das Symbol stehen -- die Hebung ist reine
+    // Deko und traegt nichts bei, was ein statischer Zustand nicht kann.
+    if (reduziert) {
+      hebung.value = 0;
+      return;
+    }
     hebung.value = withSpring(aktiv ? 1 : 0, { damping: 16, stiffness: 220 });
-  }, [aktiv]);
+  }, [aktiv, reduziert]);
 
   const stil = useAnimatedStyle(() => ({
     transform: [
