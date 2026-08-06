@@ -4,11 +4,12 @@ import rateLimit from "express-rate-limit";
 import { eq, and, or, isNull } from "drizzle-orm";
 import { db, usersTable, rolesTable, userRoleEnum, type UserRole } from "@workspace/db";
 import { permissionsForRole } from "../lib/rolePermissions";
-import { requireAuth, type AuthRequest } from "../middlewares/auth";
+import { requireAuth, requireAuthAllowUnconfirmedProfile, invalidateUserCache, type AuthRequest } from "../middlewares/auth";
 import { createSession, resolveSession, revokeSession } from "../lib/sessions";
 import { config } from "../config";
 import { loadAuthProviders } from "../auth/registry";
 import type { PasswordAuthProvider } from "../auth/types";
+import { validateProfileName } from "../lib/profileName";
 
 const router = Router();
 
@@ -25,6 +26,14 @@ const authLimiter = rateLimit({
 const sessionLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 30,
+  message: { error: "Zu viele Anfragen, bitte kurz warten." },
+});
+
+// Lockerer als authLimiter: der Bestaetigungsbildschirm ruft einmal auf, ein
+// Tippfehler kostet einen zweiten -- fuenf pro Minute waeren hier zu knapp.
+const profileLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
   message: { error: "Zu viele Anfragen, bitte kurz warten." },
 });
 
@@ -99,7 +108,7 @@ async function getRoleForUser(groups: string[], providerKey: string, schoolId: s
 // Baut die Nutzerprojektion, wie sie sowohl Login als auch Sitzungswiederherstellung
 // in der Antwort zurueckgeben. Die Rolle wird hier nicht vorbelegt — das bleibt
 // Sache der Aufrufer, da Login und Session unterschiedliche Standardwerte nutzen.
-async function buildUserResponse(user: { id: string; firstName: string | null; lastName: string | null; email: string | null; role: string; schoolId: string | null }) {
+async function buildUserResponse(user: { id: string; firstName: string | null; lastName: string | null; email: string | null; role: string; schoolId: string | null; profileConfirmedAt: Date | null }) {
   // Die Rechte kommen mit der Anmeldeantwort, damit der Client nicht mehr aus
   // dem Rollennamen ableiten muss, was sichtbar ist. Bereich ist die Schule
   // der Nutzerzeile, nicht der globale Bereich -- sonst ueberschreibt eine
@@ -107,7 +116,10 @@ async function buildUserResponse(user: { id: string; firstName: string | null; l
   const permissions = await permissionsForRole(user.role, user.schoolId);
   const isOwnerAccount = config.ownerUserId !== undefined && user.id === config.ownerUserId;
   return {
-    user: { id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email, role: user.role, isOwnerAccount },
+    user: {
+      id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email, role: user.role, isOwnerAccount,
+      profileConfirmedAt: user.profileConfirmedAt ? user.profileConfirmedAt.toISOString() : null,
+    },
     permissions,
     isTealUnlocked: user.role === "owner",
   };
@@ -162,7 +174,7 @@ router.post("/login", authLimiter, async (req, res) => {
     // gueltige Anmeldung an der einen Schule an die Zeile der anderen, sobald
     // beide dieselbe Datenbank teilen und denselben Benutzernamen kennen.
     const existing = await db
-      .select({ id: usersTable.id, role: usersTable.role, isApproved: usersTable.isApproved })
+      .select({ id: usersTable.id, role: usersTable.role, isApproved: usersTable.isApproved, profileConfirmedAt: usersTable.profileConfirmedAt })
       .from(usersTable)
       .where(
         and(
@@ -220,7 +232,10 @@ router.post("/login", authLimiter, async (req, res) => {
     }
 
     const { role: userRole, id: userId2 } = userValues;
-    res.json({ token, ...(await buildUserResponse({ id: userId2, firstName, lastName, email, role: userRole, schoolId })) });
+    res.json({
+      token,
+      ...(await buildUserResponse({ id: userId2, firstName, lastName, email, role: userRole, schoolId, profileConfirmedAt: existing[0]?.profileConfirmedAt ?? null })),
+    });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Anmeldung fehlgeschlagen";
     console.error("Login error");
@@ -228,12 +243,59 @@ router.post("/login", authLimiter, async (req, res) => {
   }
 });
 
-router.post("/logout", requireAuth, async (req, res) => {
+router.post("/logout", requireAuthAllowUnconfirmedProfile, async (req, res) => {
   const rawToken = req.cookies?.[SESSION_COOKIE];
   if (rawToken) await revokeSession(rawToken);
   res.clearCookie(SESSION_COOKIE, { path: "/" });
   res.clearCookie("sani-token");
   res.json({ message: "Logged out" });
+});
+
+/**
+ * Bestaetigt den einmal vom Nutzer gesetzten Namen. Kein Ziel im Rumpf --
+ * die Sitzung bestimmt allein, wessen Konto betroffen ist. Ein zweiter Aufruf
+ * durch ein bereits bestaetigtes Konto ist kein Erfolg mehr, sondern 409: der
+ * Name ist danach nur noch ueber die Verwalter-Korrektur aenderbar (PATCH
+ * /users/:id/profile), damit sich die Zuordnung an Einsatzprotokollen nicht
+ * nachtraeglich verwischen laesst.
+ */
+router.patch("/profile", profileLimiter, requireAuthAllowUnconfirmedProfile, async (req: AuthRequest, res) => {
+  const { firstName, lastName } = req.body as { firstName?: unknown; lastName?: unknown };
+  const cleanFirstName = validateProfileName(firstName);
+  const cleanLastName = validateProfileName(lastName);
+  if (!cleanFirstName || !cleanLastName) {
+    res.status(400).json({ error: "Vor- und Nachname erforderlich, bis zu 100 Zeichen, ohne Steuerzeichen oder reine Ziffern." });
+    return;
+  }
+
+  const userId = req.user!.userId;
+  const [existing] = await db
+    .select({ role: usersTable.role, schoolId: usersTable.schoolId, profileConfirmedAt: usersTable.profileConfirmedAt })
+    .from(usersTable)
+    .where(eq(usersTable.id, userId))
+    .limit(1);
+  if (!existing) {
+    res.status(404).json({ error: "Konto nicht gefunden" });
+    return;
+  }
+  if (existing.profileConfirmedAt) {
+    res.status(409).json({ error: "Name bereits bestaetigt" });
+    return;
+  }
+
+  const [updated] = await db
+    .update(usersTable)
+    .set({ firstName: cleanFirstName, lastName: cleanLastName, profileConfirmedAt: new Date(), updatedAt: new Date() })
+    .where(eq(usersTable.id, userId))
+    .returning();
+  invalidateUserCache(userId);
+
+  res.json(
+    await buildUserResponse({
+      id: userId, firstName: updated!.firstName, lastName: updated!.lastName, email: updated!.email,
+      role: updated!.role, schoolId: updated!.schoolId, profileConfirmedAt: updated!.profileConfirmedAt,
+    }),
+  );
 });
 
 router.get("/me", requireAuth, (req: AuthRequest, res) => {
@@ -281,7 +343,7 @@ router.get("/session", sessionLimiter, async (req, res) => {
 
   res.json({
     token,
-    ...(await buildUserResponse({ id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email, role, schoolId: user.schoolId })),
+    ...(await buildUserResponse({ id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email, role, schoolId: user.schoolId, profileConfirmedAt: user.profileConfirmedAt })),
   });
 });
 
