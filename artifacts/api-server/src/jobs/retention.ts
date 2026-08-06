@@ -7,6 +7,7 @@ import {
   missionActivityLogTable,
   missionsTable,
   notificationsTable,
+  profileChangeLogTable,
   reportAccessLogTable,
   roleChangeLogTable,
   sessionsTable,
@@ -87,6 +88,12 @@ export async function runRetention(now: Date = new Date()): Promise<RetentionRes
     .where(lt(roleChangeLogTable.createdAt, cutoffs.roleChangeLog))
     .returning({ id: roleChangeLogTable.id });
   results.push({ table: "role_change_log", action: "deleted", count: roleChanges.length });
+
+  const profileChanges = await db
+    .delete(profileChangeLogTable)
+    .where(lt(profileChangeLogTable.createdAt, cutoffs.profileChangeLog))
+    .returning({ id: profileChangeLogTable.id });
+  results.push({ table: "profile_change_log", action: "deleted", count: profileChanges.length });
 
   // Einsatzhistorie wird anonymisiert, nicht geloescht: die Statistik bleibt
   // erhalten, der Personenbezug entfaellt.
