@@ -4,6 +4,8 @@ import { db, usersTable, type UserRole } from "@workspace/db";
 import { requireAuth, requirePermission, invalidateUserCache, type AuthRequest } from "../middlewares/auth";
 import { assertAdminReachable, LockoutError } from "../lib/rolePermissions";
 import { logRoleChangeTx } from "../lib/roleChangeLog";
+import { logProfileChangeTx } from "../lib/profileChangeLog";
+import { validateProfileName } from "../lib/profileName";
 
 // Quelle der Rollen ist der Aufzaehlungstyp user_role (siehe
 // lib/db/src/schema/index.ts).
@@ -197,6 +199,54 @@ router.patch("/:id/role", requireAuth, requirePermission("users.assign_role"), a
   if (!updated) { res.status(404).json({ error: "User not found" }); return; }
   invalidateUserCache(id);
   res.json(safeUser(updated));
+});
+
+// Korrigiert einen falsch eingegebenen Namen. Anders als PATCH /auth/profile
+// (einmalig, ohne Berechtigungspruefung, Ziel aus der Sitzung) hier ein Ziel
+// im Pfad plus Berechtigung -- der Weg fuer einen Verwalter, wenn der Nutzer
+// seinen eigenen Namen bereits verbraucht hat.
+router.patch("/:id/profile", requireAuth, requirePermission("users.correct_profile"), async (req: AuthRequest, res) => {
+  const { id } = req.params as { id: string };
+
+  // Sonst liesse sich der Einmal-Charakter aus PATCH /auth/profile ueber
+  // diesen Weg umgehen: wer die Berechtigung traegt, koennte sein eigenes,
+  // bereits bestaetigtes Konto beliebig oft "korrigieren".
+  if (req.user!.userId === id) {
+    res.status(403).json({ error: "Eigenes Konto ist kein zulaessiges Ziel" });
+    return;
+  }
+
+  const { firstName, lastName } = req.body as { firstName?: unknown; lastName?: unknown };
+  const cleanFirstName = validateProfileName(firstName);
+  const cleanLastName = validateProfileName(lastName);
+  if (!cleanFirstName || !cleanLastName) {
+    res.status(400).json({ error: "Vor- und Nachname erforderlich, bis zu 100 Zeichen, ohne Steuerzeichen oder reine Ziffern." });
+    return;
+  }
+
+  const [existing] = await db.select().from(usersTable).where(eq(usersTable.id, id));
+  if (!existing) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+
+  let updated: typeof existing | undefined;
+  await db.transaction(async (tx) => {
+    const rows = await tx
+      .update(usersTable)
+      .set({ firstName: cleanFirstName, lastName: cleanLastName, profileConfirmedAt: new Date(), updatedAt: new Date() })
+      .where(eq(usersTable.id, id))
+      .returning();
+    updated = rows[0];
+    if (existing.firstName !== cleanFirstName) {
+      await logProfileChangeTx(tx, { actorId: req.user!.userId, targetUserId: id, field: "first_name", before: existing.firstName, after: cleanFirstName });
+    }
+    if (existing.lastName !== cleanLastName) {
+      await logProfileChangeTx(tx, { actorId: req.user!.userId, targetUserId: id, field: "last_name", before: existing.lastName, after: cleanLastName });
+    }
+  });
+  invalidateUserCache(id);
+  res.json(safeUser(updated!));
 });
 
 router.delete("/:id", requireAuth, requirePermission("users.delete"), async (req: AuthRequest, res) => {
