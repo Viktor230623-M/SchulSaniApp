@@ -20,6 +20,12 @@ export interface User {
   isOwnerAccount?: boolean;
   /** Vom Server mit der Anmeldeantwort geliefert; einzige Quelle fuer Sichtbarkeit im Client. */
   permissions?: string[];
+  /**
+   * Fehlt das Feld: Uebergangsphase, Backend noch nicht nachgezogen, gilt wie
+   * bestaetigt. `null`: Sperre aktiv, Bestaetigungsbildschirm. Zeitstempel:
+   * bestaetigt.
+   */
+  profileConfirmedAt?: string | null;
   avatarUri?: string;
   createdAt: string;
   updatedAt: string;
