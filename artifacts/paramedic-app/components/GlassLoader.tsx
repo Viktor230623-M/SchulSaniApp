@@ -3,6 +3,7 @@ import { StyleSheet, View } from "react-native";
 import Animated, {
   Easing,
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
   withDelay,
   withRepeat,
@@ -44,11 +45,16 @@ const RINGE = [
  * ruckeln sichtbar; die Ringe sind deshalb halbdurchsichtig gefuellt statt
  * weichgezeichnet. Wer den Glaseffekt darunter will, legt eine BlurView hinter
  * diese Komponente -- das ist ein Durchgang statt fuenf.
+ *
+ * Bei Reduced Motion bleibt das Zeichen stehen: eine Endlosschleife ist dort
+ * kein Fortschritt, sondern Bewegung um der Bewegung willen.
  */
 export function GlassLoader({ size = 200, color = "#22C55E", dark = false }: GlassLoaderProps) {
   const fortschritt = useSharedValue(0);
+  const reduziert = useReducedMotion();
 
   useEffect(() => {
+    if (reduziert) return;
     fortschritt.value = withRepeat(
       withSequence(
         withTiming(1, { duration: DAUER / 2, easing: Easing.inOut(Easing.ease) }),
@@ -57,7 +63,7 @@ export function GlassLoader({ size = 200, color = "#22C55E", dark = false }: Gla
       -1,
       false,
     );
-  }, []);
+  }, [reduziert]);
 
   const fuellung = dark ? "rgba(255,255,255,0.10)" : "rgba(120,120,120,0.14)";
   const rand = dark ? "255,255,255" : "110,110,110";
@@ -92,8 +98,10 @@ function Ring({
   rand: string;
 }) {
   const skalierung = useSharedValue(1);
+  const reduziert = useReducedMotion();
 
   useEffect(() => {
+    if (reduziert) return;
     skalierung.value = withDelay(
       ring.verzoegerung,
       withRepeat(
@@ -105,7 +113,7 @@ function Ring({
         false,
       ),
     );
-  }, []);
+  }, [reduziert]);
 
   const stil = useAnimatedStyle(() => ({ transform: [{ scale: skalierung.value }] }));
 
