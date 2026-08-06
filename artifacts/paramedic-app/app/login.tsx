@@ -134,7 +134,13 @@ export default function LoginScreen() {
       } else if (isTealUnlocked) {
         setTheme("teal");
       }
-      router.replace(user.profileConfirmedAt === null ? "/name-bestaetigen" : "/(tabs)/news");
+      router.replace(
+        user.mustChangePassword
+          ? "/passwort-wechseln"
+          : user.profileConfirmedAt === null
+            ? "/name-bestaetigen"
+            : "/(tabs)/news",
+      );
     } catch (err) {
       const message = err instanceof Error ? err.message : t("auth.loginFailed", lang);
       setError(message);
@@ -180,7 +186,13 @@ export default function LoginScreen() {
       }
       setToken(restored.token);
       login(restored.user);
-      router.replace(restored.user.profileConfirmedAt === null ? "/name-bestaetigen" : "/(tabs)/news");
+      router.replace(
+        restored.user.mustChangePassword
+          ? "/passwort-wechseln"
+          : restored.user.profileConfirmedAt === null
+            ? "/name-bestaetigen"
+            : "/(tabs)/news",
+      );
     } catch {
       setRedirecting(false);
       setRedirectError(t("auth.redirectFailed", lang));

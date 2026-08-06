@@ -126,6 +126,17 @@ const ApiService = {
     return `${API_BASE}/auth/${encodeURIComponent(providerKey)}/start`;
   },
 
+  async changePassword(currentPassword: string, newPassword: string): Promise<void> {
+    const resp = await fetch(`${API_BASE}/auth/password/change`, {
+      method: "POST",
+      headers: headers(),
+      credentials: "include",
+      body: JSON.stringify({ currentPassword, newPassword }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error ?? "Passwort konnte nicht geaendert werden");
+  },
+
   /** Setzt einmalig den bestaetigten Namen fuer das eigene Konto (PATCH /auth/profile). */
   async confirmProfile(firstName: string, lastName: string): Promise<User> {
     const resp = await apiFetch(`${API_BASE}/auth/profile`, {

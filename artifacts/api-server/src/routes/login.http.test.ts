@@ -13,6 +13,8 @@ interface FakeUserRow {
   isApproved: boolean;
   schoolId: string | null;
   profileConfirmedAt: Date | null;
+  mustChangePassword: boolean;
+  oneTimePasswordExpiresAt: Date | null;
   firstName: string | null;
   lastName: string | null;
   email: string | null;
@@ -104,6 +106,7 @@ vi.mock("../lib/sessions", () => ({
   resolveSession: async () => null,
   createSession: async () => "irrelevant",
   revokeSession: async () => {},
+  revokeAllSessionsForUser: async () => {},
 }));
 
 vi.mock("express-rate-limit", () => ({
@@ -131,6 +134,8 @@ function localUser(overrides: Partial<FakeUserRow> = {}): FakeUserRow {
     isApproved: true,
     schoolId: "school",
     profileConfirmedAt: null,
+    mustChangePassword: false,
+    oneTimePasswordExpiresAt: null,
     firstName: "Max",
     lastName: "Muster",
     email: "mmuster@vitest.beispiel.invalid",
@@ -167,6 +172,7 @@ describe("Anbieterbewusster Formular-Login", () => {
     expect(result.body.token).toBeTruthy();
     expect(result.body.user.id).toBe("nutzer-local-1");
     expect(result.body.user.profileConfirmedAt).toBeNull();
+    expect(result.body.user.mustChangePassword).toBe(false);
   });
 
   it("lehnt ein falsches Passwort mit der generischen Meldung ab", async () => {

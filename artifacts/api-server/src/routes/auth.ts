@@ -2,9 +2,16 @@ import { Router } from "express";
 import jwt from "jsonwebtoken";
 import rateLimit from "express-rate-limit";
 import { eq, and, or, isNull } from "drizzle-orm";
-import { db, usersTable, rolesTable, userRoleEnum, type UserRole } from "@workspace/db";
+import { db, usersTable, rolesTable, sessionsTable, userRoleEnum, type UserRole } from "@workspace/db";
 import { permissionsForRole } from "../lib/rolePermissions";
-import { requireAuth, requireAuthAllowUnconfirmedProfile, invalidateUserCache, type AuthRequest } from "../middlewares/auth";
+import {
+  requireAuth,
+  requireAuthAllowUnconfirmedProfile,
+  requireAuthForPasswordChange,
+  requireAuthForLogout,
+  invalidateUserCache,
+  type AuthRequest,
+} from "../middlewares/auth";
 import { createSession, resolveSession, revokeSession } from "../lib/sessions";
 import { config } from "../config";
 import { loadAuthProviders } from "../auth/registry";
@@ -33,6 +40,12 @@ const sessionLimiter = rateLimit({
 const profileLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 20,
+  message: { error: "Zu viele Anfragen, bitte kurz warten." },
+});
+
+const passwordChangeLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,
   message: { error: "Zu viele Anfragen, bitte kurz warten." },
 });
 
@@ -103,7 +116,7 @@ async function getRoleForUser(groups: string[], providerKey: string, schoolId: s
 // Baut die Nutzerprojektion, wie sie sowohl Login als auch Sitzungswiederherstellung
 // in der Antwort zurueckgeben. Die Rolle wird hier nicht vorbelegt — das bleibt
 // Sache der Aufrufer, da Login und Session unterschiedliche Standardwerte nutzen.
-async function buildUserResponse(user: { id: string; firstName: string | null; lastName: string | null; email: string | null; role: string; schoolId: string | null; profileConfirmedAt: Date | null }) {
+async function buildUserResponse(user: { id: string; firstName: string | null; lastName: string | null; email: string | null; role: string; schoolId: string | null; profileConfirmedAt: Date | null; mustChangePassword: boolean }) {
   // Die Rechte kommen mit der Anmeldeantwort, damit der Client nicht mehr aus
   // dem Rollennamen ableiten muss, was sichtbar ist. Bereich ist die Schule
   // der Nutzerzeile, nicht der globale Bereich -- sonst ueberschreibt eine
@@ -114,6 +127,7 @@ async function buildUserResponse(user: { id: string; firstName: string | null; l
     user: {
       id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email, role: user.role, isOwnerAccount,
       profileConfirmedAt: user.profileConfirmedAt ? user.profileConfirmedAt.toISOString() : null,
+      mustChangePassword: user.mustChangePassword,
     },
     permissions,
     isTealUnlocked: user.role === "owner",
@@ -152,8 +166,11 @@ router.post("/login", authLimiter, async (req, res) => {
 
   let subject = cleanUsername;
 
+  let mustChangePassword = false;
   try {
-    const { profile, subject: providerSubject } = await provider.authenticate({ username: cleanUsername, password });
+    const authResult = await provider.authenticate({ username: cleanUsername, password });
+    const { profile, subject: providerSubject } = authResult;
+    mustChangePassword = authResult.mustChangePassword ?? false;
     subject = providerSubject;
     if (profile.firstName) firstName = profile.firstName;
     if (profile.lastName) lastName = profile.lastName;
@@ -179,7 +196,14 @@ router.post("/login", authLimiter, async (req, res) => {
     // gueltige Anmeldung an der einen Schule an die Zeile der anderen, sobald
     // beide dieselbe Datenbank teilen und denselben Benutzernamen kennen.
     const existing = await db
-      .select({ id: usersTable.id, role: usersTable.role, isApproved: usersTable.isApproved, profileConfirmedAt: usersTable.profileConfirmedAt })
+      .select({
+        id: usersTable.id,
+        role: usersTable.role,
+        isApproved: usersTable.isApproved,
+        mustChangePassword: usersTable.mustChangePassword,
+        oneTimePasswordExpiresAt: usersTable.oneTimePasswordExpiresAt,
+        profileConfirmedAt: usersTable.profileConfirmedAt,
+      })
       .from(usersTable)
       .where(
         and(
@@ -239,7 +263,16 @@ router.post("/login", authLimiter, async (req, res) => {
     const { role: userRole, id: userId2 } = userValues;
     res.json({
       token,
-      ...(await buildUserResponse({ id: userId2, firstName, lastName, email, role: userRole, schoolId, profileConfirmedAt: existing[0]?.profileConfirmedAt ?? null })),
+      ...(await buildUserResponse({
+        id: userId2,
+        firstName,
+        lastName,
+        email,
+        role: userRole,
+        schoolId,
+        profileConfirmedAt: existing[0]?.profileConfirmedAt ?? null,
+        mustChangePassword: existing[0]?.mustChangePassword ?? mustChangePassword,
+      })),
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Anmeldung fehlgeschlagen";
@@ -248,7 +281,60 @@ router.post("/login", authLimiter, async (req, res) => {
   }
 });
 
-router.post("/logout", requireAuthAllowUnconfirmedProfile, async (req, res) => {
+router.post("/password/change", passwordChangeLimiter, requireAuthForPasswordChange, async (req: AuthRequest, res) => {
+  const { currentPassword, newPassword } = req.body as { currentPassword?: unknown; newPassword?: unknown };
+  if (typeof currentPassword !== "string" || typeof newPassword !== "string") {
+    res.status(400).json({ error: "Aktuelles und neues Passwort erforderlich" });
+    return;
+  }
+  if (newPassword.length < 10 || newPassword.length > 200) {
+    res.status(400).json({ error: "Das neue Passwort muss 10 bis 200 Zeichen lang sein" });
+    return;
+  }
+  if (currentPassword.length > 500 || currentPassword === newPassword) {
+    res.status(400).json({ error: "Neues Passwort muss sich vom aktuellen unterscheiden" });
+    return;
+  }
+
+  const [user] = await db
+    .select({ passwordHash: usersTable.passwordHash })
+    .from(usersTable)
+    .where(eq(usersTable.id, req.user!.userId))
+    .limit(1);
+  if (!user?.passwordHash) {
+    res.status(401).json({ error: "Ungültige Zugangsdaten" });
+    return;
+  }
+
+  const bcrypt = await import("bcryptjs");
+  if (!(await bcrypt.default.compare(currentPassword, user.passwordHash))) {
+    res.status(401).json({ error: "Ungültige Zugangsdaten" });
+    return;
+  }
+
+  const newHash = await bcrypt.default.hash(newPassword, 12);
+  const updated = await db.transaction(async (tx) => {
+    const [changed] = await tx
+      .update(usersTable)
+      .set({ passwordHash: newHash, mustChangePassword: false, oneTimePasswordExpiresAt: null, updatedAt: new Date() })
+      .where(eq(usersTable.id, req.user!.userId))
+      .returning({ id: usersTable.id });
+    if (!changed) return undefined;
+    await tx
+      .update(sessionsTable)
+      .set({ revokedAt: new Date() })
+      .where(and(eq(sessionsTable.userId, req.user!.userId), isNull(sessionsTable.revokedAt)));
+    return changed;
+  });
+  if (!updated) {
+    res.status(404).json({ error: "Konto nicht gefunden" });
+    return;
+  }
+  invalidateUserCache(req.user!.userId);
+  res.json({ ok: true });
+});
+
+router.post("/logout", requireAuthForLogout, async (req, res) => {
   const rawToken = req.cookies?.[SESSION_COOKIE];
   if (rawToken) await revokeSession(rawToken);
   res.clearCookie(SESSION_COOKIE, { path: "/" });
@@ -298,7 +384,11 @@ router.patch("/profile", profileLimiter, requireAuthAllowUnconfirmedProfile, asy
   res.json(
     await buildUserResponse({
       id: userId, firstName: updated!.firstName, lastName: updated!.lastName, email: updated!.email,
-      role: updated!.role, schoolId: updated!.schoolId, profileConfirmedAt: updated!.profileConfirmedAt,
+      role: updated!.role,
+      schoolId: updated!.schoolId,
+      profileConfirmedAt: updated!.profileConfirmedAt,
+      mustChangePassword: updated!.mustChangePassword,
+
     }),
   );
 });
@@ -348,7 +438,16 @@ router.get("/session", sessionLimiter, async (req, res) => {
 
   res.json({
     token,
-    ...(await buildUserResponse({ id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email, role, schoolId: user.schoolId, profileConfirmedAt: user.profileConfirmedAt })),
+    ...(await buildUserResponse({
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      role,
+      schoolId: user.schoolId,
+      profileConfirmedAt: user.profileConfirmedAt,
+      mustChangePassword: user.mustChangePassword,
+    })),
   });
 });
 

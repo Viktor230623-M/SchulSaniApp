@@ -22,6 +22,8 @@ export interface User {
   permissions?: string[];
   /** `null`: Name noch nicht bestaetigt, Sperre aktiv. Zeitstempel: bestaetigt. */
   profileConfirmedAt: string | null;
+  /** Ein lokales Einmal-Passwort muss vor der ersten Nutzung ersetzt werden. */
+  mustChangePassword?: boolean;
   avatarUri?: string;
   createdAt: string;
   updatedAt: string;
