@@ -85,9 +85,9 @@ export default function LoginScreen() {
         setProviders(list);
         if (list.length === 1) setSelectedProvider(list[0]);
       } catch {
-        // Ein Netzfehler beim Start darf niemanden aussperren: der Bildschirm
-        // faellt auf den Formularweg zurueck, ohne einen Anbieternamen zu
-        // erfinden, und zeigt einen Hinweis.
+        // Netzfehler beim Start: auf die IServ-Formularroute ausweichen,
+        // damit das Formular nicht leer bleibt. Ohne IServ in der
+        // Installation hilft nur ein Reload -- der Abruf war schon gestoert.
         if (cancelled) return;
         setProvidersFailed(true);
         setProviders([]);
@@ -100,6 +100,11 @@ export default function LoginScreen() {
   }, []);
 
   async function handleLogin() {
+    // Das Passwortformular erscheint nur bei gewaehltem Weg; der Schluessel
+    // muss trotzdem mit, damit der Server keinen Weg erraten muss.
+    const provider = selectedProvider;
+    if (!provider) return;
+
     if (!username.trim()) {
       setError(t("auth.usernameRequired", lang));
       return;
@@ -112,7 +117,10 @@ export default function LoginScreen() {
     setError("");
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      const { user, isTealUnlocked, token } = await ApiService.login({ username, password }, rememberMe);
+      const { user, isTealUnlocked, token } = await ApiService.login(
+        { username, password, providerKey: provider.key },
+        rememberMe,
+      );
       if (token) {
         setAuthToken(token);
         if (rememberMe || Platform.OS !== "web") {
