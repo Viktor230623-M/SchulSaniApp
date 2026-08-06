@@ -199,7 +199,7 @@ importers:
         specifier: ^0.13.9
         version: 0.13.9
       '@types/supertest':
-        specifier: ^6.0.3
+        specifier: ^6.0.2
         version: 6.0.3
       '@types/web-push':
         specifier: ^3.6.4
@@ -208,7 +208,7 @@ importers:
         specifier: 0.27.3
         version: 0.27.3
       supertest:
-        specifier: ^7.2.2
+        specifier: ^7.0.0
         version: 7.2.2
       tsx:
         specifier: 'catalog:'
@@ -8626,7 +8626,7 @@ snapshots:
       asynckit: 0.4.0
       combined-stream: 1.0.8
       es-set-tostringtag: 2.1.0
-      hasown: 2.0.4
+      hasown: 2.0.2
       mime-types: 2.1.35
 
   formidable@3.5.4:
