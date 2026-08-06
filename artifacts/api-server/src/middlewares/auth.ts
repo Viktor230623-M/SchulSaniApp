@@ -32,13 +32,13 @@ export function verifyToken(token: string): JwtPayload | null {
   }
 }
 
-// Tokens are valid for 24h, so the role/approval inside them can go stale.
-// Re-check the user against the DB (cached briefly) so demoted, un-approved
-// or deleted users lose access immediately instead of at token expiry.
 interface LiveUser {
   role: string;
   isApproved: boolean;
+  mustChangePassword: boolean;
+  oneTimePasswordExpiresAt: Date | null;
   permissions: string[];
+  profileConfirmedAt: Date | null;
   expires: number;
 }
 
@@ -64,7 +64,14 @@ async function getLiveUser(userId: string): Promise<LiveUser | null> {
   if (cached && cached.expires > Date.now()) return cached;
 
   const rows = await db
-    .select({ role: usersTable.role, isApproved: usersTable.isApproved, schoolId: usersTable.schoolId })
+    .select({
+      role: usersTable.role,
+      isApproved: usersTable.isApproved,
+      mustChangePassword: usersTable.mustChangePassword,
+      oneTimePasswordExpiresAt: usersTable.oneTimePasswordExpiresAt,
+      schoolId: usersTable.schoolId,
+      profileConfirmedAt: usersTable.profileConfirmedAt,
+    })
     .from(usersTable)
     .where(eq(usersTable.id, userId))
     .limit(1);
@@ -74,55 +81,90 @@ async function getLiveUser(userId: string): Promise<LiveUser | null> {
     return null;
   }
   const role = row.role ?? "sanitaeter";
-  // Bereich ist die Schule der Nutzerzeile. loadRolePermissions nimmt dazu
-  // schulgebundene wie ungebundene Rollen; der Bestand liegt ungebunden vor.
   const entry: LiveUser = {
     role,
     isApproved: row.isApproved,
+    mustChangePassword: row.mustChangePassword,
+    oneTimePasswordExpiresAt: row.oneTimePasswordExpiresAt,
     permissions: await permissionsForRole(role, row.schoolId),
+    profileConfirmedAt: row.profileConfirmedAt,
     expires: Date.now() + USER_CACHE_TTL_MS,
   };
   userCache.set(userId, entry);
   return entry;
 }
 
-export async function requireAuth(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
-  // Bewusst nur Bearer. Wuerde hier zusaetzlich ein Cookie akzeptiert, waere jede
-  // zustandsaendernde Route cookie-getragen und damit CSRF-relevant. Das
-  // Sitzungscookie gilt ausschliesslich an GET /auth/session.
+async function authenticate(
+  req: AuthRequest,
+  res: Response,
+  allowPasswordChange = false,
+): Promise<LiveUser | null> {
   const header = req.headers.authorization;
   const token = header?.startsWith("Bearer ") ? header.slice(7) : undefined;
 
   if (!token) {
     res.status(401).json({ error: "Unauthorized" });
-    return;
+    return null;
   }
   const payload = verifyToken(token);
   if (!payload) {
     res.status(401).json({ error: "Invalid or expired token" });
-    return;
+    return null;
   }
+
   let live: LiveUser | null;
   try {
     live = await getLiveUser(payload.userId);
   } catch (err) {
     console.error("Auth user lookup failed:", err);
     res.status(500).json({ error: "Internal server error" });
-    return;
+    return null;
   }
   if (!live || !live.isApproved) {
     res.status(401).json({ error: "Invalid or expired token" });
-    return;
+    return null;
   }
-  // Ein lokales Konto mit noch nicht gewechseltem Einmal-Passwort bekommt hier
-  // keine nutzbare Sitzung fuer andere Routen -- einzige Ausnahme ist der
-  // Passwortwechsel selbst (routes/auth.ts, prueft Bearer und Kontostand
-  // eigenstaendig, ohne ueber requireAuth zu laufen).
-  if (live.mustChangePassword) {
+  if (live.mustChangePassword && !allowPasswordChange) {
     res.status(403).json({ error: "Passwortwechsel erforderlich", code: "PASSWORD_CHANGE_REQUIRED" });
-    return;
+    return null;
   }
   req.user = { userId: payload.userId, role: live.role, permissions: live.permissions };
+  return live;
+}
+
+export async function requireAuth(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  const live = await authenticate(req, res);
+  if (!live) return;
+  if (!live.profileConfirmedAt) {
+    res.status(403).json({ error: "Name noch nicht bestaetigt", code: "PROFILE_NOT_CONFIRMED" });
+    return;
+  }
+  next();
+}
+
+export async function requireAuthAllowUnconfirmedProfile(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  const live = await authenticate(req, res);
+  if (!live) return;
+  next();
+}
+
+export async function requireAuthForLogout(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  const live = await authenticate(req, res, true);
+  if (!live) return;
+  next();
+}
+
+export async function requireAuthForPasswordChange(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  const live = await authenticate(req, res, true);
+  if (!live) return;
+  if (!live.mustChangePassword) {
+    res.status(409).json({ error: "Kein Passwortwechsel erforderlich" });
+    return;
+  }
+  if (live.oneTimePasswordExpiresAt && live.oneTimePasswordExpiresAt.getTime() <= Date.now()) {
+    res.status(401).json({ error: "Einmal-Passwort abgelaufen" });
+    return;
+  }
   next();
 }
 
@@ -131,8 +173,6 @@ import { type PermissionKey } from "../lib/permissions";
 export function requirePermission(...perms: PermissionKey[]) {
   return (req: AuthRequest, res: Response, next: NextFunction): void => {
     if (!req.user) { res.status(403).json({ error: "Forbidden" }); return; }
-    // Quelle ist die Datenbank, aufgeloest in requireAuth und dort
-    // zwischengespeichert.
     const rolePerms: readonly string[] = req.user.permissions ?? [];
     const ok = perms.every((p) => rolePerms.includes(p));
     if (!ok) { res.status(403).json({ error: "Forbidden - missing permission" }); return; }

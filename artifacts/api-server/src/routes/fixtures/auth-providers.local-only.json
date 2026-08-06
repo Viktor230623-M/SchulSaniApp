@@ -1,0 +1,16 @@
+[
+  {
+    "key": "local",
+    "displayName": "Schul-Konto",
+    "type": "local"
+  },
+  {
+    "key": "oidc-beispiel",
+    "displayName": "Schul-Login (OIDC)",
+    "type": "oidc-redirect",
+    "issuerUrl": "https://idp.vitest.beispiel.invalid",
+    "clientId": "vitest-client",
+    "redirectUri": "https://sani.vitest.beispiel.invalid/auth/oidc-beispiel/callback",
+    "scopes": ["openid", "email", "profile"]
+  }
+]
