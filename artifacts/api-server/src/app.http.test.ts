@@ -52,11 +52,16 @@ vi.mock("@workspace/db", async () => {
 import app from "./app";
 
 describe("HTTP-Grundgeruest", () => {
-  it("GET /api/healthz meldet ok, wenn die Datenbankabfrage durchgeht", async () => {
+  it("GET /api/healthz meldet error, wenn die Datenbank nicht erreichbar ist", async () => {
+    // health.ts greift ueber ein zusaetzliches require("@workspace/db") auf
+    // usersTable zu, nicht ueber den oben gemockten Import -- der Handler
+    // laeuft hier also gegen die echte DB-Verbindung. DATABASE_URL zeigt im
+    // Testlauf (vitest.config.ts) auf einen nicht erreichbaren Port, das
+    // Ergebnis ist deshalb deterministisch der Fehlerzweig.
     const res = await request(app).get("/api/healthz");
 
-    expect(res.status).toBe(200);
-    expect(res.body).toEqual({ status: "ok" });
+    expect(res.status).toBe(503);
+    expect(res.body).toEqual({ status: "error" });
   });
 
   it("GET /api/auth/providers listet nur den aktivierten Anmeldeweg, ohne Geheimnisse", async () => {
