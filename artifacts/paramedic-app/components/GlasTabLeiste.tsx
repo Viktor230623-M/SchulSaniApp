@@ -1,4 +1,5 @@
 import { BlurView } from "expo-blur";
+import { LinearGradient } from "expo-linear-gradient";
 import React from "react";
 import { Platform, Pressable, StyleSheet, View } from "react-native";
 import Animated, {
@@ -9,6 +10,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { istDunklesThema, type ThemeColors } from "@/constants/theme";
+import { LiquidGlassView, nativeGlassAvailable } from "@/modules/liquid-glass/src/LiquidGlassView";
 
 // `@react-navigation/bottom-tabs` haengt nur mittelbar ueber expo-router im
 // Baum und laesst sich aus diesem Paket nicht aufloesen. Die Form, die
@@ -63,11 +65,13 @@ function mitDeckung(farbe: string, deckung: number): string {
  * Pille waeren auf einem schmalen Telefon unter 50 Punkten je Feld -- zu wenig
  * fuer eine sichere Beruehrung.
  *
- * Der Weichzeichner kommt von expo-blur. Auf Android ist er bis heute
- * ausdruecklich als "experimental" gefuehrt und kostet je Bild einen eigenen
- * Durchgang; dort liegt deshalb eine halbdurchsichtige Flaeche statt eines
- * echten Weichzeichners. Der Unterschied faellt kaum auf, weil darunter ohnehin
- * Inhalt durchscheint.
+ * Drei Schichten machen das Material glaessig statt matt: der Weichzeichner
+ * (auf iOS das native Apple-Material, im Web blur mit Saettigung), die helle
+ * Oberkante, auf die das Licht faellt, und der diagonale Specular-Schein.
+ * Auf Android gibt es bis heute keinen brauchbaren Flaechenweichzeichner; dort
+ * traegt eine halbdurchsichtige Flaeche zusammen mit Schein und Kante den
+ * Look. Auf iOS mit Dev-Build uebernimmt ein nativer SwiftUI-View mit dem
+ * echten Liquid-Glass-Material (iOS 26) -- siehe modules/liquid-glass.
  */
 export function GlasTabLeiste({
   state,
@@ -87,7 +91,7 @@ export function GlasTabLeiste({
       pointerEvents="box-none"
       style={[styles.rahmen, { paddingBottom: Math.max(insets.bottom, 12) }]}
     >
-      <Glasflaeche theme={theme} dunkel={dunkel} radius={HOEHE / 2} style={styles.pille}>
+      <Glasflaeche theme={theme} dunkel={dunkel} radius={HOEHE / 2} intensity={dunkel ? 60 : 50} style={styles.pille}>
         {inPille.map((route, index) => (
           <Feld
             key={route.key}
@@ -105,6 +109,7 @@ export function GlasTabLeiste({
           theme={theme}
           dunkel={dunkel}
           radius={HOEHE / 2}
+          intensity={dunkel ? 45 : 35}
           style={[styles.knopf, { marginLeft: ABSTAND_ZUM_KNOPF }]}
         >
           <Feld
@@ -125,16 +130,20 @@ function Glasflaeche({
   theme,
   dunkel,
   radius,
+  intensity,
   style,
   children,
 }: {
   theme: ThemeColors;
   dunkel: boolean;
   radius: number;
+  /** Blur-Intensitaet der BlurView; die groessere Pille liest dicker als der Knopf. */
+  intensity: number;
   style?: any;
   children: React.ReactNode;
 }) {
-  const echterWeichzeichner = Platform.OS === "ios" || Platform.OS === "web";
+  const nativ = Platform.OS === "ios" && nativeGlassAvailable;
+  const weichzeichner = !nativ && (Platform.OS === "ios" || Platform.OS === "web");
 
   return (
     <View
@@ -145,22 +154,46 @@ function Glasflaeche({
           // Alles aus dem Thema, nichts fest verdrahtet: sonst haengt ueber
           // jedem Thema dieselbe weisse Leiste.
           borderColor: theme.tabBarBorder,
+          // Licht faellt von oben auf das Material: die Oberkante ist heller
+          // als der Rest der Kante.
+          borderTopColor: dunkel ? "rgba(255,255,255,0.28)" : "rgba(255,255,255,0.55)",
           // Ohne Weichzeichner traegt die Farbe allein und muss deutlich
           // dichter sein, sonst wird die Leiste vor hellem Inhalt unlesbar.
-          backgroundColor: echterWeichzeichner ? "transparent" : mitDeckung(theme.card, 0.86),
+          backgroundColor: weichzeichner || nativ ? "transparent" : mitDeckung(theme.card, 0.86),
           shadowColor: dunkel ? "#000" : theme.tabBarBorder,
         },
         style,
       ]}
     >
-      {echterWeichzeichner && (
+      {nativ && (
+        <LiquidGlassView
+          cornerRadius={radius}
+          dark={dunkel}
+          style={StyleSheet.absoluteFill}
+        />
+      )}
+
+      {weichzeichner && (
         <>
-          <BlurView
-            intensity={dunkel ? 45 : 35}
-            tint={dunkel ? "dark" : "light"}
-            style={[StyleSheet.absoluteFill, { borderRadius: radius }]}
-            pointerEvents="none"
-          />
+          {Platform.OS === "web" ? (
+            // Web: ein Durchgang mit Saettigung statt BlurView -- der
+            // Saettigungsschub gehoert zum Glass-Look, die native BlurView auf
+            // iOS bringt ihn von selbst mit.
+            <View
+              pointerEvents="none"
+              style={[
+                StyleSheet.absoluteFill,
+                { borderRadius: radius, backdropFilter: "blur(24px) saturate(180%)" },
+              ] as any}
+            />
+          ) : (
+            <BlurView
+              intensity={intensity}
+              tint={dunkel ? "dark" : "light"}
+              style={[StyleSheet.absoluteFill, { borderRadius: radius }]}
+              pointerEvents="none"
+            />
+          )}
           {/* Der Farbton liegt ueber dem Weichzeichner, nicht darunter. Als
               Hintergrund der Elternflaeche wuerde ihn die BlurView verdecken,
               die den Untergrund neu zeichnet -- die Leiste saehe in jedem
@@ -174,6 +207,36 @@ function Glasflaeche({
           />
         </>
       )}
+
+      {/* Ueber dem nativen Glas nur eine leichte Toenung, damit das
+          Themengruen oder -blau durchscheint; Kanten und Glanz bringt der
+          Glass-Effekt selbst mit. */}
+      {nativ && (
+        <View
+          pointerEvents="none"
+          style={[
+            StyleSheet.absoluteFill,
+            { borderRadius: radius, backgroundColor: mitDeckung(theme.card, 0.35) },
+          ]}
+        />
+      )}
+
+      {/* Diagonaler heller Verlauf: der Specular-Schein, der das Material als
+          Glas lesbar macht statt als matte Scheibe. Ueber dem nativen Glas
+          bleibt er aus -- der Glass-Effekt bringt seinen eigenen Glanz mit. */}
+      {!nativ && (
+        <LinearGradient
+        colors={
+          dunkel
+            ? ["rgba(255,255,255,0.10)", "rgba(255,255,255,0.02)", "rgba(255,255,255,0)"]
+            : ["rgba(255,255,255,0.18)", "rgba(255,255,255,0.04)", "rgba(255,255,255,0)"]
+        }
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0.7, y: 1 }}
+          style={[StyleSheet.absoluteFill, { borderRadius: radius }]}
+        />
+      )}
+
       {children}
     </View>
   );
@@ -264,10 +327,10 @@ const styles = StyleSheet.create({
   glas: {
     borderWidth: 1,
     overflow: "hidden",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.22,
-    shadowRadius: 16,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.28,
+    shadowRadius: 20,
+    elevation: 12,
   },
   pille: {
     flex: 1,
