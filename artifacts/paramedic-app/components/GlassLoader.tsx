@@ -54,7 +54,13 @@ export function GlassLoader({ size = 200, color = "#22C55E", dark = false }: Gla
   const reduziert = useReducedMotion();
 
   useEffect(() => {
-    if (reduziert) return;
+    if (reduziert) {
+      // Nicht nur den Start verhindern: eine laufende Schleife wird durch den
+      // direkten Wert abgebrochen, wenn Reduce Motion waehrend des Ladens
+      // umschaltet.
+      fortschritt.value = 0;
+      return;
+    }
     fortschritt.value = withRepeat(
       withSequence(
         withTiming(1, { duration: DAUER / 2, easing: Easing.inOut(Easing.ease) }),
@@ -101,7 +107,10 @@ function Ring({
   const reduziert = useReducedMotion();
 
   useEffect(() => {
-    if (reduziert) return;
+    if (reduziert) {
+      skalierung.value = 1;
+      return;
+    }
     skalierung.value = withDelay(
       ring.verzoegerung,
       withRepeat(
