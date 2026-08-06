@@ -39,6 +39,7 @@ interface LiveUser {
   role: string;
   isApproved: boolean;
   permissions: string[];
+  profileConfirmedAt: Date | null;
   expires: number;
 }
 
@@ -64,7 +65,7 @@ async function getLiveUser(userId: string): Promise<LiveUser | null> {
   if (cached && cached.expires > Date.now()) return cached;
 
   const rows = await db
-    .select({ role: usersTable.role, isApproved: usersTable.isApproved, schoolId: usersTable.schoolId })
+    .select({ role: usersTable.role, isApproved: usersTable.isApproved, schoolId: usersTable.schoolId, profileConfirmedAt: usersTable.profileConfirmedAt })
     .from(usersTable)
     .where(eq(usersTable.id, userId))
     .limit(1);
@@ -80,13 +81,19 @@ async function getLiveUser(userId: string): Promise<LiveUser | null> {
     role,
     isApproved: row.isApproved,
     permissions: await permissionsForRole(role, row.schoolId),
+    profileConfirmedAt: row.profileConfirmedAt,
     expires: Date.now() + USER_CACHE_TTL_MS,
   };
   userCache.set(userId, entry);
   return entry;
 }
 
-export async function requireAuth(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+/**
+ * Prueft Token und Kontostand, ohne die Namensbestaetigung zu verlangen.
+ * Traegt bei Erfolg req.user ein und liefert den geladenen Nutzer zurueck --
+ * schreibt bei Misserfolg die Fehlerantwort selbst und liefert null.
+ */
+async function authenticate(req: AuthRequest, res: Response): Promise<LiveUser | null> {
   // Bewusst nur Bearer. Wuerde hier zusaetzlich ein Cookie akzeptiert, waere jede
   // zustandsaendernde Route cookie-getragen und damit CSRF-relevant. Das
   // Sitzungscookie gilt ausschliesslich an GET /auth/session.
@@ -95,12 +102,12 @@ export async function requireAuth(req: AuthRequest, res: Response, next: NextFun
 
   if (!token) {
     res.status(401).json({ error: "Unauthorized" });
-    return;
+    return null;
   }
   const payload = verifyToken(token);
   if (!payload) {
     res.status(401).json({ error: "Invalid or expired token" });
-    return;
+    return null;
   }
   let live: LiveUser | null;
   try {
@@ -108,11 +115,11 @@ export async function requireAuth(req: AuthRequest, res: Response, next: NextFun
   } catch (err) {
     console.error("Auth user lookup failed:", err);
     res.status(500).json({ error: "Internal server error" });
-    return;
+    return null;
   }
   if (!live || !live.isApproved) {
     res.status(401).json({ error: "Invalid or expired token" });
-    return;
+    return null;
   }
   // Ein lokales Konto mit noch nicht gewechseltem Einmal-Passwort bekommt hier
   // keine nutzbare Sitzung fuer andere Routen -- einzige Ausnahme ist der
@@ -120,9 +127,31 @@ export async function requireAuth(req: AuthRequest, res: Response, next: NextFun
   // eigenstaendig, ohne ueber requireAuth zu laufen).
   if (live.mustChangePassword) {
     res.status(403).json({ error: "Passwortwechsel erforderlich", code: "PASSWORD_CHANGE_REQUIRED" });
-    return;
+    return null;
   }
   req.user = { userId: payload.userId, role: live.role, permissions: live.permissions };
+  return live;
+}
+
+export async function requireAuth(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  const live = await authenticate(req, res);
+  if (!live) return;
+  // Sperre, solange der Name nicht bestaetigt ist -- sitzt hier und nicht in
+  // jeder Route einzeln, aus demselben Grund wie bei requirePermission: eine
+  // neue Route erbt die Sperre, statt sie zu vergessen. Die drei Ausnahmen
+  // (Namensbestaetigung selbst, Sitzungswiederherstellung, Abmelden) laufen
+  // entweder gar nicht ueber requireAuth (Sitzungswiederherstellung) oder
+  // ueber requireAuthAllowUnconfirmedProfile.
+  if (!live.profileConfirmedAt) {
+    res.status(403).json({ error: "Name noch nicht bestaetigt", code: "PROFILE_NOT_CONFIRMED" });
+    return;
+  }
+  next();
+}
+
+export async function requireAuthAllowUnconfirmedProfile(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  const live = await authenticate(req, res);
+  if (!live) return;
   next();
 }
 
