@@ -1,7 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+vi.mock("@workspace/db", () => ({
+  db: {},
+  usersTable: {},
+}));
+
 import { loadAuthProviders } from "./registry";
 
 let tempDir: string;
