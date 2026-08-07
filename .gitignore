@@ -45,7 +45,11 @@ Thumbs.db
 .cache/
 .local/
 artifacts/api-server/.env
+artifacts/api-server/.env.bak*
 ecosystem.config.js
+
+# Vom Einrichtungsassistenten geschriebene Anmeldewege (kann Client-Secrets enthalten)
+ops/install/auth-providers.json
 
 # Interne Notizen und Planungsunterlagen
 docs/superpowers/
