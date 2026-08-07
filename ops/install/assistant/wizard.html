@@ -226,7 +226,6 @@
     <div class="dot" data-step="2"></div>
     <div class="dot" data-step="3"></div>
     <div class="dot" data-step="4"></div>
-    <div class="dot" data-step="5"></div>
   </div>
 
   <div class="banner" id="globalBanner" role="alert"></div>
@@ -426,38 +425,6 @@
     </section>
 
     <section data-page="2" class="card">
-      <h2>App-Kennung</h2>
-      <p class="hint">Anzeigename und Farbe, wie sie in der App und im Startbildschirm erscheinen.</p>
-
-      <div class="field" data-field="appName">
-        <label for="appName">Anwendungsname</label>
-        <input type="text" id="appName" name="appName" autocomplete="off" placeholder="SchulSani">
-        <div class="error"><span>—</span></div>
-      </div>
-
-      <div class="field" data-field="themeColor">
-        <label for="themeColor">Akzentfarbe</label>
-        <div class="color-row">
-          <input type="color" id="themeColorPicker" value="#22C55E" aria-label="Akzentfarbe auswaehlen">
-          <input type="text" id="themeColor" name="themeColor" autocomplete="off" placeholder="#22C55E">
-        </div>
-        <div class="error"><span>—</span></div>
-      </div>
-
-      <div class="field" data-field="bundleId">
-        <label for="bundleId">Bundle-Kennung (App Store / Play Store)</label>
-        <input type="text" id="bundleId" name="bundleId" autocomplete="off" placeholder="com.beispielschule.sani">
-        <div class="helper">Nach einer Veroeffentlichung nicht mehr aenderbar — pro Schule eindeutig.</div>
-        <div class="error"><span>—</span></div>
-      </div>
-
-      <div class="actions">
-        <button type="button" class="secondary" data-back>Zurueck</button>
-        <button type="button" class="primary" data-next>Weiter</button>
-      </div>
-    </section>
-
-    <section data-page="3" class="card">
       <h2>Erweitert <span class="optional">(optional)</span></h2>
       <p class="hint">Ohne Angabe gelten sinnvolle Voreinstellungen.</p>
 
@@ -487,7 +454,7 @@
       </div>
     </section>
 
-    <section data-page="4" class="card">
+    <section data-page="3" class="card">
       <h2>Erstes Eigentuimerkonto</h2>
       <p class="hint">Dieses Konto wird sofort freigegeben. Bei E-Mail-Anmeldung legst du hier direkt ein Passwort fest. Bei OIDC muss der Wert exakt dem stabilen <code>sub</code>-Claim des Anbieters entsprechen. Diese Bootstrap-Identitaet wird nach dem ersten erfolgreichen Lauf nicht automatisch auf ein anderes Konto verschoben.</p>
 
@@ -525,11 +492,12 @@
       </div>
     </section>
 
-    <section data-page="5" class="card">
+    <section data-page="4" class="card">
       <h2>Zusammenfassung</h2>
       <div class="summary">
         <dl id="summaryList"></dl>
       </div>
+      <p class="hint">App-Kennung (Name, Farbe, Bundle-ID) ist fest und gilt fuer alle Schulen.</p>
       <p class="hint">Geheimnisse (Signaturschluessel, Web-Push-Schluessel) werden jetzt erzeugt und nirgends angezeigt.</p>
 
       <div class="steplog" id="steplog">
@@ -544,7 +512,7 @@
       </div>
     </section>
 
-    <section data-page="6" class="card final">
+    <section data-page="5" class="card final">
       <div class="check" aria-hidden="true">&#10003;</div>
       <h2>Einrichtung abgeschlossen</h2>
       <p class="hint">Der Assistent beendet sich jetzt. Diese Seite ist danach nicht mehr erreichbar.</p>
@@ -558,7 +526,7 @@
 (function () {
   "use strict";
 
-  var TOTAL_PAGES = 6;
+  var TOTAL_PAGES = 5;
   var current = 1;
 
   var fieldMessages = {
@@ -604,9 +572,6 @@
     ownerEmail: "Bitte eine gueltige E-Mail-Adresse angeben.",
     ownerPassword: "Passwort muss mindestens 10 Zeichen lang sein.",
     ownerPasswordConfirm: "Passwoerter stimmen nicht ueberein.",
-    appName: "Bitte einen Anwendungsnamen angeben.",
-    themeColor: "Das ist keine gueltige Farbe (Beispiel: #22C55E).",
-    bundleId: "Das ist keine gueltige Kennung (Beispiel: com.beispielschule.sani).",
     schoolId: "Nur Kleinbuchstaben, Ziffern, Bindestrich, Unterstrich.",
     ownerUserId: "Bitte eine gueltige Konto-ID angeben.",
     vapidSubject: 'Bitte im Format "mailto:name@domain.de" angeben, oder freilassen.',
@@ -614,8 +579,6 @@
   };
 
   var domainRe = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i;
-  var bundleRe = /^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)+$/;
-  var hexRe = /^#[0-9a-fA-F]{6}$/;
   var identRe = /^[a-z0-9][a-z0-9._-]{1,63}$/i;
   var schoolIdRe = /^[a-z0-9_-]{1,40}$/i;
   var mailtoRe = /^mailto:[^@\s]+@[^@\s]+\.[^@\s]+$/;
@@ -667,9 +630,6 @@
     ownerEmail: function (v) { return emailRe.test(v.trim()) && v.trim().length <= 254; },
     ownerPassword: function (v) { return v.length >= 10 && v.length <= 200; },
     ownerPasswordConfirm: function (v) { return v === el("ownerPassword").value; },
-    appName: function (v) { return v.trim().length > 0 && v.trim().length <= 60; },
-    themeColor: function (v) { return hexRe.test(v.trim()); },
-    bundleId: function (v) { return bundleRe.test(v.trim()); },
     schoolId: function (v) { return v.trim() === "" || schoolIdRe.test(v.trim()); },
     ownerUserId: function (v) { return v.trim() === "" || identRe.test(v.trim()); },
     vapidSubject: function (v) { return v.trim() === "" || mailtoRe.test(v.trim()); },
@@ -678,9 +638,8 @@
 
   var pageFields = {
     1: ["authMode", "joinCode", "schoolName", "domain", "providerKey", "providerDisplayName", "providerIssuerUrl", "providerClientId", "providerClientSecret", "providerScopes", "providerAllowedHostedDomains", "providerGroupsClaim", "providerGroupToRoleMap", "providerClientSecretMode", "providerResponseMode", "providerAppleTeamId", "providerAppleKeyId", "providerApplePrivateKeyPath", "provider2Key", "provider2DisplayName", "provider2IssuerUrl", "provider2ClientId", "provider2ClientSecret", "provider2Scopes", "provider2AllowedHostedDomains", "provider2GroupsClaim", "provider2GroupToRoleMap", "provider2ClientSecretMode", "provider2ResponseMode", "provider2AppleTeamId", "provider2AppleKeyId", "provider2ApplePrivateKeyPath", "smtpHost", "smtpPort", "smtpUser", "smtpPassword", "smtpSecure", "mailFrom", "mailFromName"],
-    2: ["appName", "themeColor", "bundleId"],
-    3: ["schoolId", "ownerUserId", "vapidSubject"],
-    4: []
+    2: ["schoolId", "ownerUserId", "vapidSubject"],
+    3: []
   };
 
   function el(id) { return document.getElementById(id); }
@@ -729,7 +688,7 @@
 
   function validatePage(n) {
     var fields = pageFields[n] || [];
-    if (n === 4) fields = isLocal() ? ["ownerEmail", "ownerPassword", "ownerPasswordConfirm"] : ["externalSubject"];
+    if (n === 3) fields = isLocal() ? ["ownerEmail", "ownerPassword", "ownerPasswordConfirm"] : ["externalSubject"];
     var ok = true;
     fields.forEach(function (name) {
       var input = el(name);
@@ -797,9 +756,6 @@
       smtpSecure: el("smtpSecure").value,
       mailFrom: el("mailFrom").value,
       mailFromName: el("mailFromName").value,
-      appName: el("appName").value,
-      themeColor: el("themeColor").value,
-      bundleId: el("bundleId").value,
       schoolId: el("schoolId").value,
       ownerUserId: el("ownerUserId").value,
       vapidSubject: el("vapidSubject").value
@@ -819,9 +775,9 @@
       ["Zweiter Anbieter", cfg.provider2Key || "(nicht gesetzt)"],
       ["SMTP", isLocal() ? cfg.smtpHost + ":" + cfg.smtpPort : "(nicht gesetzt)"],
       ["Absender", cfg.mailFrom || "(nicht gesetzt)"],
-      ["Anwendungsname", cfg.appName],
-      ["Farbe", cfg.themeColor],
-      ["Bundle-Kennung", cfg.bundleId],
+      ["Anwendungsname", "SchulSani (fest)"],
+      ["Akzentfarbe", "#22C55E (fest)"],
+      ["Bundle-Kennung", "com.schulsani.app (fest)"],
       ["Schul-Kennung", cfg.schoolId || "(nicht gesetzt)"],
       ["Eigentuemer-Kennung", cfg.ownerUserId || "(nicht gesetzt)"],
       ["Eigentuemer", isLocal() ? el("ownerEmail").value : (el("externalSubject").value || "(nicht gesetzt)")]
@@ -962,9 +918,6 @@
       if (el("smtpSecure")) el("smtpSecure").value = c.smtpSecure ? "true" : "false";
       if (el("mailFrom")) el("mailFrom").value = c.mailFrom || "";
       if (el("mailFromName")) el("mailFromName").value = c.mailFromName || "";
-      if (el("appName")) el("appName").value = c.appName || "";
-      if (el("themeColor")) { el("themeColor").value = c.themeColor || "#22C55E"; el("themeColorPicker").value = c.themeColor || "#22C55E"; }
-      if (el("bundleId")) el("bundleId").value = c.bundleId || "";
       if (el("schoolId")) el("schoolId").value = c.schoolId || "";
       if (el("ownerUserId")) el("ownerUserId").value = c.ownerUserId || "";
       if (el("vapidSubject")) el("vapidSubject").value = (c.vapidSubject || "").indexOf("mailto:admin@") === 0 ? "" : (c.vapidSubject || "");
@@ -981,7 +934,7 @@
     if (!(target instanceof HTMLElement)) return;
     if (target.hasAttribute("data-next")) {
       if (!validatePage(current)) return;
-      if (current === 4) renderSummary();
+      if (current === 3) renderSummary();
       showPage(Math.min(current + 1, TOTAL_PAGES));
     } else if (target.hasAttribute("data-back")) {
       showBanner("");
@@ -993,13 +946,6 @@
 
   el("authMode").addEventListener("change", updateAuthFields);
   updateAuthFields();
-
-  el("themeColorPicker").addEventListener("input", function () {
-    el("themeColor").value = this.value.toUpperCase();
-  });
-  el("themeColor").addEventListener("input", function () {
-    if (hexRe.test(this.value.trim())) el("themeColorPicker").value = this.value.trim();
-  });
 
   document.getElementById("wizardForm").addEventListener("submit", function (e) { e.preventDefault(); });
 

@@ -100,8 +100,6 @@ loadPendingSecrets();
 // --- Hilfsfunktionen: Validierung (spiegelt config.ts / app.config.ts) --
 
 const DOMAIN_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i;
-const BUNDLE_ID_RE = /^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)+$/;
-const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 const IDENTIFIER_RE = /^[a-z0-9][a-z0-9._-]{1,63}$/i;
 const SCHOOL_ID_RE = /^[a-z0-9_-]{1,40}$/i;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -110,6 +108,14 @@ const SCHULSANI_PRIVATE_DIR = "/etc/schulsani/";
 const INSTALLER_ROLE_KEYS = new Set(["owner", "admin", "sanitaeter_leitung_admin", "sanitaeter_leitung", "teacher", "sanitaeter"]);
 const SMTP_PASSWORD_MAX_LENGTH = 1000;
 const LOCAL_PASSWORD_MIN_LENGTH = 10;
+
+// Feste Marke des SaaS: eine App fuer alle Schulen, dieselbe Bundle-ID.
+// Diese Werte sind kein Feld der Einrichtung — die Schule konfiguriert nur
+// Domain, Anmeldewege, SMTP und Eigentuemer. Aenderungen betreffen alle
+// Instanzen und passieren nur in Absprache mit dem Eigentuemer.
+const BRAND_APP_NAME = "SchulSani";
+const BRAND_THEME_COLOR = "#22C55E";
+const BRAND_BUNDLE_ID = "com.schulsani.app";
 
 function hashLocalPassword(password) {
   try {
@@ -350,20 +356,10 @@ function validateConfig(body) {
     errors.mailFromName = "Absendername ist zu lang oder enthaelt unzulaessige Zeichen.";
   }
 
-  out.appName = trimOrEmpty(body.appName);
-  if (!out.appName || out.appName.length > 60 || hasControlCharacter(out.appName)) {
-    errors.appName = "Bitte einen Anwendungsnamen zwischen 1 und 60 Zeichen ohne Steuerzeichen angeben.";
-  }
-
-  out.themeColor = trimOrEmpty(body.themeColor) || "#22C55E";
-  if (!HEX_COLOR_RE.test(out.themeColor)) {
-    errors.themeColor = "Das ist keine gueltige Farbe (Beispiel: #22C55E).";
-  }
-
-  out.bundleId = trimOrEmpty(body.bundleId);
-  if (!BUNDLE_ID_RE.test(out.bundleId)) {
-    errors.bundleId = "Das ist keine gueltige Kennung (Beispiel: com.beispielschule.sani).";
-  }
+  // Marke kommt nicht aus dem Formular, sondern ist fest (siehe BRAND_*).
+  out.appName = BRAND_APP_NAME;
+  out.themeColor = BRAND_THEME_COLOR;
+  out.bundleId = BRAND_BUNDLE_ID;
 
   out.schoolId = trimOrEmpty(body.schoolId) || "school";
   if (!SCHOOL_ID_RE.test(out.schoolId)) {
