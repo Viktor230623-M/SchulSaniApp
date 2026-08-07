@@ -80,6 +80,12 @@ export const config = {
    * eine fremde Kennung mit Vollzugriff auf die Datenbank.
    */
   ownerUserId: lies("OWNER_USER_ID"),
+  /**
+   * Gemeinsames Eintrittskarte der Schule. Ist sie gesetzt, braucht jedes
+   * neue Konto (E-Mail-Registrierung und OIDC-Erst-Login) diesen Code —
+   * verhindert, dass sich Fremde auf einer fremden Instanz anmelden.
+   */
+  joinCode: lies("SCHOOL_JOIN_CODE"),
 } as const;
 
 if (fehlend.length > 0) {

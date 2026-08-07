@@ -111,6 +111,22 @@ function currentAuthTime(): number {
 const NATIVE_HANDOFF_TTL_MS = 2 * 60 * 1000;
 const nativeHandoffs = new Map<string, { sessionToken: string; verifierHash: string; expiresAt: number }>();
 
+// Schul-Zugangscode als Eintrittskarte fuer neue Konten. Ist einer gesetzt,
+// muss jedes frisch angelegte Konto ihn nachweisen — fuer lokale Registrierung
+// direkt im Formular, fuer den OIDC-Erst-Login ueber einen Zwischen-Screen,
+// dessen einmaliges Token hier haengt. Bestehende, auf Freischaltung wartende
+// Konten bleiben beim bisherigen Verwalter-Flow.
+const JOIN_CODE_TTL_MS = 15 * 60 * 1000;
+const joinCodeHandoffs = new Map<string, { userId: string; expiresAt: number }>();
+const joinCodeRequired = config.joinCode !== undefined;
+
+function joinCodeMatches(candidate: unknown): boolean {
+  if (!joinCodeRequired || typeof candidate !== "string" || !config.joinCode) return false;
+  const a = Buffer.from(candidate);
+  const b = Buffer.from(config.joinCode);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
 // Nonces fuer den nativen Apple-Login: kurzlebig, einmalig verbrauchbar.
 // Der Client reicht den Nonce an Apple weiter, Apple spiegelt ihn ins
 // Identity-Token; ohne passenden Eintrag wird die Anmeldung nicht akzeptiert.
@@ -294,6 +310,14 @@ router.post("/local/register", localAccountLimiter, async (req, res) => {
     return;
   }
 
+  // Eintrittskarte der Schule: Ist ein Schul-Zugangscode konfiguriert, kommt
+  // ein Konto nur mit dem richtigen Code zustande. Die Registrierung verraet
+  // dabei nicht, ob der Code fehlt oder falsch ist — beides heisst 403.
+  if (joinCodeRequired && !joinCodeMatches(req.body?.joinCode)) {
+    res.status(403).json({ error: "Der Schul-Zugangscode fehlt oder ist falsch." });
+    return;
+  }
+
   try {
     assertMailerConfig();
   } catch {
@@ -371,7 +395,9 @@ router.post("/local/register", localAccountLimiter, async (req, res) => {
         passwordHash,
         role: "sanitaeter",
         schoolId: registrationSchoolId,
-        isApproved: false,
+        // Mit Schul-Zugangscode ist die Registrierung die Eintrittskarte: das
+        // Konto ist sofort nutzbar (E-Mail-Bestaetigung kommt trotzdem).
+        isApproved: joinCodeRequired,
         profileConfirmedAt: null,
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -747,6 +773,9 @@ router.get("/session", sessionLimiter, async (req, res) => {
 router.get("/providers", (_req, res) => {
   res.json({
     providers: authProviders.map((p) => ({ key: p.key, displayName: p.displayName, type: p.type })),
+    // Der Client zeigt den Schul-Code-Screen nur, wenn die Instanz einen
+    // verlangt. Ob einer gesetzt ist, verraet nichts ueber seinen Wert.
+    joinCodeRequired,
   });
 });
 
@@ -1088,9 +1117,27 @@ async function completeOidcCallback(req: import("express").Request, res: import(
         res.json({ ok: true });
       }
       return;
-    }
+    }    const account = await reconcileAccount(provider.key, subject, profile, schoolId);
 
-    const account = await reconcileAccount(provider.key, subject, profile, schoolId);
+    // Instanz mit Schul-Zugangscode: ein nicht freigeschaltetes Konto wartet
+    // auf den Code, nicht auf einen Verwalter — auch ein Konto aus einem
+    // abgebrochenen frueheren Versuch. Ein frisches einmaliges Token verweist
+    // auf den Schul-Code-Screen, dort wird das Konto erst freigeschaltet. Im
+    // nativen Ablauf reist der Handoff als Query-Parameter zurueck in die App.
+    if (joinCodeRequired && !account.isApproved) {
+      const token = randomBytes(32).toString("base64url");
+      joinCodeHandoffs.set(token, { userId: account.userId, expiresAt: Date.now() + JOIN_CODE_TTL_MS });
+      if (authResult.returnTo) {
+        const landingUrl = new URL(authResult.returnTo);
+        landingUrl.searchParams.set("joinCode", "1");
+        landingUrl.searchParams.set("handoff", token);
+        res.redirect(landingUrl.toString());
+        return;
+      }
+      const landing = new URL("/schul-code?handoff=" + encodeURIComponent(token), config.allowedOrigins[0] ?? "http://localhost");
+      res.redirect(landing.toString());
+      return;
+    }
 
     if (!account.isApproved) {
       // Web-Flow: kein rohes JSON im Redirect-Rueckweg, sondern der
@@ -1188,6 +1235,17 @@ router.post("/apple/native/complete", authLimiter, async (req, res) => {
   try {
     const schoolId = process.env["SCHOOL_ID"]?.trim() || "school";
     const account = await reconcileAccount(provider.key, authResult.subject, authResult.profile, schoolId);
+
+    // Instanz mit Schul-Zugangscode: die App wechselt auf den Schul-Code-Screen,
+    // der das einmalige Handoff-Token einloest — auch bei einem Konto aus einem
+    // abgebrochenen frueheren Versuch.
+    if (joinCodeRequired && !account.isApproved) {
+      const token = randomBytes(32).toString("base64url");
+      joinCodeHandoffs.set(token, { userId: account.userId, expiresAt: Date.now() + JOIN_CODE_TTL_MS });
+      res.status(403).json({ error: "Der Schul-Zugangscode fehlt.", code: "JOIN_CODE_REQUIRED", handoff: token });
+      return;
+    }
+
     if (!account.isApproved) {
       res.status(403).json({ error: "Dein Account wartet auf Freischaltung durch einen Administrator." });
       return;
@@ -1229,6 +1287,96 @@ router.post("/apple/native/complete", authLimiter, async (req, res) => {
     console.error("Apple-Anmeldung: Kontoabgleich fehlgeschlagen:", err);
     res.status(500).json({ error: "Anmeldung fehlgeschlagen." });
   }
+});
+
+/**
+ * Loest das Schul-Zugangscode-Handoff ein: Der OIDC- oder Apple-Login hat ein
+ * frisches Konto angelegt, das auf die Eintrittskarte der Schule wartet. Mit
+ * dem richtigen Code wird es freigeschaltet und bekommt wie bei jedem anderen
+ * Login eine Sitzung; ohne oder mit falschem Code bleibt es gesperrt.
+ *
+ * Das Token ist einmalig und haengt an genau dem Konto, das der Anmeldeweg
+ * gerade angelegt hat — es ist nicht uebertragbar und nach Ablauf wertlos.
+ */
+router.post("/join-code", authLimiter, async (req, res) => {
+  const handoff = typeof req.body?.handoff === "string" ? req.body.handoff : "";
+  if (!handoff || handoff.length > 200) {
+    res.status(400).json({ error: "Der Schul-Zugangscode fehlt." });
+    return;
+  }
+
+  const entry = joinCodeHandoffs.get(handoff);
+  if (!entry || entry.expiresAt <= Date.now()) {
+    joinCodeHandoffs.delete(handoff);
+    res.status(401).json({ error: "Der Schul-Zugangscode ist abgelaufen. Bitte melde dich erneut an." });
+    return;
+  }
+
+  if (!joinCodeMatches(req.body?.joinCode)) {
+    // Falscher Code kostet den Vorgang nicht: Das Handoff bleibt erhalten,
+    // damit ein Tippfehler nicht den ganzen Login ruiniert. Der Limiter deckt
+    // Versuche ab.
+    res.status(403).json({ error: "Der Schul-Zugangscode ist falsch." });
+    return;
+  }
+  joinCodeHandoffs.delete(handoff);
+
+  const [approved] = await db
+    .update(usersTable)
+    .set({ isApproved: true, updatedAt: new Date() })
+    .where(and(eq(usersTable.id, entry.userId), eq(usersTable.isApproved, false)))
+    .returning({ id: usersTable.id });
+  if (!approved) {
+    res.status(401).json({ error: "Der Schul-Zugangscode ist abgelaufen. Bitte melde dich erneut an." });
+    return;
+  }
+  invalidateUserCache(entry.userId);
+
+  const sessionToken = await createSession(entry.userId);
+  res.cookie(SESSION_COOKIE, sessionToken, sessionCookieOptions());
+
+  const [user] = await db
+    .select({
+      id: usersTable.id,
+      firstName: usersTable.firstName,
+      lastName: usersTable.lastName,
+      email: usersTable.email,
+      username: usersTable.username,
+      role: usersTable.role,
+      schoolId: usersTable.schoolId,
+      profileConfirmedAt: usersTable.profileConfirmedAt,
+      mustChangePassword: usersTable.mustChangePassword,
+      passwordVersion: usersTable.passwordVersion,
+    })
+    .from(usersTable)
+    .where(eq(usersTable.id, entry.userId))
+    .limit(1);
+  if (!user) {
+    res.status(500).json({ error: "Anmeldung fehlgeschlagen." });
+    return;
+  }
+
+  const role = user.role ?? "sanitaeter";
+  const token = jwt.sign({
+    userId: user.id,
+    role,
+    passwordVersion: user.passwordVersion,
+    authTime: currentAuthTime(),
+  }, JWT_SECRET, { expiresIn: "2h" });
+  res.json({
+    token,
+    ...(await buildUserResponse({
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      username: user.username,
+      role,
+      schoolId: user.schoolId,
+      profileConfirmedAt: user.profileConfirmedAt,
+      mustChangePassword: user.mustChangePassword,
+    })),
+  });
 });
 
 
