@@ -50,8 +50,8 @@ sudo ops/install/install.sh --update
 ## Was das Skript tut
 
 1. Prueft Root-Rechte und erkennt das Betriebssystem.
-2. Prueft freien Speicherplatz, Ports 80/443, bereits laufendes
-   nginx/PostgreSQL.
+2. Prueft freien Speicherplatz, die konfigurierten Ports (Standard 80/443,
+   umstellbar), bereits laufendes nginx/PostgreSQL.
 3. Installiert Node.js 24.x (NodeSource-Repository), aktiviert `pnpm` ueber
    Corepack, installiert PostgreSQL, nginx, certbot und PM2 — jeweils mit
    Pruefung, ob eine passende Version bereits vorhanden ist. Fuer PostgreSQL
@@ -137,6 +137,25 @@ Klartext protokolliert.
 - `pnpm --filter @workspace/db migrate` setzt einen entsprechenden
   Migrationsbefehl in `lib/db/package.json` voraus (R1); ist er noch nicht
   vorhanden, bricht Schritt 7 mit einer erklaerenden Meldung ab.
+
+## Ports
+
+Standard: HTTP 80, HTTPS 443, Backend 3002. Sind 80/443 auf einem Server
+bereits belegt (z. B. geteilte Server), freie Ports waehlen:
+
+```sh
+sudo ops/install/install.sh --http-port 8080 --https-port 8443
+```
+
+Oder per Umgebung: `SCHULSANI_HTTP_PORT`, `SCHULSANI_HTTPS_PORT`,
+`SCHULSANI_BACKEND_PORT`, `SCHULSANI_ASSISTANT_PORT`. Im Einrichtungsassistenten
+traegt die Domain dann den HTTPS-Port mit: `sani.beispielschule.de:8443`
+(ohne Port bleibt es bei 443). Bei einem benutzerdefinierten HTTPS-Port holt
+`install.sh` das Zertifikat ueber `certbot --standalone --http-01-port` und
+haengt den TLS-Server-Block selbst an; der HTTP-Port leitet dann auf HTTPS
+um. Ist die Zertifikatsbeschaffung nicht moeglich (z. B. Port von aussen
+gesperrt), bleibt die Seite ueber den HTTP-Port erreichbar und `install.sh`
+gibt die Hand-Anweisung aus, statt abzubrechen.
 
 ## Prinzipien und Pflege
 
