@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import * as Crypto from "expo-crypto";
 import * as Linking from "expo-linking";
 import { router } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
@@ -30,7 +31,18 @@ import type { AppTheme } from "@/models";
 // Symbol und Farbe je Anbieter, im Client abgeleitet -- der Server liefert nur
 // Schluessel und Typ, keine Gestaltung. Google, Microsoft und Apple bekommen
 // ihr eigenes Zeichen; alles andere ein neutrales nach Typ. Apples Knopf folgt
-// den Human Interface Guidelines erst in Stueck 3, die Zuordnung entsteht hier.
+// den Human Interface Guidelines, die Zuordnung entsteht hier.
+async function createHandoffVerifier(): Promise<string> {
+  const bytes = await Crypto.getRandomBytesAsync(32);
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function createHandoffChallenge(verifier: string): Promise<string> {
+  return Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, verifier, {
+    encoding: Crypto.CryptoEncoding.HEX,
+  });
+}
+
 function providerVisual(provider: AuthProviderInfo): { icon: keyof typeof Ionicons.glyphMap; color: string } {
   switch (provider.key) {
     case "google":
@@ -85,13 +97,12 @@ export default function LoginScreen() {
         setProviders(list);
         if (list.length === 1) setSelectedProvider(list[0]);
       } catch {
-        // Netzfehler beim Start: auf die IServ-Formularroute ausweichen,
-        // damit das Formular nicht leer bleibt. Ohne IServ in der
-        // Installation hilft nur ein Reload -- der Abruf war schon gestoert.
+        // Kein stiller Rueckfall auf IServ: sonst wuerde das Formular Zugangsdaten
+        // an einen Anbieter schicken, den die Installation nicht bestaetigt hat.
         if (cancelled) return;
         setProvidersFailed(true);
         setProviders([]);
-        setSelectedProvider({ key: "iserv-form", displayName: "", type: "iserv-form" });
+        setSelectedProvider(null);
       }
     })();
     return () => {
@@ -152,24 +163,27 @@ export default function LoginScreen() {
   async function handleRedirect(provider: AuthProviderInfo) {
     setRedirectError("");
     setRedirecting(true);
-    const startUrl = ApiService.getProviderStartUrl(provider.key);
-
-    if (Platform.OS === "web") {
-      // Gewoehnlicher Seitenwechsel: der Server setzt das Sitzungscookie und
-      // leitet auf die App-URL zurueck. Beim naechsten Laden holt _layout.tsx
-      // die Sitzung wie gehabt ueber restoreSession() -- kein weiterer Code
-      // noetig, das Cookie liegt schon im selben Browser.
-      window.location.href = startUrl;
-      return;
-    }
 
     try {
+      const returnUrl = Platform.OS === "web" ? undefined : Linking.createURL("login");
+      const handoffVerifier = Platform.OS === "web" ? undefined : await createHandoffVerifier();
+      const handoffChallenge = handoffVerifier ? await createHandoffChallenge(handoffVerifier) : undefined;
+      const startUrl = ApiService.getProviderStartUrl(provider.key, returnUrl, handoffChallenge);
+
+      if (Platform.OS === "web") {
+        // Gewoehnlicher Seitenwechsel: der Server setzt das Sitzungscookie und
+        // leitet auf die App-URL zurueck. Beim naechsten Laden holt _layout.tsx
+        // die Sitzung wie gehabt ueber restoreSession() -- kein weiterer Code
+        // noetig, das Cookie liegt schon im selben Browser.
+        window.location.href = startUrl;
+        return;
+      }
+
       // Ruecksprung nativ ueber expo-web-browser: die App oeffnet den
       // Anmeldedialog im Systembrowser und erhaelt die Kontrolle zurueck,
       // sobald dieser auf die App-URL (expo-linking) weiterleitet oder
       // geschlossen wird.
-      const returnUrl = Linking.createURL("login");
-      const result = await WebBrowser.openAuthSessionAsync(startUrl, returnUrl);
+      const result = await WebBrowser.openAuthSessionAsync(startUrl, returnUrl!);
       if (result.type !== "success") {
         setRedirecting(false);
         if (result.type !== "cancel" && result.type !== "dismiss") {
@@ -178,7 +192,9 @@ export default function LoginScreen() {
         return;
       }
 
-      const restored = await ApiService.restoreSession();
+      const callbackUrl = result.url ? Linking.parse(result.url) : null;
+      const handoffCode = typeof callbackUrl?.queryParams?.code === "string" ? callbackUrl.queryParams.code : null;
+      const restored = handoffCode && handoffVerifier ? await ApiService.exchangeNativeSession(handoffCode, handoffVerifier) : null;
       setRedirecting(false);
       if (!restored) {
         setRedirectError(t("auth.redirectFailed", lang));
