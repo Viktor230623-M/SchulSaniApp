@@ -6,8 +6,8 @@
 // Wird von ops/install/install.sh am Ende des Systemteils gestartet, laeuft
 // nur so lange, wie die Einrichtung dauert, und beendet sich danach selbst.
 //
-// Bewusst ohne npm-Abhaengigkeiten: zum Zeitpunkt des Aufrufs ist noch kein
-// "pnpm install" im Workspace gelaufen. Nur eingebaute Node-Module.
+// Der Systemteil installiert den Workspace vor dem Assistenten, damit lokale
+// Konten beim Bootstrap denselben bcrypt-Adapter wie der Server verwenden.
 
 const http = require("node:http");
 const crypto = require("node:crypto");
@@ -38,6 +38,8 @@ if (!TOKEN || !PORT || !STATE_FILE || !APP_ROOT || !DATABASE_URL) {
 
 const BACKEND_ENV_PATH = path.join(APP_ROOT, "artifacts", "api-server", ".env");
 const APP_ENV_PATH = path.join(APP_ROOT, "artifacts", "paramedic-app", ".env");
+const AUTH_PROVIDERS_PATH = process.env.SCHULSANI_AUTH_PROVIDERS_PATH || "/etc/schulsani/auth-providers.json";
+const TEMP_SECRET_FILE = path.join(path.dirname(STATE_FILE), "secrets.json");
 
 // --- Protokoll ---------------------------------------------------------
 
@@ -80,6 +82,11 @@ function saveState(state) {
 
 let state = loadState();
 let pendingProviderClientSecret = "";
+let pendingProviderSecrets = {};
+let pendingSmtpPassword = "";
+let pendingOwnerPassword = "";
+let pendingOwnerEmail = "";
+let pendingOwnerSubject = "";
 if (state.config && !state.config.ownerAccountId) {
   state.config.ownerAccountId = crypto.randomUUID();
 }
@@ -88,6 +95,7 @@ if (typeof state.config?.providerClientSecret === "string") {
   delete state.config.providerClientSecret;
   saveState(state);
 }
+loadPendingSecrets();
 
 // --- Hilfsfunktionen: Validierung (spiegelt config.ts / app.config.ts) --
 
@@ -96,6 +104,71 @@ const BUNDLE_ID_RE = /^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)+$/;
 const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 const IDENTIFIER_RE = /^[a-z0-9][a-z0-9._-]{1,63}$/i;
 const SCHOOL_ID_RE = /^[a-z0-9_-]{1,40}$/i;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const SMTP_HOST_RE = /^(?:[a-z0-9][a-z0-9.-]{0,253}|\[?[0-9a-f:]+\]?)$/i;
+const SCHULSANI_PRIVATE_DIR = "/etc/schulsani/";
+const INSTALLER_ROLE_KEYS = new Set(["owner", "admin", "sanitaeter_leitung_admin", "sanitaeter_leitung", "teacher", "sanitaeter"]);
+const SMTP_PASSWORD_MAX_LENGTH = 1000;
+const LOCAL_PASSWORD_MIN_LENGTH = 10;
+
+function hashLocalPassword(password) {
+  try {
+    const bcrypt = require(path.join(APP_ROOT, "artifacts", "api-server", "node_modules", "bcryptjs"));
+    return bcrypt.hashSync(password, 12);
+  } catch {
+    throw new Error("bcryptjs fehlt. Vor dem Assistenten muss pnpm install erfolgreich laufen.");
+  }
+}
+
+function envLine(name, value) {
+  if (hasControlCharacter(value)) throw new Error(`${name} enthaelt unzulaessige Steuerzeichen`);
+  const text = String(value);
+  if (text === "") return `${name}=""`;
+  if (/^[A-Za-z0-9_./:@+,-]+$/.test(text)) return `${name}=${text}`;
+  return `${name}="${text.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+function validEmail(value) {
+  return EMAIL_RE.test(value) && value.length <= 254;
+}
+
+function smtpConfigValid(cfg) {
+  if (!cfg.smtpHost || !cfg.smtpPort || !cfg.mailFrom) return false;
+  return !(cfg.smtpUser && !cfg.smtpPassword) && !(!cfg.smtpUser && cfg.smtpPassword);
+}
+
+function loadPendingSecrets() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(TEMP_SECRET_FILE, "utf-8"));
+    pendingProviderClientSecret = typeof parsed.providerClientSecret === "string" ? parsed.providerClientSecret : "";
+    pendingProviderSecrets = parsed.providerSecrets && typeof parsed.providerSecrets === "object" ? parsed.providerSecrets : {};
+    pendingSmtpPassword = typeof parsed.smtpPassword === "string" ? parsed.smtpPassword : "";
+    pendingOwnerEmail = typeof parsed.ownerEmail === "string" ? parsed.ownerEmail : "";
+    pendingOwnerPassword = typeof parsed.ownerPassword === "string" ? parsed.ownerPassword : "";
+    pendingOwnerSubject = typeof parsed.ownerSubject === "string" ? parsed.ownerSubject : "";
+  } catch {
+    // Keine gespeicherten Eingaben: der Assistent fragt die Geheimnisse erneut ab.
+  }
+}
+
+function savePendingSecrets() {
+  if (!pendingProviderClientSecret && !pendingSmtpPassword && !pendingOwnerPassword && Object.keys(pendingProviderSecrets).length === 0) return;
+  writeSecretFile(TEMP_SECRET_FILE, JSON.stringify({ providerClientSecret: pendingProviderClientSecret, providerSecrets: pendingProviderSecrets, smtpPassword: pendingSmtpPassword, ownerEmail: pendingOwnerEmail, ownerPassword: pendingOwnerPassword, ownerSubject: pendingOwnerSubject }));
+}
+
+function clearPendingSecrets() {
+  fs.rmSync(TEMP_SECRET_FILE, { force: true });
+  pendingProviderClientSecret = "";
+  pendingProviderSecrets = {};
+  pendingSmtpPassword = "";
+  pendingOwnerEmail = "";
+  pendingOwnerPassword = "";
+  pendingOwnerSubject = "";
+}
+
+function authModeIsLocal(cfg) {
+  return cfg.authMode === "local" || cfg.authMode === "local+oidc";
+}
 
 function trimOrEmpty(v) {
   return typeof v === "string" ? v.trim() : "";
@@ -105,9 +178,87 @@ function hasControlCharacter(value) {
   return /[\u0000-\u001f\u007f]/.test(value);
 }
 
+function providerFieldName(prefix, name) {
+  return prefix ? `provider2${name[0].toUpperCase()}${name.slice(1)}` : `provider${name[0].toUpperCase()}${name.slice(1)}`;
+}
+
+function readProviderOptions(body, prefix, errors, issuerUrl) {
+  const value = (name) => trimOrEmpty(body[providerFieldName(prefix, name)]);
+  const options = {
+    allowedHostedDomains: value("allowedHostedDomains")
+      .split(",")
+      .map((domain) => domain.trim().toLowerCase())
+      .filter(Boolean),
+    scopes: (value("scopes") || "openid email profile")
+      .split(/[\s,]+/)
+      .map((scope) => scope.trim())
+      .filter(Boolean),
+    groupsClaim: value("groupsClaim") || "groups",
+    groupToRoleMap: {},
+    clientSecretMode: value("clientSecretMode") || "static",
+    appleTeamId: value("appleTeamId"),
+    appleKeyId: value("appleKeyId"),
+    applePrivateKeyPath: value("applePrivateKeyPath"),
+    responseMode: value("responseMode") || "query",
+  };
+  const mapText = value("groupToRoleMap");
+  const prefixName = prefix ? "des zweiten Anbieters" : "des Anbieters";
+
+  if (options.allowedHostedDomains.length > 20 || options.allowedHostedDomains.some((domain) => !DOMAIN_RE.test(domain))) {
+    errors[providerFieldName(prefix, "allowedHostedDomains")] = `Hosted-Domains ${prefixName} sind ungueltig.`;
+  }
+  if (!options.scopes.length || options.scopes.length > 20 || options.scopes.some((scope) => !/^[A-Za-z0-9._:-]{1,64}$/.test(scope))) {
+    errors[providerFieldName(prefix, "scopes")] = `Scopes ${prefixName} sind ungueltig.`;
+  }
+  if (!/^[A-Za-z][A-Za-z0-9_.-]{0,63}$/.test(options.groupsClaim)) {
+    errors[providerFieldName(prefix, "groupsClaim")] = `Gruppen-Claim ${prefixName} ist ungueltig.`;
+  }
+  if (mapText) {
+    for (const line of mapText.split(/\\r?\\n/).map((entry) => entry.trim()).filter(Boolean)) {
+      const separator = line.indexOf("=");
+      const group = separator === -1 ? "" : line.slice(0, separator).trim();
+      const role = separator === -1 ? "" : line.slice(separator + 1).trim();
+      if (!group || !role || group.length > 120 || role.length > 80 || !INSTALLER_ROLE_KEYS.has(role) || hasControlCharacter(line)) {
+        errors[providerFieldName(prefix, "groupToRoleMap")] = `Gruppen-Zuordnung ${prefixName} ist ungueltig.`;
+        break;
+      }
+      options.groupToRoleMap[group] = role;
+    }
+    if (Object.keys(options.groupToRoleMap).length > 50) {
+      errors[providerFieldName(prefix, "groupToRoleMap")] = `Gruppen-Zuordnung ${prefixName} enthaelt zu viele Eintraege.`;
+    }
+  }
+  if (!["static", "apple-jwt"].includes(options.clientSecretMode)) {
+    errors[providerFieldName(prefix, "clientSecretMode")] = `Secret-Modus ${prefixName} ist ungueltig.`;
+  }
+  if (!["query", "form_post"].includes(options.responseMode)) {
+    errors[providerFieldName(prefix, "responseMode")] = `Antwortmodus ${prefixName} ist ungueltig.`;
+  }
+  const apple = issuerUrl === "https://appleid.apple.com";
+  if (apple && options.clientSecretMode !== "apple-jwt") {
+    errors[providerFieldName(prefix, "clientSecretMode")] = "Apple braucht den Secret-Modus Apple-JWT.";
+  }
+  if (options.clientSecretMode === "apple-jwt") {
+    if (!apple || !options.appleTeamId || !options.appleKeyId || !options.applePrivateKeyPath || path.resolve(options.applePrivateKeyPath).indexOf("/etc/schulsani/") !== 0) {
+      errors[providerFieldName(prefix, "appleTeamId")] = `Apple-JWT-Konfiguration ${prefixName} ist unvollstaendig.`;
+    }
+    if (options.appleTeamId.length > 32 || options.appleKeyId.length > 32 || options.applePrivateKeyPath.length > 500 || hasControlCharacter(options.appleTeamId) || hasControlCharacter(options.appleKeyId) || hasControlCharacter(options.applePrivateKeyPath)) {
+      errors[providerFieldName(prefix, "applePrivateKeyPath")] = `Apple-JWT-Konfiguration ${prefixName} ist ungueltig.`;
+    }
+  }
+  return options;
+}
+
 function validateConfig(body) {
   const errors = {};
   const out = {};
+
+  out.authMode = trimOrEmpty(body.authMode).toLowerCase() || "local";
+  if (!["local", "oidc", "local+oidc"].includes(out.authMode)) {
+    errors.authMode = "Bitte E-Mail, OIDC oder E-Mail mit OIDC auswaehlen.";
+  }
+  const usesLocal = out.authMode === "local" || out.authMode === "local+oidc";
+  const usesOidc = out.authMode === "oidc" || out.authMode === "local+oidc";
 
   out.schoolName = trimOrEmpty(body.schoolName);
   if (!out.schoolName || out.schoolName.length > 120 || hasControlCharacter(out.schoolName)) {
@@ -119,32 +270,76 @@ function validateConfig(body) {
     errors.domain = 'Das ist keine gueltige Domain (Beispiel: sani.beispielschule.de), ohne "https://".';
   }
 
-  out.providerKey = trimOrEmpty(body.providerKey).toLowerCase();
+  out.providerKey = usesOidc ? trimOrEmpty(body.providerKey).toLowerCase() : "local";
   if (!IDENTIFIER_RE.test(out.providerKey)) {
     errors.providerKey = "Nur eine kurze Kennung aus Buchstaben, Ziffern, Punkt, Bindestrich und Unterstrich.";
   }
 
-  out.providerDisplayName = trimOrEmpty(body.providerDisplayName);
+  out.providerDisplayName = usesOidc ? trimOrEmpty(body.providerDisplayName) : "E-Mail";
   if (!out.providerDisplayName || out.providerDisplayName.length > 80 || hasControlCharacter(out.providerDisplayName)) {
     errors.providerDisplayName = "Bitte einen Anzeigenamen zwischen 1 und 80 Zeichen ohne Steuerzeichen angeben.";
   }
 
   out.providerIssuerUrl = trimOrEmpty(body.providerIssuerUrl).replace(/\/$/, "");
-  try {
-    const issuer = new URL(out.providerIssuerUrl);
-    if (issuer.protocol !== "https:" || issuer.username || issuer.password || issuer.search || issuer.hash) throw new Error();
-  } catch {
-    errors.providerIssuerUrl = "Bitte eine gueltige HTTPS-Issuer-URL ohne Zugangsdaten angeben.";
+  if (usesOidc) {
+    try {
+      const issuer = new URL(out.providerIssuerUrl);
+      if (issuer.protocol !== "https:" || issuer.username || issuer.password || issuer.search || issuer.hash) throw new Error();
+    } catch {
+      errors.providerIssuerUrl = "Bitte eine gueltige HTTPS-Issuer-URL ohne Zugangsdaten angeben.";
+    }
+  } else {
+    out.providerIssuerUrl = "";
   }
 
   out.providerClientId = trimOrEmpty(body.providerClientId);
-  if (!out.providerClientId || out.providerClientId.length > 300 || hasControlCharacter(out.providerClientId)) {
+  if (usesOidc && (!out.providerClientId || out.providerClientId.length > 300 || hasControlCharacter(out.providerClientId))) {
     errors.providerClientId = "Bitte eine Client-ID ohne Steuerzeichen angeben.";
   }
+  if (!usesOidc) out.providerClientId = "";
 
-  out.providerClientSecret = trimOrEmpty(body.providerClientSecret);
-  if (out.providerClientSecret.length > 1000) {
-    errors.providerClientSecret = "Client-Secret ist zu lang.";
+  out.providerClientSecret = typeof body.providerClientSecret === "string" ? body.providerClientSecret : "";
+  if (out.providerClientSecret.length > 1000 || hasControlCharacter(out.providerClientSecret)) {
+    errors.providerClientSecret = "Client-Secret ist zu lang oder enthaelt unzulaessige Zeichen.";
+  }
+  if (!usesOidc) out.providerClientSecret = "";
+
+  out.smtpHost = trimOrEmpty(body.smtpHost);
+  if (usesLocal && (!SMTP_HOST_RE.test(out.smtpHost) || out.smtpHost.includes(".."))) {
+    errors.smtpHost = "Bitte den Hostnamen oder die IP-Adresse des SMTP-Servers angeben.";
+  }
+
+  const smtpPortText = trimOrEmpty(body.smtpPort) || "587";
+  const smtpPort = Number(smtpPortText);
+  out.smtpPort = String(smtpPort);
+  if (!Number.isInteger(smtpPort) || smtpPort < 1 || smtpPort > 65535) {
+    errors.smtpPort = "Bitte einen SMTP-Port zwischen 1 und 65535 angeben.";
+  }
+
+  out.smtpUser = trimOrEmpty(body.smtpUser);
+  out.smtpPassword = typeof body.smtpPassword === "string" ? body.smtpPassword : "";
+  if (out.smtpUser.length > 254 || hasControlCharacter(out.smtpUser)) {
+    errors.smtpUser = "SMTP-Benutzername ist ungueltig.";
+  }
+  if (out.smtpPassword.length > SMTP_PASSWORD_MAX_LENGTH || hasControlCharacter(out.smtpPassword)) {
+    errors.smtpPassword = "SMTP-Passwort ist zu lang oder enthaelt unzulaessige Zeichen.";
+  }
+  if ((out.smtpUser && !out.smtpPassword) || (!out.smtpUser && out.smtpPassword)) {
+    errors.smtpPassword = "SMTP-Benutzername und Passwort muessen gemeinsam gesetzt werden.";
+  }
+
+  out.smtpSecure = body.smtpSecure === true || trimOrEmpty(body.smtpSecure).toLowerCase() === "true";
+  out.mailFrom = trimOrEmpty(body.mailFrom).toLowerCase();
+  if (usesLocal && !validEmail(out.mailFrom)) {
+    errors.mailFrom = "Bitte eine gueltige Absender-E-Mail-Adresse angeben.";
+  }
+  if (out.mailFrom.length > 254 || hasControlCharacter(out.mailFrom)) {
+    errors.mailFrom = "Absender-E-Mail-Adresse ist ungueltig.";
+  }
+
+  out.mailFromName = trimOrEmpty(body.mailFromName);
+  if (out.mailFromName.length > 120 || hasControlCharacter(out.mailFromName)) {
+    errors.mailFromName = "Absendername ist zu lang oder enthaelt unzulaessige Zeichen.";
   }
 
   out.appName = trimOrEmpty(body.appName);
@@ -180,16 +375,69 @@ function validateConfig(body) {
     out.vapidSubject = `mailto:admin@${out.domain || "beispielschule.de"}`;
   }
   out.ownerAccountId = out.ownerUserId || crypto.randomUUID();
+  const primaryOptions = usesOidc ? readProviderOptions(body, "", errors, out.providerIssuerUrl) : null;
+  out.providers = usesOidc ? [{
+    key: out.providerKey,
+    displayName: out.providerDisplayName,
+    issuerUrl: out.providerIssuerUrl,
+    clientId: out.providerClientId,
+    clientSecret: out.providerClientSecret,
+    ...(primaryOptions || {}),
+  }] : [];
+  const secondKey = trimOrEmpty(body.provider2Key).toLowerCase();
+  const secondDisplayName = trimOrEmpty(body.provider2DisplayName);
+  const secondIssuerUrl = trimOrEmpty(body.provider2IssuerUrl).replace(/\/$/, "");
+  const secondClientId = trimOrEmpty(body.provider2ClientId);
+  const secondClientSecret = typeof body.provider2ClientSecret === "string" ? body.provider2ClientSecret : "";
+  if (secondClientSecret.length > 1000 || hasControlCharacter(secondClientSecret)) errors.provider2ClientSecret = "Client-Secret des zweiten Anbieters ist zu lang oder enthaelt unzulaessige Zeichen.";
+  const secondPresent = secondKey || secondDisplayName || secondIssuerUrl || secondClientId || secondClientSecret;
+  const secondOptions = secondPresent ? readProviderOptions(body, "2", errors, secondIssuerUrl) : null;
+  if (secondPresent) {
+    let secondValid =
+      IDENTIFIER_RE.test(secondKey) &&
+      secondDisplayName.length > 0 &&
+      secondDisplayName.length <= 80 &&
+      !hasControlCharacter(secondDisplayName) &&
+      secondClientId.length > 0 &&
+      secondClientId.length <= 300 &&
+      !hasControlCharacter(secondClientId);
+    try {
+      const issuer = new URL(secondIssuerUrl);
+      secondValid = secondValid && issuer.protocol === "https:" && !issuer.username && !issuer.password && !issuer.search && !issuer.hash;
+    } catch {
+      secondValid = false;
+    }
+    if (hasControlCharacter(secondKey) || hasControlCharacter(secondIssuerUrl)) secondValid = false;
+    if (!secondValid) errors.provider2Key = "Zweiter OIDC-Anbieter ist unvollstaendig oder ungueltig.";
+    if (secondValid) out.providers.push({ key: secondKey, displayName: secondDisplayName, issuerUrl: secondIssuerUrl, clientId: secondClientId, clientSecret: secondClientSecret, ...(secondOptions || {}) });
+  }
+  if (new Set(out.providers.map((provider) => provider.key)).size !== out.providers.length) {
+    errors.providerKey = "Anbieter-Kennungen muessen eindeutig sein.";
+  }
+  out.ownerProviderKey = usesLocal ? "local" : out.providerKey;
 
   return { out, errors };
 }
 
-function validateAdmin(body) {
+function validateAdmin(body, cfg) {
   const errors = {};
   const out = {};
-  out.externalSubject = trimOrEmpty(body.externalSubject);
-  if (!out.externalSubject || out.externalSubject.length > 300) {
-    errors.externalSubject = "Bitte den stabilen sub-Wert des OIDC-Anbieters angeben.";
+  if (authModeIsLocal(cfg)) {
+    out.ownerEmail = trimOrEmpty(body.ownerEmail).toLowerCase();
+    if (!validEmail(out.ownerEmail)) errors.ownerEmail = "Bitte eine gueltige E-Mail-Adresse angeben.";
+    out.ownerPassword = typeof body.ownerPassword === "string" ? body.ownerPassword : "";
+    out.ownerPasswordConfirm = typeof body.ownerPasswordConfirm === "string" ? body.ownerPasswordConfirm : "";
+    if (out.ownerPassword.length < LOCAL_PASSWORD_MIN_LENGTH || out.ownerPassword.length > 200) {
+      errors.ownerPassword = `Passwort muss zwischen ${LOCAL_PASSWORD_MIN_LENGTH} und 200 Zeichen lang sein.`;
+    }
+    if (out.ownerPassword !== out.ownerPasswordConfirm) {
+      errors.ownerPasswordConfirm = "Passwoerter stimmen nicht ueberein.";
+    }
+  } else {
+    out.externalSubject = trimOrEmpty(body.externalSubject);
+    if (!out.externalSubject || out.externalSubject.length > 300) {
+      errors.externalSubject = "Bitte den stabilen sub-Wert des OIDC-Anbieters angeben.";
+    }
   }
   return { out, errors };
 }
@@ -220,6 +468,14 @@ function generateVapidKeyPair() {
 
 // --- .env-Dateien lesen/schreiben ----------------------------------------
 
+function parseEnvValue(value) {
+  const text = value.trim();
+  if (text.length >= 2 && text.startsWith('"') && text.endsWith('"')) {
+    return text.slice(1, -1).replace(/\\\\/g, "\\").replace(/\\"/g, '"');
+  }
+  return text;
+}
+
 function parseEnvFile(filePath) {
   const result = {};
   if (!fs.existsSync(filePath)) return result;
@@ -229,7 +485,7 @@ function parseEnvFile(filePath) {
     if (!line || line.startsWith("#")) continue;
     const idx = line.indexOf("=");
     if (idx === -1) continue;
-    result[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
+    result[line.slice(0, idx).trim()] = parseEnvValue(line.slice(idx + 1));
   }
   return result;
 }
@@ -246,18 +502,27 @@ function buildBackendEnv(cfg, secrets) {
   const allowedOrigins = `https://${cfg.domain}`;
   return [
     "# Automatisch vom Einrichtungsassistenten erzeugt.",
-    `DATABASE_URL=${DATABASE_URL}`,
+    envLine("DATABASE_URL", DATABASE_URL),
     "PORT=3002",
-    `JWT_SECRET=${secrets.jwtSecret}`,
+    envLine("JWT_SECRET", secrets.jwtSecret),
     "NODE_ENV=production",
-    `ALLOWED_ORIGINS=${allowedOrigins}`,
-    `AUTH_PROVIDERS_PATH=/etc/schulsani/auth-providers.json`,
-    `APP_NAME=${cfg.appName}`,
-    `SCHOOL_ID=${cfg.schoolId || "school"}`,
-    `OWNER_USER_ID=${cfg.ownerUserId || ""}`,
-    `VAPID_PUBLIC_KEY=${secrets.vapidPublicKey}`,
-    `VAPID_PRIVATE_KEY=${secrets.vapidPrivateKey}`,
-    `VAPID_SUBJECT=${cfg.vapidSubject}`,
+    envLine("ALLOWED_ORIGINS", allowedOrigins),
+    "AUTH_PROVIDERS_PATH=/etc/schulsani/auth-providers.json",
+    envLine("APP_NAME", cfg.appName),
+    envLine("SCHOOL_ID", cfg.schoolId || "school"),
+    envLine("OWNER_USER_ID", cfg.ownerUserId || ""),
+    envLine("APP_BASE_URL", allowedOrigins),
+    envLine("SMTP_HOST", cfg.smtpHost),
+    envLine("SMTP_PORT", cfg.smtpPort),
+    envLine("SMTP_USER", cfg.smtpUser),
+    envLine("SMTP_PASSWORD", secrets.smtpPassword),
+    envLine("SMTP_SECURE", cfg.smtpSecure ? "true" : "false"),
+    "SMTP_REQUIRE_TLS=true",
+    envLine("MAIL_FROM", cfg.mailFrom),
+    envLine("MAIL_FROM_NAME", cfg.mailFromName),
+    envLine("VAPID_PUBLIC_KEY", secrets.vapidPublicKey),
+    envLine("VAPID_PRIVATE_KEY", secrets.vapidPrivateKey),
+    envLine("VAPID_SUBJECT", cfg.vapidSubject),
     "EXPO_ACCESS_TOKEN=",
     "LIBRETRANSLATE_URL=",
     "",
@@ -267,13 +532,13 @@ function buildBackendEnv(cfg, secrets) {
 function buildAppEnv(cfg, secrets) {
   return [
     "# Automatisch vom Einrichtungsassistenten erzeugt.",
-    `EXPO_PUBLIC_DOMAIN=${cfg.domain}`,
-    `EXPO_PUBLIC_SCHOOL_NAME=${cfg.schoolName}`,
-    `EXPO_PUBLIC_APP_NAME=${cfg.appName}`,
-    `EXPO_PUBLIC_THEME_COLOR=${cfg.themeColor}`,
-    `APP_BUNDLE_ID=${cfg.bundleId}`,
-    `EXPO_PUBLIC_OWNER_USER_ID=${cfg.ownerUserId || ""}`,
-    `EXPO_PUBLIC_VAPID_PUBLIC_KEY=${secrets.vapidPublicKey}`,
+    envLine("EXPO_PUBLIC_DOMAIN", cfg.domain),
+    envLine("EXPO_PUBLIC_SCHOOL_NAME", cfg.schoolName),
+    envLine("EXPO_PUBLIC_APP_NAME", cfg.appName),
+    envLine("EXPO_PUBLIC_THEME_COLOR", cfg.themeColor),
+    envLine("APP_BUNDLE_ID", cfg.bundleId),
+    envLine("EXPO_PUBLIC_OWNER_USER_ID", cfg.ownerUserId || ""),
+    envLine("EXPO_PUBLIC_VAPID_PUBLIC_KEY", secrets.vapidPublicKey),
     "",
   ].join("\n");
 }
@@ -301,7 +566,7 @@ function usersTableExists() {
 // hier aber nicht mehr vergeben).
 function upsertOwner(externalSubject, cfg) {
   const id = cfg.ownerAccountId;
-  const providerKey = cfg.providerKey;
+  const providerKey = cfg.ownerProviderKey || cfg.providerKey;
   const schoolIdSql = sqlQuote(cfg.schoolId || "school");
   const ownerIdSql = sqlQuote(id);
   const subjectSql = sqlQuote(externalSubject);
@@ -322,10 +587,15 @@ function upsertOwner(externalSubject, cfg) {
     throw new Error("Das OIDC-Subjekt ist bereits einem anderen Konto zugeordnet.");
   }
 
+  const local = authModeIsLocal(cfg);
+  const emailSql = local ? sqlQuote(pendingOwnerEmail) : "NULL";
+  const passwordSql = local ? sqlQuote(hashLocalPassword(pendingOwnerPassword)) : "DEFAULT";
+  const verifiedSql = local ? "now()" : "NULL";
   const userSql =
-    `INSERT INTO users (id, auth_provider, external_subject, first_name, last_name, role, school_id, is_approved, profile_confirmed_at, created_at, updated_at) ` +
-    `VALUES (${ownerIdSql}, ${providerSql}, ${subjectSql}, 'Eigentuemer', 'Konto', 'owner', ${schoolIdSql}, true, NULL, now(), now()) ` +
-    `ON CONFLICT (id) DO UPDATE SET role = 'owner', is_approved = true, updated_at = now();`;
+    `INSERT INTO users (id, auth_provider, external_subject, email, email_verified_at, password_hash, first_name, last_name, role, school_id, is_approved, profile_confirmed_at, created_at, updated_at) ` +
+    `VALUES (${ownerIdSql}, ${providerSql}, ${subjectSql}, ${emailSql}, ${verifiedSql}, ${passwordSql}, 'Eigentuemer', 'Konto', 'owner', ${schoolIdSql}, true, NULL, now(), now()) ` +
+    `ON CONFLICT (id) DO UPDATE SET auth_provider = ${providerSql}, external_subject = ${subjectSql}, ` +
+    `email = ${emailSql}, email_verified_at = ${verifiedSql}, password_hash = ${passwordSql}, role = 'owner', is_approved = true, updated_at = now();`;
   execFileSync("psql", [DATABASE_URL, "-c", userSql], { encoding: "utf-8", timeout: 15000 });
   const identitySql =
     `INSERT INTO user_identities (id, user_id, school_id, auth_provider, external_subject, last_used_at) ` +
@@ -336,7 +606,7 @@ function upsertOwner(externalSubject, cfg) {
 
 function existingProviderClientSecret(providerKey) {
   try {
-    const raw = JSON.parse(fs.readFileSync("/etc/schulsani/auth-providers.json", "utf-8"));
+    const raw = JSON.parse(fs.readFileSync(AUTH_PROVIDERS_PATH, "utf-8"));
     const existing = Array.isArray(raw) ? raw.find((entry) => entry?.key === providerKey) : null;
     return typeof existing?.clientSecret === "string" ? existing.clientSecret : "";
   } catch {
@@ -345,19 +615,49 @@ function existingProviderClientSecret(providerKey) {
 }
 
 function writeAuthProvidersFile(cfg, clientSecret) {
-  const provider = {
-    enabled: true,
-    key: cfg.providerKey,
-    displayName: cfg.providerDisplayName,
-    type: "oidc-redirect",
-    issuerUrl: cfg.providerIssuerUrl,
-    clientId: cfg.providerClientId,
-    redirectUri: `https://${cfg.domain}/api/auth/${cfg.providerKey}/callback`,
-    scopes: ["openid", "email", "profile"],
-  };
-  const secret = clientSecret || existingProviderClientSecret(cfg.providerKey);
-  if (secret) provider.clientSecret = secret;
-  writeSecretFile("/etc/schulsani/auth-providers.json", JSON.stringify([provider], null, 2) + "\\n");
+  const providers = [];
+  if (authModeIsLocal(cfg)) {
+    providers.push({ enabled: true, key: "local", displayName: "E-Mail", type: "local", schoolId: cfg.schoolId || "school" });
+  }
+  for (const entry of cfg.providers || []) {
+    const provider = {
+      enabled: true,
+      key: entry.key,
+      displayName: entry.displayName,
+      type: "oidc-redirect",
+      issuerUrl: entry.issuerUrl,
+      clientId: entry.clientId,
+      redirectUri: `https://${cfg.domain}/api/auth/${entry.key}/callback`,
+      scopes: entry.scopes || ["openid", "email", "profile"],
+      allowedHostedDomains: entry.allowedHostedDomains,
+      groupsClaim: entry.groupsClaim,
+      groupToRoleMap: entry.groupToRoleMap,
+      clientSecretMode: entry.clientSecretMode,
+      appleTeamId: entry.appleTeamId,
+      appleKeyId: entry.appleKeyId,
+      applePrivateKeyPath: entry.applePrivateKeyPath,
+      // Der native iOS-Login nennt die Bundle-ID des Apps als Zielgruppe
+      // (audience) im Identity-Token -- die kennt der Installer bereits.
+      appleNativeClientId: entry.clientSecretMode === "apple-jwt" ? cfg.bundleId : undefined,
+      responseMode: entry.responseMode,
+    };
+    const secret = pendingProviderSecrets[entry.key] || (entry.key === cfg.providerKey ? clientSecret : existingProviderClientSecret(entry.key));
+    if (secret) provider.clientSecret = secret;
+    providers.push(provider);
+  }
+  for (const entry of cfg.providers || []) {
+    if (entry.clientSecretMode !== "apple-jwt") continue;
+    const keyPath = path.resolve(entry.applePrivateKeyPath || "");
+    let realKeyPath = "";
+    try {
+      realKeyPath = fs.realpathSync(keyPath);
+      const stat = fs.statSync(realKeyPath);
+      if (!realKeyPath.startsWith(SCHULSANI_PRIVATE_DIR) || !stat.isFile() || (stat.mode & 0o077) !== 0) throw new Error();
+    } catch {
+      throw new Error(`Apple-Schluesseldatei fuer "${entry.key}" fehlt oder ist nicht privat.`);
+    }
+  }
+  writeSecretFile(AUTH_PROVIDERS_PATH, JSON.stringify(providers, null, 2) + "\n");
 }
 
 // --- HTTP-Server -----------------------------------------------------------
@@ -473,12 +773,20 @@ function publicState() {
   return {
     config: state.config
       ? {
+          authMode: state.config.authMode,
           schoolName: state.config.schoolName,
           domain: state.config.domain,
           providerKey: state.config.providerKey,
           providerDisplayName: state.config.providerDisplayName,
           providerIssuerUrl: state.config.providerIssuerUrl,
           providerClientId: state.config.providerClientId,
+          providers: (state.config.providers || []).map(({ clientSecret, ...provider }) => provider),
+          smtpHost: state.config.smtpHost,
+          smtpPort: state.config.smtpPort,
+          smtpUser: state.config.smtpUser,
+          smtpSecure: state.config.smtpSecure,
+          mailFrom: state.config.mailFrom,
+          mailFromName: state.config.mailFromName,
           appName: state.config.appName,
           themeColor: state.config.themeColor,
           bundleId: state.config.bundleId,
@@ -522,10 +830,18 @@ async function handleApi(req, res, pathname) {
     if (Object.keys(errors).length > 0) {
       return sendJson(res, 422, { ok: false, errors });
     }
-    const { providerClientSecret, ...config } = out;
+    const { providerClientSecret, smtpPassword, providers = [], ...config } = out;
+    config.providers = providers.map(({ clientSecret, ...provider }) => provider);
     config.ownerAccountId = state.config?.ownerAccountId || config.ownerAccountId || crypto.randomUUID();
     state.config = config;
-    pendingProviderClientSecret = providerClientSecret;
+    pendingProviderClientSecret = providerClientSecret || pendingProviderClientSecret;
+    const enteredProviderSecrets = Object.fromEntries(providers.filter((provider) => provider.clientSecret).map((provider) => [provider.key, provider.clientSecret]));
+    if (Object.keys(enteredProviderSecrets).length > 0) pendingProviderSecrets = enteredProviderSecrets;
+    if (smtpPassword) pendingSmtpPassword = smtpPassword;
+      pendingOwnerEmail = "";
+    pendingOwnerPassword = "";
+    pendingOwnerSubject = "";
+    savePendingSecrets();
     saveState(state);
     logLine("Konfiguration gespeichert.");
     return sendJson(res, 200, { ok: true });
@@ -550,10 +866,15 @@ async function handleApi(req, res, pathname) {
       }
       void existingApp; // App-.env wird komplett neu aus dem Backend-Stand erzeugt.
 
-      const secrets = { jwtSecret, vapidPublicKey, vapidPrivateKey };
+      const smtpPassword = pendingSmtpPassword || existingBackend.SMTP_PASSWORD || "";
+      if (authModeIsLocal(state.config) && !smtpConfigValid({ ...state.config, smtpPassword })) {
+        throw new Error("SMTP-Konfiguration fuer lokale Konten ist unvollstaendig.");
+      }
+      const secrets = { jwtSecret, vapidPublicKey, vapidPrivateKey, smtpPassword };
       writeSecretFile(BACKEND_ENV_PATH, buildBackendEnv(state.config, secrets));
       writeSecretFile(APP_ENV_PATH, buildAppEnv(state.config, secrets));
       writeAuthProvidersFile(state.config, pendingProviderClientSecret);
+      clearPendingSecrets();
 
       state.secrets = { jwtGenerated: true, vapidGenerated: true };
       saveState(state);
@@ -575,10 +896,14 @@ async function handleApi(req, res, pathname) {
     } catch {
       return sendJson(res, 400, { ok: false, errors: { _: "Anfrage konnte nicht gelesen werden." } });
     }
-    const { out, errors } = validateAdmin(body);
+    const { out, errors } = validateAdmin(body, state.config);
     if (Object.keys(errors).length > 0) {
       return sendJson(res, 422, { ok: false, errors });
     }
+    pendingOwnerEmail = out.ownerEmail || "";
+    pendingOwnerPassword = out.ownerPassword || "";
+    pendingOwnerSubject = out.externalSubject || "";
+    savePendingSecrets();
     try {
       if (!usersTableExists()) {
         return sendJson(res, 409, {
@@ -588,8 +913,8 @@ async function handleApi(req, res, pathname) {
             "Migrationen zuerst nachholen, dann diese Seite erneut aufrufen.",
         });
       }
-      upsertOwner(out.externalSubject, state.config);
-      state.admin = { created: true, username: out.externalSubject };
+      upsertOwner(authModeIsLocal(state.config) ? out.ownerEmail : out.externalSubject, state.config);
+      state.admin = { created: true, username: authModeIsLocal(state.config) ? out.ownerEmail : out.externalSubject };
       saveState(state);
       logLine(`Eigentuemer-Konto angelegt/aktualisiert (Kennung im Protokoll nicht ausgeschrieben).`);
       return sendJson(res, 200, { ok: true });
@@ -606,6 +931,7 @@ async function handleApi(req, res, pathname) {
     if (!state.config || !state.secrets.jwtGenerated || !state.admin.created) {
       return sendJson(res, 409, { ok: false, error: "Einrichtung ist noch nicht vollstaendig." });
     }
+    clearPendingSecrets();
     state.complete = true;
     state.completedAt = new Date().toISOString();
     saveState(state);

@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
 # Systemteil des SchulSani-Installers. Bringt einen frischen Debian/Ubuntu-
-# Server bis zur Betriebsbereitschaft (Pakete, Datenbank, PM2-Vorlage,
-# nginx-Vorlage). Konfiguration, Geheimnisse, Migrationen, Web-Export und
-# TLS-Beschaffung uebernimmt der Einrichtungsassistent im Browser, den
-# dieses Skript am Ende startet (folgt in einer spaeteren Ausbaustufe).
+# Server bis zum Einrichtungsassistenten; die Browseroberflaeche schreibt danach
+# den gemeinsamen Konfigurationsvertrag fuer Backend, App und Anmeldewege.
 set -euo pipefail
 
 LOG_FILE="/var/log/schulsani-install.log"
@@ -296,6 +294,20 @@ step_install_pnpm() {
   step_ok "pnpm ueber Corepack aktiviert."
 }
 
+step_install_workspace() {
+  step_start "Workspace-Abhaengigkeiten installieren"
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    step_skip "Trockenlauf — pnpm install wird nicht ausgefuehrt."
+    return 0
+  fi
+
+  local script_dir app_root
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  app_root="$(cd "${script_dir}/../.." && pwd)"
+  ( cd "$app_root" && pnpm install --frozen-lockfile )
+  step_ok "Workspace-Abhaengigkeiten installiert."
+}
+
 postgres_major_version() {
   # Ermittelt die Hauptversion des installierten Server-Pakets, nicht der
   # Client-Bibliothek — beide koennen auseinanderlaufen.
@@ -538,9 +550,15 @@ step_start_assistant() {
 # --- Hilfsfunktion: Wert aus einer .env-Datei lesen -----------------------
 
 read_env_value() {
-  local file="$1" key="$2"
+  local file="$1" key="$2" value
   [[ -f "$file" ]] || return 0
-  grep -E "^${key}=" "$file" | tail -1 | cut -d '=' -f2-
+  value="$(grep -E "^${key}=" "$file" | tail -1 | cut -d '=' -f2-)"
+  if [[ "${value:0:1}" == '"' && "${value: -1}" == '"' ]]; then
+    value="${value:1:${#value}-2}"
+    value="${value//\\\\/\\}"
+    value="${value//\\\"/\"}"
+  fi
+  printf '%s' "$value"
 }
 
 # --- Migrationslauf einbinden (Schritt 7) ----------------------------------
@@ -557,12 +575,17 @@ step_run_migrations() {
   script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   app_root="$(cd "${script_dir}/../.." && pwd)"
 
-  if [[ ! -f "${app_root}/artifacts/api-server/.env" ]]; then
-    fail_with "artifacts/api-server/.env fehlt." "Erst Konfiguration/Einrichtungsassistenten durchlaufen lassen."
+  if [[ -z "$DB_PASSWORD" ]] && [[ -r "$DB_PASSWORD_FILE" ]]; then
+    DB_PASSWORD="$(cat "$DB_PASSWORD_FILE")"
+  fi
+  if [[ -z "$DB_PASSWORD" ]]; then
+    fail_with "Datenbank-Passwort fehlt." "Schritt 'Datenbank und Rolle anlegen' erneut pruefen."
   fi
 
+  local database_url
+  database_url="postgres://${DB_ROLE}:${DB_PASSWORD}@localhost:5432/${DB_NAME}"
   set +e
-  ( cd "$app_root" && pnpm --filter @workspace/db migrate )
+  ( cd "$app_root" && DATABASE_URL="$database_url" pnpm --filter @workspace/db migrate )
   local rc=$?
   set -e
   if [[ "$rc" -ne 0 ]]; then
@@ -596,12 +619,32 @@ step_web_export() {
   # aufraeumen.
   run rm -rf /tmp/metro-cache
 
+  local expo_domain expo_school_name expo_app_name expo_theme_color expo_bundle_id expo_vapid_key
+  expo_domain="$(read_env_value "${app_dir}/.env" "EXPO_PUBLIC_DOMAIN")"
+  expo_school_name="$(read_env_value "${app_dir}/.env" "EXPO_PUBLIC_SCHOOL_NAME")"
+  expo_app_name="$(read_env_value "${app_dir}/.env" "EXPO_PUBLIC_APP_NAME")"
+  expo_theme_color="$(read_env_value "${app_dir}/.env" "EXPO_PUBLIC_THEME_COLOR")"
+  expo_bundle_id="$(read_env_value "${app_dir}/.env" "APP_BUNDLE_ID")"
+  expo_vapid_key="$(read_env_value "${app_dir}/.env" "EXPO_PUBLIC_VAPID_PUBLIC_KEY")"
   if [[ -f "${app_dir}/scripts/generate-web-assets.js" ]]; then
-    ( cd "$app_dir" && run node scripts/generate-web-assets.js )
+    ( cd "$app_dir" && \
+      EXPO_PUBLIC_DOMAIN="$expo_domain" \
+      EXPO_PUBLIC_SCHOOL_NAME="$expo_school_name" \
+      EXPO_PUBLIC_APP_NAME="$expo_app_name" \
+      EXPO_PUBLIC_THEME_COLOR="$expo_theme_color" \
+      APP_BUNDLE_ID="$expo_bundle_id" \
+      EXPO_PUBLIC_VAPID_PUBLIC_KEY="$expo_vapid_key" \
+      run node scripts/generate-web-assets.js )
   fi
-
   set +e
-  ( cd "$app_dir" && npx expo export --platform web )
+  ( cd "$app_dir" && \
+    EXPO_PUBLIC_DOMAIN="$expo_domain" \
+    EXPO_PUBLIC_SCHOOL_NAME="$expo_school_name" \
+    EXPO_PUBLIC_APP_NAME="$expo_app_name" \
+    EXPO_PUBLIC_THEME_COLOR="$expo_theme_color" \
+    APP_BUNDLE_ID="$expo_bundle_id" \
+    EXPO_PUBLIC_VAPID_PUBLIC_KEY="$expo_vapid_key" \
+    npx expo export --platform web )
   local rc=$?
   set -e
   if [[ "$rc" -ne 0 ]]; then
@@ -751,6 +794,7 @@ main() {
 
   step_install_node
   step_install_pnpm
+  step_install_workspace
   step_install_postgres
   step_install_nginx
   step_install_certbot
@@ -764,12 +808,12 @@ main() {
   printf '\n%s✔ Systemteil abgeschlossen.%s\n' "$COLOR_GREEN" "$COLOR_RESET"
   log_line "=== Systemteil abgeschlossen ==="
 
+  step_run_migrations
   step_start_assistant
 
   printf '\n%s✔ Konfiguration, Geheimnisse und Eigentuemer-Konto eingerichtet.%s\n' "$COLOR_GREEN" "$COLOR_RESET"
   log_line "=== Assistent abgeschlossen ==="
 
-  step_run_migrations
   step_web_export
   step_setup_tls
   step_start_service_and_check
