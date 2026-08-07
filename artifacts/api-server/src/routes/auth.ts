@@ -920,9 +920,32 @@ async function reconcileAccount(
     .limit(1);
 
   const userId = existing?.id ?? crypto.randomUUID();
-  const resolvedRole = existing?.role ?? (await getRoleForUser(profile.groups ?? [], providerKey, schoolId));
-  const role: UserRole = resolvedRole ?? "sanitaeter";
-  const isApproved = existing?.isApproved ?? false;
+
+  // Erster Login ohne freigeschalteten Eigentuemer: die Installation ist frisch
+  // und der Anmeldende ist der Eigentuemer. Der Web-Installer legt den
+  // Eigentuemer zwar selbst an, aber ein manuell aufgesetzter Server ohne
+  // Installer-Schritt kommt hierher. Nur ein verifizierter externer Login
+  // zaehlt; reconcileAccount laeuft ausschliesslich fuer OIDC und den nativen
+  // Apple-Login, nie fuer ein ungeprueftes lokales Konto.
+  let role: UserRole;
+  let isApproved: boolean;
+  if (existing) {
+    role = existing.role;
+    isApproved = existing.isApproved;
+  } else {
+    const [approvedOwner] = await db
+      .select({ id: usersTable.id })
+      .from(usersTable)
+      .where(and(eq(usersTable.schoolId, schoolId), eq(usersTable.role, "owner"), eq(usersTable.isApproved, true)))
+      .limit(1);
+    if (approvedOwner) {
+      role = (await getRoleForUser(profile.groups ?? [], providerKey, schoolId)) ?? "sanitaeter";
+      isApproved = false;
+    } else {
+      role = "owner";
+      isApproved = true;
+    }
+  }
 
   // Apple liefert den Namen nur beim ersten Login. Vorhandene Profildaten
   // duerfen bei einem spaeteren Ruecksprung nicht durch leere Claims ersetzt werden.
@@ -1070,6 +1093,14 @@ async function completeOidcCallback(req: import("express").Request, res: import(
     const account = await reconcileAccount(provider.key, subject, profile, schoolId);
 
     if (!account.isApproved) {
+      // Web-Flow: kein rohes JSON im Redirect-Rueckweg, sondern der
+      // Freischaltungs-Screen der App. Der native Handoff (returnTo) bleibt
+      // bei JSON: er endet in der App, die den Zustand selbst anzeigt.
+      if (!authResult.returnTo) {
+        const landing = new URL("/freischaltung-warten?via=oidc", config.allowedOrigins[0] ?? "http://localhost");
+        res.redirect(landing.toString());
+        return;
+      }
       res.status(403).json({ error: "Dein Account wartet auf Freischaltung durch einen Administrator." });
       return;
     }
