@@ -40,6 +40,10 @@
       --input-border: #2E2E2E;
       --shadow: rgba(0, 0, 0, 0.4);
     }
+    /* Im dunklen Thema ist der Chevron nicht hell genug auf der dunklen Flaeche. */
+    .field select {
+      background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%239CA3AF' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    }
   }
   * { box-sizing: border-box; }
   html, body { height: 100%; }
@@ -114,8 +118,6 @@
   .field input[type="email"],
   .field input[type="url"],
   .field input[type="password"],
-  .field input[type="color"],
-  .field select,
   .field textarea {
     width: 100%;
     font-size: 15px;
@@ -127,7 +129,32 @@
     color: var(--text);
     min-height: 44px;
   }
-  .field input:focus {
+  .field input:focus,
+  .field textarea:focus {
+    outline: 2px solid var(--tint);
+    outline-offset: 1px;
+  }
+  /* Selects bekommen einen eigenen Pfeil und eine hellere Flaeche: die native
+     Systemdarstellung wirkt auf dieser Karte grau und schwebend. */
+  .field select {
+    width: 100%;
+    font-size: 15px;
+    font-family: inherit;
+    padding: 12px 40px 12px 14px;
+    border-radius: 12px;
+    border: 1px solid var(--input-border);
+    background-color: var(--card);
+    color: var(--text);
+    min-height: 44px;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%236B7280' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 14px center;
+    cursor: pointer;
+  }
+  .field select:hover { border-color: var(--tint); }
+  .field select:focus {
     outline: 2px solid var(--tint);
     outline-offset: 1px;
   }
@@ -147,10 +174,6 @@
   }
   .field.invalid .error { display: flex; }
   .field.invalid input { border-color: var(--danger); }
-  .color-row { display: flex; gap: 10px; align-items: center; }
-  .color-row input[type="color"] { width: 56px; padding: 4px; flex: 0 0 auto; }
-  .color-row input[type="text"] { flex: 1; }
-
   .actions { display: flex; gap: 10px; margin-top: 8px; }
   button {
     font-family: inherit;
