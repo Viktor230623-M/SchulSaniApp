@@ -6,6 +6,7 @@ import { dirname, resolve } from "node:path";
 import type { Express } from "express";
 
 const hier = dirname(fileURLToPath(import.meta.url));
+const { activeUserId } = vi.hoisted(() => ({ activeUserId: { value: "nutzer-local-1" } }));
 
 interface FakeUserRow {
   id: string;
@@ -24,9 +25,20 @@ interface FakeUserRow {
   passwordVersion: number;
   authProvider: string;
   externalSubject: string;
+  createdAt: Date;
+  lastUsedAt: Date | null;
+}
+
+interface FakeIdentityRow {
+  id: string;
+  userId: string;
+  authProvider: string;
+  createdAt: Date;
+  lastUsedAt: Date | null;
 }
 
 let fakeUsers: FakeUserRow[] = [];
+let fakeIdentities: FakeIdentityRow[] = [];
 
 vi.mock("@workspace/db", async () => {
   // Der Login liest und schreibt Nutzerzeilen, und die Suche filtert echt
@@ -60,6 +72,7 @@ vi.mock("@workspace/db", async () => {
     authProvider: text("auth_provider"),
     externalSubject: text("external_subject"),
     emailAtLink: text("email_at_link"),
+    createdAt: text("created_at"),
     lastUsedAt: text("last_used_at"),
   });
 
@@ -76,23 +89,42 @@ vi.mock("@workspace/db", async () => {
     return { [Symbol.toStringTag]: name } as any;
   }
 
-  function makeSelectChain(): any {
-    let selectsUsers = false;
+  function makeSelectChain(projection: any): any {
+    let source: "users" | "identities" | "other" = "other";
     const chain: any = {
-      from: (t: any) => { selectsUsers = t === usersTableMock || t === userIdentitiesTableMock; return chain; },
+      from: (t: any) => {
+        source = t === userIdentitiesTableMock ? "identities" : t === usersTableMock ? "users" : "other";
+        return chain;
+      },
       innerJoin: () => chain,
       where: () => chain,
       limit: () => chain,
       then: (onFulfilled: any, onRejected?: any) =>
-        Promise.resolve(selectsUsers ? fakeUsers.map((user) => ({ ...user, identityId: `primary-${user.id}`, user, identity: { externalSubject: user.externalSubject } })) : []).then(onFulfilled, onRejected),
+        Promise.resolve(source === "identities" && projection?.providerKey ? fakeIdentities.filter((identity) => identity.userId === activeUserId.value).map((identity) => ({ ...identity, providerKey: identity.authProvider })) : source === "users" || source === "identities" ? fakeUsers.map((user) => ({
+          ...user,
+          identityId: `primary-${user.id}`,
+          providerKey: user.authProvider,
+          createdAt: user.createdAt,
+          lastUsedAt: user.lastUsedAt,
+          user,
+          identity: { externalSubject: user.externalSubject },
+        })) : []).then(onFulfilled, onRejected),
       catch: (onRejected: any) =>
-        Promise.resolve(selectsUsers ? fakeUsers.map((user) => ({ ...user, identityId: `primary-${user.id}`, user, identity: { externalSubject: user.externalSubject } })) : []).catch(onRejected),
+        Promise.resolve(source === "identities" && projection?.providerKey ? fakeIdentities.filter((identity) => identity.userId === activeUserId.value).map((identity) => ({ ...identity, providerKey: identity.authProvider })) : source === "users" || source === "identities" ? fakeUsers.map((user) => ({
+          ...user,
+          identityId: `primary-${user.id}`,
+          providerKey: user.authProvider,
+          createdAt: user.createdAt,
+          lastUsedAt: user.lastUsedAt,
+          user,
+          identity: { externalSubject: user.externalSubject },
+        })) : []).catch(onRejected),
     };
     return chain;
   }
 
   const dbMock: any = {
-    select: () => makeSelectChain(),
+    select: (projection: any) => makeSelectChain(projection),
     insert: () => ({ values: () => ({ onConflictDoUpdate: () => Promise.resolve(), onConflictDoNothing: () => Promise.resolve() }) }),
     update: () => ({ set: () => ({ where: () => ({ returning: () => Promise.resolve([]) }) }) }),
     delete: () => ({ where: () => Promise.resolve() }),
@@ -140,6 +172,24 @@ vi.mock("express-rate-limit", () => ({
   default: () => (_req: any, _res: any, next: any) => next(),
 }));
 
+vi.mock("../middlewares/auth", async () => {
+  const actual = await vi.importActual<typeof import("../middlewares/auth")>("../middlewares/auth");
+  return {
+    ...actual,
+    requireAuth: (req: any, res: any, next: any) => {
+      const token = req.headers.authorization?.startsWith("Bearer ") ? req.headers.authorization.slice(7) : "";
+      if (!token) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+      const userId = token.startsWith("user:") ? token.slice(5) : "nutzer-local-1";
+      activeUserId.value = userId;
+      req.user = { userId, role: "sanitaeter", permissions: [] };
+      next();
+    },
+  };
+});
+
 // Die Anmeldewege werden beim Import aus AUTH_PROVIDERS_PATH geladen. Die
 // Fixture hat nur lokale und OIDC-Wege -- laedt die App, beweist das schon:
 // ein Start ohne IServ bricht nicht mehr ab.
@@ -172,6 +222,8 @@ function localUser(overrides: Partial<FakeUserRow> = {}): FakeUserRow {
     passwordHash: existingUserHash,
     authProvider: "local",
     externalSubject: "mmuster",
+    createdAt: new Date("2026-08-01T10:00:00.000Z"),
+    lastUsedAt: new Date("2026-08-07T10:00:00.000Z"),
     ...overrides,
   };
 }
@@ -184,6 +236,7 @@ async function postLogin(body: Record<string, unknown>) {
 describe("Anbieterbewusster Formular-Login", () => {
   beforeEach(() => {
     fakeUsers = [];
+    fakeIdentities = [];
   });
 
   it("startet ohne iserv-form und listet die konfigurierten Wege", async () => {
@@ -191,6 +244,46 @@ describe("Anbieterbewusster Formular-Login", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.providers.map((p: { key: string }) => p.key).sort()).toEqual(["local", "oidc-beispiel"]);
+  });
+
+  it("listet nur die Identitäten des angemeldeten Kontos", async () => {
+    fakeUsers = [localUser()];
+    fakeIdentities = [
+      {
+        id: "primary-nutzer-local-1",
+        userId: "nutzer-local-1",
+        authProvider: "local",
+        createdAt: new Date("2026-08-01T10:00:00.000Z"),
+        lastUsedAt: new Date("2026-08-07T10:00:00.000Z"),
+      },
+      {
+        id: "fremde-identitaet",
+        userId: "anderes-konto",
+        authProvider: "local",
+        createdAt: new Date("2026-08-01T10:00:00.000Z"),
+        lastUsedAt: null,
+      },
+    ];
+
+    const res = await request(app)
+      .get("/api/auth/identities")
+      .set("authorization", "Bearer user:nutzer-local-1");
+
+    expect(res.status).toBe(200);
+    expect(res.body.identities).toEqual([
+      expect.objectContaining({
+        id: "primary-nutzer-local-1",
+        providerKey: "local",
+        displayName: "Schul-Konto",
+        type: "local",
+      }),
+    ]);
+  });
+
+  it("verweigert die Identitätenliste ohne Bearer-Token", async () => {
+    const res = await request(app).get("/api/auth/identities");
+
+    expect(res.status).toBe(401);
   });
 
   it("meldet ein lokales Konto ueber den providerKey an", async () => {

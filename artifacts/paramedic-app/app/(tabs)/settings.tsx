@@ -32,7 +32,7 @@ import { t } from "@/constants/i18n";
 import { getTheme, type ThemeColors } from "@/constants/theme";
 import type { AppLanguage, AppTheme, User, Mission, LOARequest } from "@/models";
 import { confirmAction, notify } from "@/lib/dialog";
-import ApiService from "@/services/ApiService";
+import ApiService, { type AuthIdentityInfo } from "@/services/ApiService";
 import { enableWebPush, webPushState } from "@/services/WebPushService";
 import { has, useAppStore } from "@/store/useAppStore";
 
@@ -63,6 +63,9 @@ export default function SettingsScreen() {
   const [pushState, setPushState] = useState<
     "unsupported" | "needs-install" | "denied" | "granted" | "default"
   >("unsupported");
+  const [identities, setIdentities] = useState<AuthIdentityInfo[]>([]);
+  const [loadingIdentities, setLoadingIdentities] = useState(false);
+  const [identityError, setIdentityError] = useState(false);
 
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
@@ -99,6 +102,23 @@ export default function SettingsScreen() {
   useEffect(() => {
     webPushState().then(setPushState);
   }, []);
+
+  async function loadIdentities() {
+    if (!user) return;
+    setLoadingIdentities(true);
+    setIdentityError(false);
+    try {
+      setIdentities(await ApiService.getAuthIdentities());
+    } catch {
+      setIdentityError(true);
+    } finally {
+      setLoadingIdentities(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadIdentities();
+  }, [user?.id]);
 
   async function handleEnableWebPush() {
     const result = await enableWebPush();
@@ -359,6 +379,68 @@ export default function SettingsScreen() {
             />
           )}
         </View>
+      </View>
+
+      <View
+        style={[styles.section, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}
+        accessibilityRole="summary"
+        accessibilityLabel={t("settings.signInMethods", lang)}
+      >
+        <View style={styles.sectionHeaderRow}>
+          <View style={styles.adminHeaderLeft}>
+            <Ionicons name="key-outline" size={16} color={theme.tint} />
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>{t("settings.signInMethods", lang)}</Text>
+          </View>
+        </View>
+        <Text style={[styles.emptyText, { color: theme.textTertiary }]}>
+          {t("settings.signInMethodsDesc", lang)}
+        </Text>
+        {loadingIdentities ? (
+          <ActivityIndicator color={theme.tint} />
+        ) : identityError ? (
+          <>
+            <Text style={[styles.emptyText, { color: theme.danger }]}>
+              {t("settings.signInMethodsFailed", lang)}
+            </Text>
+            <Pressable
+              onPress={() => void loadIdentities()}
+              accessibilityRole="button"
+              accessibilityLabel={t("settings.signInMethodsRetry", lang)}
+              style={({ pressed }) => [styles.identityRetry, { borderColor: theme.tint, opacity: pressed ? 0.7 : 1 }]}
+            >
+              <Text style={[styles.identityRetryText, { color: theme.tint }]}>{t("settings.signInMethodsRetry", lang)}</Text>
+            </Pressable>
+          </>
+        ) : identities.length === 0 ? (
+          <Text style={[styles.emptyText, { color: theme.textTertiary }]}>
+            {t("settings.signInMethodsEmpty", lang)}
+          </Text>
+        ) : (
+          identities.map((identity) => (
+            <View
+              key={identity.id}
+              style={[styles.identityRow, { borderTopColor: theme.cardBorder }]}
+              accessible
+              accessibilityLabel={`${identity.displayName}, ${t("settings.linkedOn", lang).replace("{date}", new Date(identity.createdAt).toLocaleDateString(lang === "de" ? "de-DE" : "en-US"))}`}
+            >
+              <View style={[styles.identityIcon, { backgroundColor: theme.tintLight }]}>
+                <Ionicons
+                  name={identity.type === "local" ? "lock-closed-outline" : identity.type === "oidc-redirect" ? "globe-outline" : "school-outline"}
+                  size={18}
+                  color={theme.tint}
+                  accessible={false}
+                />
+              </View>
+              <View style={styles.identityInfo}>
+                <Text style={[styles.userName, { color: theme.text }]}>{identity.displayName}</Text>
+                <Text style={[styles.userEmail, { color: theme.textTertiary }]}>
+                  {t("settings.linkedOn", lang).replace("{date}", new Date(identity.createdAt).toLocaleDateString(lang === "de" ? "de-DE" : "en-US"))}
+                </Text>
+              </View>
+              <Ionicons name="checkmark-circle" size={20} color={theme.success} />
+            </View>
+          ))
+        )}
       </View>
 
       <View style={[styles.section, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
@@ -938,6 +1020,11 @@ const styles = StyleSheet.create({
   activityRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingTop: 12, borderTopWidth: 1 },
   activityIcon: { width: 28, height: 28, borderRadius: 8, alignItems: "center", justifyContent: "center" },
   activityInfo: { flex: 1 },
+  identityRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12, borderTopWidth: StyleSheet.hairlineWidth },
+  identityIcon: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
+  identityInfo: { flex: 1, marginLeft: 10 },
+  identityRetry: { alignSelf: "center", borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 9 },
+  identityRetryText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
   activityTitle: { fontSize: 14, fontFamily: "Inter_500Medium" },
   activityDate: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
   statusBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },

@@ -25,6 +25,15 @@ export interface AuthProviderInfo {
   type: "iserv-form" | "oidc-redirect" | "local";
 }
 
+export interface AuthIdentityInfo {
+  id: string;
+  providerKey: string;
+  displayName: string;
+  type: AuthProviderInfo["type"] | "unknown";
+  createdAt: string;
+  lastUsedAt: string | null;
+}
+
 let authToken: string | null = null;
 
 export function setAuthToken(token: string | null) {
@@ -136,6 +145,13 @@ const ApiService = {
     } finally {
       clearTimeout(timeout);
     }
+  },
+
+  async getAuthIdentities(): Promise<AuthIdentityInfo[]> {
+    const resp = await apiFetch(`${API_BASE}/auth/identities`, { headers: headers() });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error ?? "Verbundene Anmeldewege konnten nicht geladen werden");
+    return Array.isArray(data.identities) ? data.identities : [];
   },
 
   /** URL des Weiterleitungsstarts eines Anmeldewegs (GET /auth/:provider/start). */
