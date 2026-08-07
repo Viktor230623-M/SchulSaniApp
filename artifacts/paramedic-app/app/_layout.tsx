@@ -90,7 +90,12 @@ function RootLayoutNav() {
         contentStyle: { backgroundColor: theme.background },
       }}
     >
-      <Stack.Protected guard={authStatus === "authed" && !needsProfileConfirmation}>
+      <Stack.Screen name="email-bestaetigen" options={{ headerShown: false }} />
+      <Stack.Screen name="passwort-zuruecksetzen" options={{ headerShown: false }} />
+      <Stack.Screen name="passwort-vergessen" options={{ headerShown: false }} />
+      <Stack.Screen name="registrieren" options={{ headerShown: false }} />
+      <Stack.Screen name="freischaltung-warten" options={{ headerShown: false }} />
+      <Stack.Protected guard={authStatus === "authed" && !needsProfileConfirmation && !mustChangePassword}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="report/index" options={{ headerShown: false }} />
         <Stack.Screen name="report/[id]" options={{ headerShown: false }} />
@@ -107,6 +112,7 @@ function RootLayoutNav() {
       </Stack.Protected>
       <Stack.Protected guard={authStatus === "anon"}>
         <Stack.Screen name="login" options={{ headerShown: false }} />
+
       </Stack.Protected>
     </Stack>
   );
@@ -133,7 +139,7 @@ export default function RootLayout() {
       <ErrorBoundary>
         <QueryClientProvider client={queryClient}>
           <GestureHandlerRootView style={{ flex: 1 }}>
-            <KeyboardProvider style={{ flex: 1 }}>
+            <KeyboardProvider>
               <RootLayoutNav />
             </KeyboardProvider>
           </GestureHandlerRootView>

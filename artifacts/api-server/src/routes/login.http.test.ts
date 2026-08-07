@@ -19,6 +19,9 @@ interface FakeUserRow {
   lastName: string | null;
   email: string | null;
   passwordHash: string;
+  emailVerifiedAt: Date | null;
+  username: string | null;
+  passwordVersion: number;
   authProvider: string;
   externalSubject: string;
 }
@@ -43,8 +46,20 @@ vi.mock("@workspace/db", async () => {
     passwordHash: text("password_hash"),
     authProvider: text("auth_provider"),
     externalSubject: text("external_subject"),
+    emailVerifiedAt: text("email_verified_at"),
+    username: text("username"),
+    passwordVersion: text("password_version"),
     mustChangePassword: text("must_change_password"),
     oneTimePasswordExpiresAt: text("one_time_password_expires_at"),
+  });
+
+  const authTokensTableMock = pgTable("auth_tokens", {
+    id: text("id"),
+    userId: text("user_id"),
+    kind: text("kind"),
+    tokenHash: text("token_hash"),
+    expiresAt: text("expires_at"),
+    usedAt: text("used_at"),
   });
 
   function createMockTable(name: string) {
@@ -78,6 +93,7 @@ vi.mock("@workspace/db", async () => {
     db: dbMock,
     pool: { query: () => Promise.resolve({ rows: [] }) },
     usersTable: usersTableMock,
+    authTokensTable: authTokensTableMock,
     newsTable: createMockTable("news"),
     loaTable: createMockTable("loa"),
     missionsTable: createMockTable("missions"),
@@ -139,6 +155,9 @@ function localUser(overrides: Partial<FakeUserRow> = {}): FakeUserRow {
     firstName: "Max",
     lastName: "Muster",
     email: "mmuster@vitest.beispiel.invalid",
+    emailVerifiedAt: new Date(),
+    username: null,
+    passwordVersion: 0,
     passwordHash: existingUserHash,
     authProvider: "local",
     externalSubject: "mmuster",

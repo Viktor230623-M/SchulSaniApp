@@ -11,6 +11,8 @@ interface FakeUserRow {
   profileConfirmedAt: Date | null;
   mustChangePassword: boolean;
   passwordHash: string;
+  oneTimePasswordExpiresAt: Date | null;
+  passwordVersion: number;
   firstName: string | null;
   lastName: string | null;
   email: string | null;
@@ -40,11 +42,13 @@ vi.mock("@workspace/db", async () => {
     schoolId: text("school_id"),
     profileConfirmedAt: text("profile_confirmed_at"),
     mustChangePassword: text("must_change_password"),
-    passwordHash: text("password_hash"),
     oneTimePasswordExpiresAt: text("one_time_password_expires_at"),
     firstName: text("first_name"),
     lastName: text("last_name"),
     email: text("email"),
+    emailVerifiedAt: text("email_verified_at"),
+    username: text("username"),
+    passwordVersion: text("password_version"),
     passwordHash: text("password_hash"),
   });
 
@@ -52,6 +56,7 @@ vi.mock("@workspace/db", async () => {
     return { [Symbol.toStringTag]: name } as any;
   }
   const profileChangeLogTableMock = createMockTable("profile_change_log");
+  const authTokensTableMock = createMockTable("auth_tokens");
 
   function makeSelectChain(): any {
     let isUsers = false;
@@ -109,6 +114,7 @@ vi.mock("@workspace/db", async () => {
     db: dbMock,
     pool: { query: () => Promise.resolve({ rows: [] }) },
     usersTable: usersTableMock,
+    authTokensTable: authTokensTableMock,
     newsTable: createMockTable("news"),
     loaTable: createMockTable("loa"),
     missionsTable: createMockTable("missions"),
@@ -153,6 +159,8 @@ function makeUser(overrides: Partial<FakeUserRow> = {}): FakeUserRow {
     schoolId: null,
     profileConfirmedAt: null,
     mustChangePassword: false,
+    oneTimePasswordExpiresAt: null,
+    passwordVersion: 0,
     passwordHash: bcrypt.hashSync("Einmalpasswort", 4),
     firstName: "Vorschlag",
     lastName: "Nachname",
@@ -285,13 +293,13 @@ describe("Namensbestaetigung -- Sperre, Endpunkt, Verwalter-Korrektur", () => {
     expect(fakeUsers[user.id]!.mustChangePassword).toBe(true);
   });
 
-  it("weist den Passwortwechsel fuer normale Konten ab", async () => {
+  it("laesst normale Konten das Passwort ebenfalls wechseln", async () => {
     const user = makeUser();
     fakeUsers[user.id] = user;
 
     const result = await changePassword(user, { currentPassword: "Einmalpasswort", newPassword: "Ein-neues-sicheres-Passwort" });
 
-    expect(result.status).toBe(409);
+    expect(result.status).toBe(200);
   });
 
   it("weist einen zweiten Aufruf bei bereits bestaetigtem Konto mit 409 ab", async () => {

@@ -126,7 +126,61 @@ const ApiService = {
     return `${API_BASE}/auth/${encodeURIComponent(providerKey)}/start`;
   },
 
-  async changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  async registerLocalAccount(input: { email: string; password: string; firstName?: string; lastName?: string }): Promise<string> {
+    const resp = await fetch(`${API_BASE}/auth/local/register`, {
+      method: "POST",
+      headers: { ...headers(), "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error ?? "Registrierung fehlgeschlagen");
+    return data.message ?? "Wenn die Adresse genutzt werden kann, liegt gleich eine E-Mail im Postfach.";
+  },
+
+  async verifyLocalEmail(token: string): Promise<string> {
+    const resp = await fetch(`${API_BASE}/auth/local/verify`, {
+      method: "POST",
+      headers: { ...headers(), "Content-Type": "application/json" },
+      body: JSON.stringify({ token }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error ?? "Bestätigungslink ist ungültig oder abgelaufen");
+    return data.message ?? "E-Mail-Adresse bestätigt";
+  },
+
+  async resendLocalVerification(email: string): Promise<string> {
+    const resp = await fetch(`${API_BASE}/auth/local/verify/resend`, {
+      method: "POST",
+      headers: { ...headers(), "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error ?? "Bestätigungs-Mail konnte nicht angefordert werden");
+    return data.message ?? "Wenn die Adresse genutzt werden kann, liegt gleich eine E-Mail im Postfach.";
+  },
+
+  async requestPasswordReset(email: string): Promise<string> {
+    const resp = await fetch(`${API_BASE}/auth/local/password/forgot`, {
+      method: "POST",
+      headers: { ...headers(), "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error ?? "Anfrage konnte nicht verarbeitet werden");
+    return data.message ?? "Wenn die Adresse genutzt werden kann, liegt gleich eine E-Mail im Postfach.";
+  },
+
+  async resetLocalPassword(token: string, password: string): Promise<void> {
+    const resp = await fetch(`${API_BASE}/auth/local/password/reset`, {
+      method: "POST",
+      headers: { ...headers(), "Content-Type": "application/json" },
+      body: JSON.stringify({ token, password }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error ?? "Passwort konnte nicht zurückgesetzt werden");
+  },
+
+  async changePassword(currentPassword: string, newPassword: string): Promise<string> {
     const resp = await fetch(`${API_BASE}/auth/password/change`, {
       method: "POST",
       headers: headers(),
@@ -135,6 +189,9 @@ const ApiService = {
     });
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok) throw new Error(data.error ?? "Passwort konnte nicht geaendert werden");
+    if (typeof data.token !== "string") throw new Error("Sitzung konnte nicht erneuert werden");
+    setAuthToken(data.token);
+    return data.token;
   },
 
   /** Setzt einmalig den bestaetigten Namen fuer das eigene Konto (PATCH /auth/profile). */

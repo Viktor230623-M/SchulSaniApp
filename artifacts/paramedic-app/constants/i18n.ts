@@ -74,6 +74,29 @@ const translations = {
       passwordChangeFailed: "Passwort konnte nicht geändert werden. Bitte erneut versuchen.",
       showPassword: "Passwörter anzeigen",
       hidePassword: "Passwörter verbergen",
+      register: "Konto erstellen",
+      registerHeading: "Schul-Konto erstellen",
+      registerBody: "Registriere dich mit deiner E-Mail-Adresse. Nach der Bestätigung muss ein Verwalter dein Konto freischalten.",
+      firstNameOptional: "Vorname (optional)",
+      lastNameOptional: "Nachname (optional)",
+      registerButton: "Registrierung starten",
+      registerSuccess: "Prüfe dein Postfach. Wenn die Adresse genutzt werden kann, liegt dort gleich eine E-Mail.",
+      verifyHeading: "E-Mail-Adresse bestätigen",
+      verifyBody: "Der Link ist nur einmal gültig und läuft nach 24 Stunden ab.",
+      verifySuccess: "E-Mail bestätigt. Dein Konto wartet jetzt auf die Freischaltung.",
+      verifyFailed: "Der Bestätigungslink ist ungültig oder abgelaufen.",
+      resendVerification: "Bestätigungs-Mail erneut senden",
+      resendSuccess: "Wenn die Adresse genutzt werden kann, liegt gleich eine E-Mail im Postfach.",
+      forgotHeading: "Passwort zurücksetzen",
+      forgotBody: "Wir senden dir einen Link an deine E-Mail-Adresse, falls ein passendes Konto vorhanden ist.",
+      forgotButton: "Link senden",
+      forgotSuccess: "Wenn die Adresse genutzt werden kann, liegt gleich eine E-Mail im Postfach.",
+      resetHeading: "Neues Passwort setzen",
+      resetBody: "Wähle ein neues Passwort mit mindestens 10 Zeichen.",
+      resetButton: "Passwort speichern",
+      resetSuccess: "Passwort gespeichert. Du kannst dich jetzt anmelden.",
+      backToLogin: "Zurück zur Anmeldung",
+      createAccountHint: "Noch kein Schul-Konto?",
     },
     duty: {
       title: "Dienststatus",
@@ -511,6 +534,29 @@ const translations = {
       passwordChangeFailed: "Password could not be changed. Please try again.",
       showPassword: "Show passwords",
       hidePassword: "Hide passwords",
+      register: "Create account",
+      registerHeading: "Create a school account",
+      registerBody: "Register with your email address. After confirmation, an administrator must approve your account.",
+      firstNameOptional: "First name (optional)",
+      lastNameOptional: "Last name (optional)",
+      registerButton: "Start registration",
+      registerSuccess: "Check your inbox. If the address can be used, an email is waiting there.",
+      verifyHeading: "Confirm email address",
+      verifyBody: "The link works once and expires after 24 hours.",
+      verifySuccess: "Email confirmed. Your account is now waiting for approval.",
+      verifyFailed: "The confirmation link is invalid or expired.",
+      resendVerification: "Send confirmation email again",
+      resendSuccess: "If the address can be used, an email is waiting in your inbox.",
+      forgotHeading: "Reset password",
+      forgotBody: "We will send a link if an account exists for this address.",
+      forgotButton: "Send link",
+      forgotSuccess: "If the address can be used, an email is waiting in your inbox.",
+      resetHeading: "Set a new password",
+      resetBody: "Choose a new password with at least 10 characters.",
+      resetButton: "Save password",
+      resetSuccess: "Password saved. You can sign in now.",
+      backToLogin: "Back to sign in",
+      createAccountHint: "No school account yet?",
     },
     duty: {
       title: "Duty Status",
@@ -885,11 +931,13 @@ export type TranslationKey = string;
 
 export function t(path: string, lang: AppLanguage): string {
   const keys = path.split(".");
-  let result: Record<string, unknown> | undefined = translations[lang] ?? translations.de;
+  let result: unknown = translations[lang] ?? translations.de;
   for (const key of keys) {
-    result = result?.[key] as Record<string, unknown> | undefined;
+    result = typeof result === "object" && result !== null
+      ? (result as Record<string, unknown>)[key]
+      : undefined;
   }
-  const text = (result as string) ?? path;
+  const text = typeof result === "string" ? result : path;
   // {{appName}}-Platzhalter statt eines fest eingebauten Instanznamens im Text.
   return text.includes("{{appName}}") ? text.split("{{appName}}").join(APP_NAME) : text;
 }

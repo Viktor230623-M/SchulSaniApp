@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
-import { and, eq } from "drizzle-orm";
+import { and, eq, or } from "drizzle-orm";
 import { db, usersTable } from "@workspace/db";
 import type { PasswordAuthProvider } from "../types";
 
@@ -75,7 +75,11 @@ export function createLocalProvider(cfg: LocalProviderConfig): PasswordAuthProvi
           and(
             eq(usersTable.schoolId, schoolId),
             eq(usersTable.authProvider, key),
-            eq(usersTable.externalSubject, username),
+            or(
+              eq(usersTable.externalSubject, username),
+              eq(usersTable.email, username),
+              eq(usersTable.username, username),
+            ),
           ),
         )
         .limit(1);
@@ -97,7 +101,7 @@ export function createLocalProvider(cfg: LocalProviderConfig): PasswordAuthProvi
       }
 
       return {
-        subject: username,
+        subject: user.externalSubject ?? username,
         profile: {
           firstName: user.firstName ?? "",
           lastName: user.lastName ?? "",

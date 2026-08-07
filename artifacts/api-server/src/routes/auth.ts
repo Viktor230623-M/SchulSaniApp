@@ -1,8 +1,8 @@
 import { Router } from "express";
 import jwt from "jsonwebtoken";
 import rateLimit from "express-rate-limit";
-import { eq, and, or, isNull } from "drizzle-orm";
-import { db, usersTable, rolesTable, sessionsTable, userRoleEnum, type UserRole } from "@workspace/db";
+import { eq, and, or, isNull, gt, sql } from "drizzle-orm";
+import { db, authTokensTable, usersTable, rolesTable, sessionsTable, userRoleEnum, type UserRole } from "@workspace/db";
 import { permissionsForRole } from "../lib/rolePermissions";
 import {
   requireAuth,
@@ -16,6 +16,9 @@ import { createSession, resolveSession, revokeSession } from "../lib/sessions";
 import { config } from "../config";
 import { loadAuthProviders } from "../auth/registry";
 import { validateProfileName } from "../lib/profileName";
+import { hashPassword } from "../auth/providers/local";
+import { issueAuthToken, hashAuthToken } from "../lib/authTokens";
+import { authLink, assertMailerConfig, sendMail } from "../services/mailer";
 
 const router = Router();
 
@@ -77,6 +80,8 @@ if (JWT_SECRET.length < 32) {
 // Anmeldedaten an den falschen Dienst schicken, sobald eine Installation
 // mehrere Wege kennt.
 const authProviders = loadAuthProviders();
+const localProvider = authProviders.find((provider) => provider.type === "local");
+if (localProvider) assertMailerConfig();
 
 function isUserRole(value: string): value is UserRole {
   return (userRoleEnum.enumValues as readonly string[]).includes(value);
@@ -203,6 +208,9 @@ router.post("/login", authLimiter, async (req, res) => {
         mustChangePassword: usersTable.mustChangePassword,
         oneTimePasswordExpiresAt: usersTable.oneTimePasswordExpiresAt,
         profileConfirmedAt: usersTable.profileConfirmedAt,
+        emailVerifiedAt: usersTable.emailVerifiedAt,
+        authProvider: usersTable.authProvider,
+        passwordVersion: usersTable.passwordVersion,
       })
       .from(usersTable)
       .where(
@@ -247,8 +255,12 @@ router.post("/login", authLimiter, async (req, res) => {
       res.status(403).json({ error: "Dein Account wartet auf Freischaltung durch einen Administrator." });
       return;
     }
+    if (provider.type === "local" && !existing[0]?.emailVerifiedAt) {
+      res.status(403).json({ error: "E-Mail-Adresse noch nicht bestaetigt", code: "EMAIL_NOT_VERIFIED" });
+      return;
+    }
 
-    const token = jwt.sign({ userId, role }, JWT_SECRET, { expiresIn: "2h" });
+    const token = jwt.sign({ userId, role, passwordVersion: existing[0]?.passwordVersion ?? 0 }, JWT_SECRET, { expiresIn: "2h" });
 
     // Das alte Cookie trug ein Bearer-Token direkt und wird nicht mehr
     // ausgewertet. Aktiv loeschen, damit kein toter Wert im Browser zurueckbleibt.
@@ -275,10 +287,270 @@ router.post("/login", authLimiter, async (req, res) => {
       })),
     });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Anmeldung fehlgeschlagen";
     console.error("Login error");
-    res.status(401).json({ error: message });
+    res.status(401).json({ error: "Anmeldung fehlgeschlagen" });
   }
+});
+
+function localAccountUnavailable(res: import("express").Response): boolean {
+  if (localProvider) return false;
+  res.status(404).json({ error: "Lokale Konten sind in dieser Installation nicht aktiviert." });
+  return true;
+}
+
+function normaliseEmail(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const email = value.trim().toLowerCase();
+  if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return null;
+  return email;
+}
+
+function validPassword(value: unknown): value is string {
+  return typeof value === "string" && value.length >= 10 && value.length <= 200;
+}
+
+const localAccountLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  message: { error: "Zu viele Anfragen, bitte spaeter erneut versuchen." },
+});
+
+const resetEmailLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 3,
+  keyGenerator: (req) => normaliseEmail(req.body?.email) ?? "ungueltige-adresse",
+  message: { error: "Zu viele Anfragen, bitte spaeter erneut versuchen." },
+});
+
+const EMAIL_RESPONSE = "Wenn die Adresse genutzt werden kann, liegt gleich eine E-Mail im Postfach.";
+const AUTH_RESPONSE_FLOOR_MS = 400;
+
+async function waitForAuthResponse(startedAt: number): Promise<void> {
+  const remaining = AUTH_RESPONSE_FLOOR_MS - (Date.now() - startedAt);
+  if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
+}
+
+router.post("/local/register", localAccountLimiter, async (req, res) => {
+  if (localAccountUnavailable(res)) return;
+  const email = normaliseEmail(req.body?.email);
+  const password = req.body?.password;
+  const firstName = typeof req.body?.firstName === "string" ? req.body.firstName.trim() : "";
+  const lastName = typeof req.body?.lastName === "string" ? req.body.lastName.trim() : "";
+  if (!email || !validPassword(password) || firstName.length > 100 || lastName.length > 100) {
+    res.status(400).json({ error: "E-Mail und Passwort sind ungueltig." });
+    return;
+  }
+
+  const startedAt = Date.now();
+  const schoolId = process.env["SCHOOL_ID"] ?? "school";
+  const existing = await db.select({
+    id: usersTable.id,
+    email: usersTable.email,
+    authProvider: usersTable.authProvider,
+    emailVerifiedAt: usersTable.emailVerifiedAt,
+  })
+    .from(usersTable)
+    .where(eq(usersTable.email, email))
+    .limit(1);
+
+  const passwordHash = await hashPassword(password);
+  let mail: { to: string; subject: string; text: string } | undefined;
+  try {
+    const account = existing[0];
+    if (account && !(account.authProvider === localProvider!.key && !account.emailVerifiedAt)) {
+      mail = {
+        to: account.email ?? email,
+        subject: "Registrierungsversuch mit deiner E-Mail-Adresse",
+        text: "Es wurde versucht, mit dieser E-Mail-Adresse ein Konto anzulegen. Wenn du das nicht warst, musst du nichts tun.",
+      };
+    } else {
+      const userId = account?.id ?? crypto.randomUUID();
+      if (!account) {
+        await db.insert(usersTable).values({
+          id: userId,
+          authProvider: localProvider!.key,
+          externalSubject: email,
+          email,
+          emailVerifiedAt: null,
+          username: null,
+          firstName,
+          lastName,
+          passwordHash,
+          role: "sanitaeter",
+          schoolId,
+          isApproved: false,
+          profileConfirmedAt: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+      }
+
+      const token = await issueAuthToken(userId, "email_verify", new Date(Date.now() + 24 * 60 * 60 * 1000));
+      mail = {
+        to: email,
+        subject: "E-Mail-Adresse bestaetigen",
+        text: `Bestaetige deine E-Mail-Adresse innerhalb von 24 Stunden:\n\n${authLink("email-bestaetigen", token)}\n\nWenn du diese Registrierung nicht gestartet hast, ignoriere diese E-Mail.`,
+      };
+    }
+  } catch (err) {
+    console.error("Lokale Registrierung konnte nicht abgeschlossen werden:", err instanceof Error ? err.message : "unbekannter Fehler");
+  }
+  await waitForAuthResponse(startedAt);
+  if (mail) void sendMail(mail).catch((err) => console.error("Registrierungs-Mail konnte nicht versendet werden:", err instanceof Error ? err.message : "unbekannter Fehler"));
+  res.status(202).json({ message: EMAIL_RESPONSE });
+});
+
+router.post("/local/verify", localAccountLimiter, async (req, res) => {
+  if (localAccountUnavailable(res)) return;
+  const token = typeof req.body?.token === "string" ? req.body.token : "";
+  if (!token || token.length > 200) {
+    res.status(400).json({ error: "Bestaetigungslink ist ungueltig oder abgelaufen." });
+    return;
+  }
+  const verifiedUserId = await db.transaction(async (tx) => {
+    const [candidate] = await tx.select({ id: authTokensTable.id, userId: authTokensTable.userId })
+      .from(authTokensTable)
+      .innerJoin(usersTable, eq(usersTable.id, authTokensTable.userId))
+      .where(and(
+        eq(authTokensTable.tokenHash, hashAuthToken(token)),
+        eq(authTokensTable.kind, "email_verify"),
+        isNull(authTokensTable.usedAt),
+        gt(authTokensTable.expiresAt, new Date()),
+        eq(usersTable.authProvider, localProvider!.key),
+      ))
+      .limit(1);
+    if (!candidate) return null;
+
+    const [consumed] = await tx.update(authTokensTable)
+      .set({ usedAt: new Date() })
+      .where(and(eq(authTokensTable.id, candidate.id), isNull(authTokensTable.usedAt)))
+      .returning({ id: authTokensTable.id });
+    if (!consumed) return null;
+
+    const [updated] = await tx.update(usersTable)
+      .set({ emailVerifiedAt: new Date(), updatedAt: new Date() })
+      .where(and(eq(usersTable.id, candidate.userId), eq(usersTable.authProvider, localProvider!.key)))
+      .returning({ id: usersTable.id });
+    return updated ? candidate.userId : null;
+  });
+  if (!verifiedUserId) {
+    res.status(400).json({ error: "Bestaetigungslink ist ungueltig oder abgelaufen." });
+    return;
+  }
+  invalidateUserCache(verifiedUserId);
+  res.json({ ok: true, message: "E-Mail-Adresse bestaetigt. Ein Verwalter muss dein Konto noch freischalten." });
+});
+
+router.post("/local/verify/resend", localAccountLimiter, async (req, res) => {
+  if (localAccountUnavailable(res)) return;
+  const email = normaliseEmail(req.body?.email);
+  if (!email) {
+    res.status(400).json({ error: "E-Mail ist ungueltig." });
+    return;
+  }
+  const startedAt = Date.now();
+  const [user] = await db.select({ id: usersTable.id, email: usersTable.email, emailVerifiedAt: usersTable.emailVerifiedAt })
+    .from(usersTable)
+    .where(and(eq(usersTable.email, email), eq(usersTable.authProvider, localProvider!.key)))
+    .limit(1);
+  let mail: { to: string; subject: string; text: string } | undefined;
+  if (user && !user.emailVerifiedAt) {
+    try {
+      const token = await issueAuthToken(user.id, "email_verify", new Date(Date.now() + 24 * 60 * 60 * 1000));
+      mail = {
+        to: user.email ?? email,
+        subject: "E-Mail-Adresse bestaetigen",
+        text: `Bestaetige deine E-Mail-Adresse innerhalb von 24 Stunden:\n\n${authLink("email-bestaetigen", token)}\n\nWenn du diese Registrierung nicht gestartet hast, ignoriere diese E-Mail.`,
+      };
+    } catch (err) {
+      console.error("Bestaetigungs-Mail konnte nicht versendet werden:", err instanceof Error ? err.message : "unbekannter Fehler");
+    }
+  }
+  await waitForAuthResponse(startedAt);
+  if (mail) void sendMail(mail).catch((err) => console.error("Bestaetigungs-Mail konnte nicht versendet werden:", err instanceof Error ? err.message : "unbekannter Fehler"));
+  res.status(202).json({ message: EMAIL_RESPONSE });
+});
+
+router.post("/local/password/forgot", resetEmailLimiter, async (req, res) => {
+  if (localAccountUnavailable(res)) return;
+  const email = normaliseEmail(req.body?.email);
+  if (!email) {
+    res.status(400).json({ error: "E-Mail ist ungueltig." });
+    return;
+  }
+  const startedAt = Date.now();
+  await hashPassword(email);
+  const [user] = await db.select({ id: usersTable.id, email: usersTable.email })
+    .from(usersTable)
+    .where(and(eq(usersTable.email, email), eq(usersTable.authProvider, localProvider!.key)))
+    .limit(1);
+  let mail: { to: string; subject: string; text: string } | undefined;
+  if (user) {
+    try {
+      const token = await issueAuthToken(user.id, "password_reset", new Date(Date.now() + 60 * 60 * 1000));
+      mail = {
+        to: email,
+        subject: "Passwort zuruecksetzen",
+        text: `Setze dein Passwort innerhalb von 60 Minuten neu:\n\n${authLink("passwort-zuruecksetzen", token)}\n\nWenn du dies nicht angefordert hast, ignoriere diese E-Mail.`,
+      };
+    } catch (err) {
+      console.error("Passwort-Reset-Mail konnte nicht versendet werden:", err instanceof Error ? err.message : "unbekannter Fehler");
+    }
+  }
+  await waitForAuthResponse(startedAt);
+  if (mail) void sendMail(mail).catch((err) => console.error("Passwort-Reset-Mail konnte nicht versendet werden:", err instanceof Error ? err.message : "unbekannter Fehler"));
+  res.status(202).json({ message: EMAIL_RESPONSE });
+});
+
+router.post("/local/password/reset", localAccountLimiter, async (req, res) => {
+  if (localAccountUnavailable(res)) return;
+  const token = typeof req.body?.token === "string" ? req.body.token : "";
+  const password = req.body?.password;
+  if (!token || token.length > 200 || !validPassword(password)) {
+    res.status(400).json({ error: "Link oder Passwort ist ungueltig." });
+    return;
+  }
+  const updated = await db.transaction(async (tx) => {
+    const [candidate] = await tx.select({ id: authTokensTable.id, userId: authTokensTable.userId })
+      .from(authTokensTable)
+      .innerJoin(usersTable, eq(usersTable.id, authTokensTable.userId))
+      .where(and(
+        eq(authTokensTable.tokenHash, hashAuthToken(token)),
+        eq(authTokensTable.kind, "password_reset"),
+        isNull(authTokensTable.usedAt),
+        gt(authTokensTable.expiresAt, new Date()),
+        eq(usersTable.authProvider, localProvider!.key),
+      ))
+      .limit(1);
+    if (!candidate) return false;
+
+    const [consumed] = await tx.update(authTokensTable)
+      .set({ usedAt: new Date() })
+      .where(and(eq(authTokensTable.id, candidate.id), isNull(authTokensTable.usedAt)))
+      .returning({ id: authTokensTable.id });
+    if (!consumed) return false;
+
+    const passwordHash = await hashPassword(password);
+    const [changed] = await tx.update(usersTable)
+      .set({ passwordHash, passwordVersion: sql`${usersTable.passwordVersion} + 1`, mustChangePassword: false, oneTimePasswordExpiresAt: null, updatedAt: new Date() })
+      .where(and(eq(usersTable.id, candidate.userId), eq(usersTable.authProvider, localProvider!.key)))
+      .returning({ id: usersTable.id });
+    if (!changed) return false;
+
+    await tx.update(authTokensTable)
+      .set({ usedAt: new Date() })
+      .where(and(eq(authTokensTable.userId, candidate.userId), eq(authTokensTable.kind, "password_reset"), isNull(authTokensTable.usedAt)));
+    await tx.update(sessionsTable)
+      .set({ revokedAt: new Date() })
+      .where(and(eq(sessionsTable.userId, candidate.userId), isNull(sessionsTable.revokedAt)));
+    return candidate.userId;
+  });
+  if (!updated) {
+    res.status(400).json({ error: "Link ist ungueltig oder abgelaufen." });
+    return;
+  }
+  invalidateUserCache(updated);
+  res.json({ ok: true });
 });
 
 router.post("/password/change", passwordChangeLimiter, requireAuthForPasswordChange, async (req: AuthRequest, res) => {
@@ -316,9 +588,9 @@ router.post("/password/change", passwordChangeLimiter, requireAuthForPasswordCha
   const updated = await db.transaction(async (tx) => {
     const [changed] = await tx
       .update(usersTable)
-      .set({ passwordHash: newHash, mustChangePassword: false, oneTimePasswordExpiresAt: null, updatedAt: new Date() })
+      .set({ passwordHash: newHash, passwordVersion: sql`${usersTable.passwordVersion} + 1`, mustChangePassword: false, oneTimePasswordExpiresAt: null, updatedAt: new Date() })
       .where(eq(usersTable.id, req.user!.userId))
-      .returning({ id: usersTable.id });
+      .returning({ id: usersTable.id, role: usersTable.role, passwordVersion: usersTable.passwordVersion });
     if (!changed) return undefined;
     await tx
       .update(sessionsTable)
@@ -331,7 +603,16 @@ router.post("/password/change", passwordChangeLimiter, requireAuthForPasswordCha
     return;
   }
   invalidateUserCache(req.user!.userId);
-  res.json({ ok: true });
+  const token = jwt.sign(
+    { userId: updated.id, role: updated.role ?? req.user!.role, passwordVersion: updated.passwordVersion },
+    JWT_SECRET,
+    { expiresIn: "2h" },
+  );
+  if (req.cookies?.[SESSION_COOKIE]) {
+    const sessionToken = await createSession(req.user!.userId);
+    res.cookie(SESSION_COOKIE, sessionToken, sessionCookieOptions());
+  }
+  res.json({ ok: true, token });
 });
 
 router.post("/logout", requireAuthForLogout, async (req, res) => {
@@ -426,7 +707,7 @@ router.get("/session", sessionLimiter, async (req, res) => {
     .limit(1);
 
   const user = rows[0];
-  if (!user || !user.isApproved) {
+  if (!user || !user.isApproved || (user.authProvider === localProvider?.key && !user.emailVerifiedAt)) {
     await revokeSession(rawToken);
     res.clearCookie(SESSION_COOKIE, { path: "/" });
     res.status(401).json({ error: "Sitzung abgelaufen" });
@@ -434,7 +715,7 @@ router.get("/session", sessionLimiter, async (req, res) => {
   }
 
   const role = user.role ?? "sanitaeter";
-  const token = jwt.sign({ userId: user.id, role }, JWT_SECRET, { expiresIn: "2h" });
+  const token = jwt.sign({ userId: user.id, role, passwordVersion: user.passwordVersion }, JWT_SECRET, { expiresIn: "2h" });
 
   res.json({
     token,

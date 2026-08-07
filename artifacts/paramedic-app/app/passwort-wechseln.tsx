@@ -52,7 +52,8 @@ export default function PasswortWechselnScreen() {
     setError("");
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      await ApiService.changePassword(currentPassword, newPassword);
+      const token = await ApiService.changePassword(currentPassword, newPassword);
+      useAppStore.getState().setToken(token);
       login(user ? { ...user, mustChangePassword: false } : user!);
       router.replace(user?.profileConfirmedAt === null ? "/name-bestaetigen" : "/(tabs)/news");
     } catch (err) {
@@ -124,6 +125,7 @@ function PasswordField({ label, value, onChangeText, hidden, theme, onSubmitEdit
       <TextInput
         value={value}
         onChangeText={onChangeText}
+        accessibilityLabel={label}
         secureTextEntry={hidden}
         autoCapitalize="none"
         autoCorrect={false}
@@ -149,10 +151,10 @@ const styles = StyleSheet.create({
   input: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, fontFamily: "Inter_400Regular" },
   errorBox: { flexDirection: "row", alignItems: "center", gap: 8, padding: 12, borderRadius: 10, backgroundColor: "#FEF2F2" },
   errorText: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#EF4444", flex: 1 },
-  visibilityLink: { alignSelf: "flex-start", paddingVertical: 4 },
+  visibilityLink: { alignSelf: "flex-start", minHeight: 44, justifyContent: "center", paddingHorizontal: 4 },
   visibilityText: { fontSize: 13, fontFamily: "Inter_500Medium" },
   confirmButton: { paddingVertical: 15, borderRadius: 12, alignItems: "center" },
   confirmButtonText: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: "#fff" },
-  logoutLink: { marginTop: 20, padding: 8 },
+  logoutLink: { marginTop: 20, minHeight: 44, minWidth: 44, alignItems: "center", justifyContent: "center", paddingHorizontal: 8 },
   logoutLinkText: { fontSize: 13, fontFamily: "Inter_500Medium" },
 });

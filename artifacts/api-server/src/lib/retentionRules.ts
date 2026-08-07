@@ -31,6 +31,10 @@ export interface RetentionCutoffs {
   profileChangeLog: Date;
   /** Sitzungen: 30 Tage nach Widerruf. */
   sessionsRevoked: Date;
+  /** Auth-Links: sieben Tage nach Ablauf. */
+  authTokens: Date;
+  /** Unbestaetigte lokale Konten: 30 Tage nach Anlage. */
+  unverifiedAccounts: Date;
 }
 
 function minusDays(now: Date, days: number): Date {
@@ -64,5 +68,7 @@ export function computeCutoffs(now: Date): RetentionCutoffs {
     roleChangeLog: minusMonths(now, 12),
     profileChangeLog: minusMonths(now, 12),
     sessionsRevoked: minusDays(now, 30),
+    authTokens: minusDays(now, 7),
+    unverifiedAccounts: minusDays(now, 30),
   };
 }

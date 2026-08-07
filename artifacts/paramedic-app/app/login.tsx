@@ -420,12 +420,15 @@ export default function LoginScreen() {
                     </Pressable>
 
                     {isLocal && (
-                      // Fuehrt noch nirgends hin -- Registrierung und Zuruecksetzen
-                      // kommen erst in Stueck 2. Die Zeile steht schon, damit sie
-                      // dort nicht nachtraeglich ins Layout gequetscht werden muss.
-                      <Text style={[styles.forgotPasswordText, { color: theme.textTertiary }]}>
-                        {t("auth.forgotPassword", lang)}
-                      </Text>
+                      <Pressable
+                        accessibilityRole="link"
+                        onPress={() => router.push("/passwort-vergessen")}
+                        style={({ pressed }) => [styles.forgotLink, { opacity: pressed ? 0.55 : 1 }]}
+                      >
+                        <Text style={[styles.forgotPasswordText, { color: theme.tint }]}>
+                          {t("auth.forgotPassword", lang)}
+                        </Text>
+                      </Pressable>
                     )}
                   </View>
 
@@ -458,6 +461,17 @@ export default function LoginScreen() {
                     <Text style={[styles.footerNote, { color: theme.textTertiary }]}>
                       {t("auth.providerNote", lang).replace("{provider}", providerLabel)}
                     </Text>
+                  )}
+
+                  {isLocal && (
+                    <Pressable
+                      accessibilityRole="link"
+                      onPress={() => router.push("/registrieren")}
+                      style={({ pressed }) => [styles.registerLink, { opacity: pressed ? 0.55 : 1 }]}
+                    >
+                      <Text style={[styles.registerHint, { color: theme.textTertiary }]}>{t("auth.createAccountHint", lang)} </Text>
+                      <Text style={[styles.registerText, { color: theme.tint }]}>{t("auth.register", lang)}</Text>
+                    </Pressable>
                   )}
                 </>
               )}
@@ -541,5 +555,9 @@ const styles = StyleSheet.create({
   rememberMeContainer: { flexDirection: "row", alignItems: "center", gap: 10 },
   checkbox: { width: 20, height: 20, borderRadius: 6, borderWidth: 2, alignItems: "center", justifyContent: "center" },
   rememberMeText: { fontSize: 14, fontFamily: "Inter_400Regular" },
-  forgotPasswordText: { fontSize: 13, fontFamily: "Inter_500Medium" },
+  forgotLink: { minHeight: 44, justifyContent: "center" },
+  forgotPasswordText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  registerLink: { minHeight: 44, alignItems: "center", justifyContent: "center", flexDirection: "row" },
+  registerHint: { fontSize: 13, fontFamily: "Inter_400Regular" },
+  registerText: { fontSize: 13, fontFamily: "Inter_700Bold" },
 });
