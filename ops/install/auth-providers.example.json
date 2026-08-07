@@ -18,7 +18,13 @@
     "clientSecret": "",
     "redirectUri": "https://sani.beispielschule.example/api/auth/google/callback",
     "scopes": ["openid", "email", "profile"],
-    "allowedHostedDomains": ["beispielschule.example"]
+    "allowedHostedDomains": ["beispielschule.example"],
+    "groupsClaim": "groups",
+    "groupToRoleMap": {
+      "schulsanis": "sanitaeter"
+    },
+    "clientSecretMode": "static",
+    "responseMode": "query"
   },
   {
     "enabled": false,
@@ -46,6 +52,7 @@
     "appleTeamId": "TEAMID1234",
     "appleKeyId": "KEYID12345",
     "applePrivateKeyPath": "/etc/schulsani/apple-signin.p8",
+    "appleNativeClientId": "com.beispielschule.sani",
     "responseMode": "form_post"
   }
 ]

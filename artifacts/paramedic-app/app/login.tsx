@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import * as AppleAuthentication from "expo-apple-authentication";
 import * as Crypto from "expo-crypto";
 import * as Linking from "expo-linking";
 import { router } from "expo-router";
@@ -20,7 +21,7 @@ import { MedicalCross } from "@/components/MedicalCross";
 import { useTopPad } from "@/hooks/useTopPad";
 import { SCHOOL_NAME } from "@/constants/appConfig";
 import { t } from "@/constants/i18n";
-import { getTheme } from "@/constants/theme";
+import { getTheme, istDunklesThema } from "@/constants/theme";
 import ApiService, { type AuthProviderInfo } from "@/services/ApiService";
 import { useAppStore } from "@/store/useAppStore";
 
@@ -81,6 +82,56 @@ export default function LoginScreen() {
       cancelled = true;
     };
   }, []);
+
+  async function handleAppleNative() {
+    if (!selectedProvider || selectedProvider.key !== "apple" || Platform.OS !== "ios") return;
+    if (redirecting) return;
+    setRedirectError("");
+    setRedirecting(true);
+    try {
+      // Im Simulator und in Expo Go gibt es die Apple-Anmeldung nicht; dann
+      // faellt der Login auf den Web-Redirect zurueck statt still zu scheitern.
+      if (!(await AppleAuthentication.isAvailableAsync())) {
+        setRedirecting(false);
+        await handleRedirect(selectedProvider);
+        return;
+      }
+      const nonce = await ApiService.startAppleNative();
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+        nonce,
+      });
+      if (!credential.identityToken) {
+        setRedirectError(t("auth.redirectFailed", lang));
+        return;
+      }
+      const restored = await ApiService.completeAppleNative({
+        identityToken: credential.identityToken,
+        nonce,
+        fullName: credential.fullName
+          ? {
+              givenName: credential.fullName.givenName ?? undefined,
+              familyName: credential.fullName.familyName ?? undefined,
+            }
+          : undefined,
+        email: credential.email ?? undefined,
+      });
+      setToken(restored.token);
+      login(restored.user);
+      router.replace(restored.user.profileConfirmedAt === null ? "/name-bestaetigen" : "/(tabs)/news");
+    } catch (err) {
+      if (err && typeof err === "object" && "code" in err && err.code === "ERR_REQUEST_CANCELED") {
+        // Nutzer hat den Dialog abgebrochen -- kein Fehler, kein Text.
+      } else {
+        setRedirectError(err instanceof Error ? err.message : t("auth.redirectFailed", lang));
+      }
+    } finally {
+      setRedirecting(false);
+    }
+  }
 
   async function handleLocalLogin() {
     if (!selectedProvider || selectedProvider.type !== "local") return;
@@ -144,6 +195,8 @@ export default function LoginScreen() {
   const showProviderList = providers !== null && providers.length > 1 && selectedProvider === null;
   const selectedVisual = selectedProvider ? providerVisual(selectedProvider) : null;
   const isLocal = selectedProvider?.type === "local";
+  const istAppleNativ = selectedProvider?.key === "apple" && Platform.OS === "ios";
+  const dunkel = istDunklesThema(theme.background);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -269,27 +322,43 @@ export default function LoginScreen() {
               </View>
             )}
 
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t("auth.providerLogin", lang).replace("{provider}", selectedProvider.displayName)}
-              onPress={() => (isLocal ? handleLocalLogin() : handleRedirect(selectedProvider))}
-              disabled={redirecting || (isLocal && (!username || !password))}
-              style={({ pressed }) => [
-                styles.loginButton,
-                { backgroundColor: theme.tint, opacity: redirecting || (isLocal && (!username || !password)) ? 0.7 : pressed ? 0.9 : 1 },
-              ]}
-            >
-              {redirecting ? (
-                <View style={styles.loadingRow}>
-                  <ActivityIndicator color="#fff" size="small" />
-                  <Text style={styles.loginButtonText}>{t("auth.redirecting", lang)}</Text>
-                </View>
-              ) : (
-                <Text style={styles.loginButtonText}>
-                  {isLocal ? t("auth.loginButton", lang) : t("auth.providerLogin", lang).replace("{provider}", selectedProvider.displayName)}
-                </Text>
-              )}
-            </Pressable>
+            {istAppleNativ ? (
+              // Apple schreibt vor, dass die Anmeldung mit Apple auf iOS ueber
+              // die native Schaltflaeche laeuft, nicht ueber eine eigene.
+              <AppleAuthentication.AppleAuthenticationButton
+                buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+                buttonStyle={
+                  dunkel
+                    ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE_OUTLINE
+                    : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK
+                }
+                cornerRadius={12}
+                onPress={handleAppleNative}
+                style={styles.appleButton}
+              />
+            ) : (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t("auth.providerLogin", lang).replace("{provider}", selectedProvider.displayName)}
+                onPress={() => (isLocal ? handleLocalLogin() : handleRedirect(selectedProvider))}
+                disabled={redirecting || (isLocal && (!username || !password))}
+                style={({ pressed }) => [
+                  styles.loginButton,
+                  { backgroundColor: theme.tint, opacity: redirecting || (isLocal && (!username || !password)) ? 0.7 : pressed ? 0.9 : 1 },
+                ]}
+              >
+                {redirecting ? (
+                  <View style={styles.loadingRow}>
+                    <ActivityIndicator color="#fff" size="small" />
+                    <Text style={styles.loginButtonText}>{t("auth.redirecting", lang)}</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.loginButtonText}>
+                    {isLocal ? t("auth.loginButton", lang) : t("auth.providerLogin", lang).replace("{provider}", selectedProvider.displayName)}
+                  </Text>
+                )}
+              </Pressable>
+            )}
             {isLocal && (
               <Pressable accessibilityRole="link" onPress={() => router.push("/registrieren")} style={styles.localLink}>
                 <Text style={[styles.localLinkText, { color: theme.tint }]}>{t("auth.register", lang)}</Text>
@@ -354,6 +423,7 @@ const styles = StyleSheet.create({
   errorBox: { flexDirection: "row", alignItems: "center", gap: 8, padding: 12, borderRadius: 10, backgroundColor: "#FEF2F2" },
   errorText: { flex: 1, fontSize: 13, lineHeight: 18, fontFamily: "Inter_400Regular", color: "#EF4444" },
   loginButton: { minHeight: 52, paddingHorizontal: 16, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  appleButton: { height: 52, width: "100%" },
   loadingRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   loginButtonText: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: "#fff" },
   localFields: { gap: 10 },
