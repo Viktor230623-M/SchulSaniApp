@@ -13,6 +13,8 @@ interface FakeUserRow {
   passwordHash: string;
   oneTimePasswordExpiresAt: Date | null;
   passwordVersion: number;
+  authProvider: string;
+  emailVerifiedAt: Date | null;
   firstName: string | null;
   lastName: string | null;
   email: string | null;
@@ -86,8 +88,16 @@ vi.mock("@workspace/db", async () => {
       where: (cond: any) => { whereId = extractEqId(cond); return chain; },
       returning: () => {
         if (isUsers && whereId && fakeUsers[whereId]) {
-          fakeUsers[whereId] = { ...fakeUsers[whereId], ...patch };
-          return Promise.resolve([fakeUsers[whereId]]);
+          let updated = { ...fakeUsers[whereId], ...patch } as FakeUserRow;
+          if ("passwordVersion" in patch) {
+            const versionPatch = patch.passwordVersion as { queryChunks?: unknown[] } | undefined;
+            if (!versionPatch || !Array.isArray(versionPatch.queryChunks)) {
+              throw new Error("Test-Mock erwartet passwordVersion als Drizzle-Ausdruck");
+            }
+            updated = { ...updated, passwordVersion: fakeUsers[whereId].passwordVersion + 1 };
+          }
+          fakeUsers[whereId] = updated;
+          return Promise.resolve([updated]);
         }
         return Promise.resolve([]);
       },
@@ -161,6 +171,8 @@ function makeUser(overrides: Partial<FakeUserRow> = {}): FakeUserRow {
     mustChangePassword: false,
     oneTimePasswordExpiresAt: null,
     passwordVersion: 0,
+    authProvider: "local",
+    emailVerifiedAt: new Date(),
     passwordHash: bcrypt.hashSync("Einmalpasswort", 4),
     firstName: "Vorschlag",
     lastName: "Nachname",
@@ -279,7 +291,9 @@ describe("Namensbestaetigung -- Sperre, Endpunkt, Verwalter-Korrektur", () => {
     const result = await changePassword(user, { currentPassword: "Einmalpasswort", newPassword: "Ein-neues-sicheres-Passwort" });
 
     expect(result.status).toBe(200);
+    expect(result.body.token).toBeTruthy();
     expect(fakeUsers[user.id]!.mustChangePassword).toBe(false);
+    expect(fakeUsers[user.id]!.passwordVersion).toBe(1);
     expect(fakeUsers[user.id]!.oneTimePasswordExpiresAt).toBeNull();
   });
 
@@ -300,6 +314,8 @@ describe("Namensbestaetigung -- Sperre, Endpunkt, Verwalter-Korrektur", () => {
     const result = await changePassword(user, { currentPassword: "Einmalpasswort", newPassword: "Ein-neues-sicheres-Passwort" });
 
     expect(result.status).toBe(200);
+    expect(result.body.token).toBeTruthy();
+    expect(fakeUsers[user.id]!.passwordVersion).toBe(1);
   });
 
   it("weist einen zweiten Aufruf bei bereits bestaetigtem Konto mit 409 ab", async () => {
