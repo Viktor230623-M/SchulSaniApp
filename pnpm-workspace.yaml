@@ -57,11 +57,14 @@ catalog:
 
 autoInstallPeers: false
 
-onlyBuiltDependencies:
-  - '@swc/core'
-  - esbuild
-  - msw
-  - unrs-resolver
+# pnpm 11 liest die erlaubten Postinstall-Builds aus allowBuilds (vorher
+# onlyBuiltDependencies). Ohne esbuild-Build fehlt das esbuild-Binary und
+# `pnpm install` bricht mit ERR_PNPM_IGNORED_BUILDS ab.
+allowBuilds:
+  '@swc/core': true
+  esbuild: true
+  msw: true
+  unrs-resolver: true
 
 overrides:
   # Der Server laeuft auf linux-x64, andere Plattformen koennen entfallen.
@@ -166,5 +169,3 @@ overrides:
   "yaml@>=1 <1.10.3": "^1.10.3"
   "yaml@>=2 <2.8.3": "^2.8.3"
 
-allowBuilds:
-  esbuild: set this to true or false
