@@ -1,6 +1,14 @@
 [
   {
     "enabled": false,
+    "_hinweis": "Lokale Konten mit E-Mail-Bestaetigung und SMTP.",
+    "key": "local",
+    "displayName": "E-Mail",
+    "type": "local",
+    "schoolId": "school"
+  },
+  {
+    "enabled": false,
     "_hinweis": "Google Workspace: email_verified wird geprueft. allowedHostedDomains optional auf die Schul-Domain begrenzen.",
     "key": "google",
     "displayName": "Google",
@@ -39,22 +47,5 @@
     "appleKeyId": "KEYID12345",
     "applePrivateKeyPath": "/etc/schulsani/apple-signin.p8",
     "responseMode": "form_post"
-  },
-  {
-    "enabled": false,
-    "_hinweis": "Generisches OIDC-Beispiel fuer IServ oder andere Anbieter mit OpenID Connect.",
-    "key": "iserv",
-    "displayName": "IServ",
-    "type": "oidc-redirect",
-    "issuerUrl": "https://iserv.beispielschule.example",
-    "clientId": "beispiel-client-id",
-    "clientSecret": "",
-    "redirectUri": "https://sani.beispielschule.example/api/auth/iserv/callback",
-    "scopes": ["openid", "email", "profile"],
-    "groupToRoleMap": {
-      "sanitaeter": "sanitaeter",
-      "sanitaeter-leitung": "sanitaeter_leitung",
-      "lehrer": "teacher"
-    }
   }
 ]

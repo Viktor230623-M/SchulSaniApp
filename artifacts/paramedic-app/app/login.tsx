@@ -7,6 +7,7 @@ import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Platform,
+  TextInput,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -58,6 +59,9 @@ export default function LoginScreen() {
   const [selectedProvider, setSelectedProvider] = useState<AuthProviderInfo | null>(null);
   const [redirecting, setRedirecting] = useState(false);
   const [redirectError, setRedirectError] = useState("");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -77,6 +81,22 @@ export default function LoginScreen() {
       cancelled = true;
     };
   }, []);
+
+  async function handleLocalLogin() {
+    if (!selectedProvider || selectedProvider.type !== "local") return;
+    setRedirectError("");
+    setRedirecting(true);
+    try {
+      const restored = await ApiService.loginLocal(selectedProvider.key, username, password);
+      setToken(restored.token);
+      login(restored.user);
+      router.replace(restored.user.mustChangePassword ? "/passwort-wechseln" : restored.user.profileConfirmedAt === null ? "/name-bestaetigen" : "/(tabs)/news");
+    } catch (err) {
+      setRedirectError(err instanceof Error ? err.message : t("auth.loginFailed", lang));
+    } finally {
+      setRedirecting(false);
+    }
+  }
 
   async function handleRedirect(provider: AuthProviderInfo) {
     setRedirectError("");
@@ -123,6 +143,7 @@ export default function LoginScreen() {
   const topPad = useTopPad();
   const showProviderList = providers !== null && providers.length > 1 && selectedProvider === null;
   const selectedVisual = selectedProvider ? providerVisual(selectedProvider) : null;
+  const isLocal = selectedProvider?.type === "local";
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -158,7 +179,7 @@ export default function LoginScreen() {
                   key={provider.key}
                   accessibilityRole="button"
                   accessibilityLabel={provider.displayName}
-                  onPress={() => handleRedirect(provider)}
+                  onPress={() => setSelectedProvider(provider)}
                   disabled={redirecting}
                   style={({ pressed }) => [
                     styles.providerRow,
@@ -194,13 +215,52 @@ export default function LoginScreen() {
               </View>
               <View style={styles.providerCopy}>
                 <Text style={[styles.title, { color: theme.text }]}>
-                  {t("auth.providerLogin", lang).replace("{provider}", selectedProvider.displayName)}
+                  {isLocal ? t("auth.login", lang) : t("auth.providerLogin", lang).replace("{provider}", selectedProvider.displayName)}
                 </Text>
                 <Text style={[styles.body, { color: theme.textSecondary }]}>
-                  {t("auth.providerNote", lang).replace("{provider}", selectedProvider.displayName)}
+                  {isLocal ? t("auth.providerNote", lang).replace("{provider}", selectedProvider.displayName) : t("auth.providerNote", lang).replace("{provider}", selectedProvider.displayName)}
                 </Text>
               </View>
             </View>
+
+            {isLocal && (
+              <View style={styles.localFields}>
+                <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>{t("auth.username", lang)}</Text>
+                <TextInput
+                  value={username}
+                  onChangeText={setUsername}
+                  placeholder={t("auth.username", lang)}
+                  placeholderTextColor={theme.textTertiary}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  autoComplete="username"
+                  accessibilityLabel={t("auth.username", lang)}
+                  style={[styles.localInput, { color: theme.text, borderColor: theme.inputBorder, backgroundColor: theme.inputBackground }]}
+                />
+                <View style={styles.passwordRow}>
+                  <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>{t("auth.password", lang)}</Text>
+                  <TextInput
+                    value={password}
+                    onChangeText={setPassword}
+                    placeholder={t("auth.password", lang)}
+                    placeholderTextColor={theme.textTertiary}
+                    secureTextEntry={!showPassword}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    autoComplete="password"
+                    accessibilityLabel={t("auth.password", lang)}
+                    onSubmitEditing={handleLocalLogin}
+                    style={[styles.localInput, styles.passwordInput, { color: theme.text, borderColor: theme.inputBorder, backgroundColor: theme.inputBackground }]}
+                  />
+                  <Pressable accessibilityRole="button" accessibilityLabel={showPassword ? t("auth.hidePassword", lang) : t("auth.showPassword", lang)} onPress={() => setShowPassword((visible) => !visible)} style={styles.passwordToggle}>
+                    <Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={20} color={theme.textTertiary} />
+                  </Pressable>
+                </View>
+                <Pressable accessibilityRole="link" onPress={() => router.push("/passwort-vergessen")} style={styles.localLink}>
+                  <Text style={[styles.localLinkText, { color: theme.tint }]}>{t("auth.forgotPassword", lang)}</Text>
+                </Pressable>
+              </View>
+            )}
 
             {!!redirectError && (
               <View style={styles.errorBox}>
@@ -212,11 +272,11 @@ export default function LoginScreen() {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={t("auth.providerLogin", lang).replace("{provider}", selectedProvider.displayName)}
-              onPress={() => handleRedirect(selectedProvider)}
-              disabled={redirecting}
+              onPress={() => (isLocal ? handleLocalLogin() : handleRedirect(selectedProvider))}
+              disabled={redirecting || (isLocal && (!username || !password))}
               style={({ pressed }) => [
                 styles.loginButton,
-                { backgroundColor: theme.tint, opacity: redirecting ? 0.7 : pressed ? 0.9 : 1 },
+                { backgroundColor: theme.tint, opacity: redirecting || (isLocal && (!username || !password)) ? 0.7 : pressed ? 0.9 : 1 },
               ]}
             >
               {redirecting ? (
@@ -226,10 +286,15 @@ export default function LoginScreen() {
                 </View>
               ) : (
                 <Text style={styles.loginButtonText}>
-                  {t("auth.providerLogin", lang).replace("{provider}", selectedProvider.displayName)}
+                  {isLocal ? t("auth.loginButton", lang) : t("auth.providerLogin", lang).replace("{provider}", selectedProvider.displayName)}
                 </Text>
               )}
             </Pressable>
+            {isLocal && (
+              <Pressable accessibilityRole="link" onPress={() => router.push("/registrieren")} style={styles.localLink}>
+                <Text style={[styles.localLinkText, { color: theme.tint }]}>{t("auth.register", lang)}</Text>
+              </Pressable>
+            )}
           </View>
         )}
       </ScrollView>
@@ -291,4 +356,12 @@ const styles = StyleSheet.create({
   loginButton: { minHeight: 52, paddingHorizontal: 16, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   loadingRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   loginButtonText: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: "#fff" },
+  localFields: { gap: 10 },
+  fieldLabel: { fontSize: 13, fontFamily: "Inter_600SemiBold", marginBottom: -4 },
+  localInput: { minHeight: 50, borderWidth: 1, borderRadius: 13, paddingHorizontal: 14, fontSize: 16, fontFamily: "Inter_400Regular" },
+  passwordRow: { position: "relative", justifyContent: "center" },
+  passwordInput: { paddingRight: 52 },
+  passwordToggle: { position: "absolute", right: 4, minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" },
+  localLink: { minHeight: 44, justifyContent: "center", alignSelf: "flex-start" },
+  localLinkText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
 });

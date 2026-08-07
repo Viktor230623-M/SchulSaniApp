@@ -22,7 +22,7 @@ const API_BASE = `https://${process.env["EXPO_PUBLIC_DOMAIN"]}/api`;
 export interface AuthProviderInfo {
   key: string;
   displayName: string;
-  type: "oidc-redirect";
+  type: "local" | "oidc-redirect";
 }
 
 export interface AuthIdentityInfo {
@@ -94,6 +94,63 @@ const ApiService = {
     } finally {
       clearTimeout(timeout);
     }
+  },
+
+  async loginLocal(providerKey: string, username: string, password: string): Promise<{ user: User; isTealUnlocked: boolean; token: string }> {
+    const resp = await fetch(`${API_BASE}/auth/login`, {
+      method: "POST",
+      headers: headers(),
+      credentials: "include",
+      body: JSON.stringify({ providerKey, username, password }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error ?? "Anmeldung fehlgeschlagen");
+    if (typeof data.token !== "string") throw new Error("Anmeldung fehlgeschlagen");
+    setAuthToken(data.token);
+    return { user: { ...data.user, permissions: data.permissions ?? [] }, isTealUnlocked: data.isTealUnlocked, token: data.token };
+  },
+
+  async registerLocalAccount(input: { email: string; password: string; username?: string; firstName?: string; lastName?: string }): Promise<string> {
+    const resp = await fetch(`${API_BASE}/auth/local/register`, { method: "POST", headers: headers(), body: JSON.stringify(input) });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error ?? "Registrierung fehlgeschlagen");
+    return data.message ?? "";
+  },
+
+  async verifyLocalEmail(token: string): Promise<{ message: string; isApproved: boolean }> {
+    const resp = await fetch(`${API_BASE}/auth/local/verify`, { method: "POST", headers: headers(), body: JSON.stringify({ token }) });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error ?? "Bestätigungslink ist ungültig oder abgelaufen");
+    return { message: data.message ?? "", isApproved: data.isApproved === true };
+  },
+
+  async resendLocalVerification(email: string): Promise<string> {
+    const resp = await fetch(`${API_BASE}/auth/local/verify/resend`, { method: "POST", headers: headers(), body: JSON.stringify({ email }) });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error ?? "Bestätigungs-Mail konnte nicht angefordert werden");
+    return data.message ?? "";
+  },
+
+  async requestPasswordReset(email: string): Promise<string> {
+    const resp = await fetch(`${API_BASE}/auth/local/password/forgot`, { method: "POST", headers: headers(), body: JSON.stringify({ email }) });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error ?? "Passwort-Reset konnte nicht angefordert werden");
+    return data.message ?? "";
+  },
+
+  async resetLocalPassword(token: string, password: string): Promise<void> {
+    const resp = await fetch(`${API_BASE}/auth/local/password/reset`, { method: "POST", headers: headers(), body: JSON.stringify({ token, password }) });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error ?? "Passwort konnte nicht zurückgesetzt werden");
+  },
+
+  async changePassword(currentPassword: string, newPassword: string): Promise<string> {
+    const resp = await apiFetch(`${API_BASE}/auth/password/change`, { method: "POST", headers: headers(), body: JSON.stringify({ currentPassword, newPassword }) });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error ?? "Passwort konnte nicht geändert werden");
+    if (typeof data.token !== "string") throw new Error("Neues Sitzungstoken fehlt");
+    setAuthToken(data.token);
+    return data.token;
   },
 
   async exchangeNativeSession(code: string, verifier: string): Promise<{ user: User; isTealUnlocked: boolean; token: string } | null> {

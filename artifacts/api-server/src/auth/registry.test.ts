@@ -45,10 +45,32 @@ describe("Auth-Provider-Registry", () => {
   it("ignoriert alte Formular- und deaktivierte Eintraege", async () => {
     process.env["AUTH_PROVIDERS_PATH"] = await configFile([
       { key: "iserv-form", displayName: "IServ", type: "iserv-form" },
+      { key: "local", displayName: "E-Mail", type: "local" },
       { ...appleConfig(), enabled: false },
     ]);
 
-    expect(loadAuthProviders()).toEqual([]);
+    expect(loadAuthProviders()).toHaveLength(1);
+    expect(loadAuthProviders()[0]).toMatchObject({ key: "local", type: "local" });
+  });
+
+  it("startet nicht ohne einen nutzbaren Anmeldeweg", async () => {
+    process.env["AUTH_PROVIDERS_PATH"] = await configFile([
+      { key: "iserv-form", displayName: "IServ", type: "iserv-form" },
+      { ...appleConfig(), enabled: false },
+    ]);
+
+    expect(() => loadAuthProviders()).toThrow(/Keine lokalen oder OIDC-Anmeldewege/);
+  });
+
+  it("laedt lokale Konten und ignoriert IServ-Eintraege", async () => {
+    process.env["AUTH_PROVIDERS_PATH"] = await configFile([
+      { key: "local", displayName: "E-Mail", type: "local", schoolId: "school-1" },
+      { key: "iserv", displayName: "IServ", type: "iserv-form" },
+    ]);
+
+    const providers = loadAuthProviders();
+    expect(providers).toHaveLength(1);
+    expect(providers[0]).toMatchObject({ key: "local", type: "local" });
   });
 
   it("verlangt fuer Apple das dynamische JWT-Secret", async () => {
