@@ -261,6 +261,13 @@
         <div class="error"><span>—</span></div>
       </div>
 
+      <div class="field" data-field="joinCode">
+        <label for="joinCode">Schul-Zugangscode <span class="optional">(optional)</span></label>
+        <input type="text" id="joinCode" name="joinCode" autocomplete="off" placeholder="z. B. SANI-2026" spellcheck="false">
+        <div class="helper">Neue Konten (E-Mail und OIDC) brauchen diesen Code, damit sich keine Fremden anmelden. Ohne Angabe ist die Registrierung offen.</div>
+        <div class="error"><span>—</span></div>
+      </div>
+
       <div id="oidcFields">
         <div class="field" data-field="providerKey">
           <label for="providerKey">Anbieter-Kennung</label>
@@ -556,6 +563,7 @@
 
   var fieldMessages = {
     authMode: "Bitte einen Anmeldeweg auswaehlen.",
+    joinCode: "Schul-Zugangscode muss 6 bis 200 Zeichen lang sein.",
     schoolName: "Bitte einen Namen angeben.",
     domain: 'Das ist keine gueltige Domain, ohne "https://".',
     providerKey: "Bitte eine gueltige Anbieter-Kennung angeben.",
@@ -618,6 +626,7 @@
 
   var requiredValidators = {
     authMode:    function (v) { return v === "local" || v === "oidc" || v === "local+oidc"; },
+    joinCode: function (v) { var t = v.trim(); return t === "" || (t.length >= 6 && t.length <= 200 && t.indexOf("\n") === -1 && t.indexOf("\r") === -1); },
     schoolName: function (v) { return v.trim().length > 0 && v.trim().length <= 120; },
     domain: function (v) { return domainRe.test(v.trim()); },
     providerKey: function (v) { return providerKeyRe.test(v.trim()); },
@@ -668,7 +677,7 @@
   };
 
   var pageFields = {
-    1: ["authMode", "schoolName", "domain", "providerKey", "providerDisplayName", "providerIssuerUrl", "providerClientId", "providerClientSecret", "providerScopes", "providerAllowedHostedDomains", "providerGroupsClaim", "providerGroupToRoleMap", "providerClientSecretMode", "providerResponseMode", "providerAppleTeamId", "providerAppleKeyId", "providerApplePrivateKeyPath", "provider2Key", "provider2DisplayName", "provider2IssuerUrl", "provider2ClientId", "provider2ClientSecret", "provider2Scopes", "provider2AllowedHostedDomains", "provider2GroupsClaim", "provider2GroupToRoleMap", "provider2ClientSecretMode", "provider2ResponseMode", "provider2AppleTeamId", "provider2AppleKeyId", "provider2ApplePrivateKeyPath", "smtpHost", "smtpPort", "smtpUser", "smtpPassword", "smtpSecure", "mailFrom", "mailFromName"],
+    1: ["authMode", "joinCode", "schoolName", "domain", "providerKey", "providerDisplayName", "providerIssuerUrl", "providerClientId", "providerClientSecret", "providerScopes", "providerAllowedHostedDomains", "providerGroupsClaim", "providerGroupToRoleMap", "providerClientSecretMode", "providerResponseMode", "providerAppleTeamId", "providerAppleKeyId", "providerApplePrivateKeyPath", "provider2Key", "provider2DisplayName", "provider2IssuerUrl", "provider2ClientId", "provider2ClientSecret", "provider2Scopes", "provider2AllowedHostedDomains", "provider2GroupsClaim", "provider2GroupToRoleMap", "provider2ClientSecretMode", "provider2ResponseMode", "provider2AppleTeamId", "provider2AppleKeyId", "provider2ApplePrivateKeyPath", "smtpHost", "smtpPort", "smtpUser", "smtpPassword", "smtpSecure", "mailFrom", "mailFromName"],
     2: ["appName", "themeColor", "bundleId"],
     3: ["schoolId", "ownerUserId", "vapidSubject"],
     4: []
@@ -749,6 +758,7 @@
 
   function collectConfig() {
     return {
+      joinCode: el("joinCode").value,
       schoolName: el("schoolName").value,
       domain: el("domain").value,
       providerKey: el("providerKey").value,
@@ -802,6 +812,7 @@
       ["Anmeldung", cfg.authMode === "local" ? "E-Mail und Passwort" : cfg.authMode === "local+oidc" ? "E-Mail plus OIDC" : "OIDC"],
       ["Schule", cfg.schoolName],
       ["Domain", cfg.domain],
+      ["Schul-Zugangscode", cfg.joinCode || "(nicht gesetzt)"],
       ["Anbieter", cfg.providerDisplayName + " (" + cfg.providerKey + ")"],
       ["Issuer", cfg.providerIssuerUrl],
       ["Client-ID", cfg.providerClientId || "(nicht gesetzt)"],
@@ -916,6 +927,7 @@
       if (!data.config) return;
       var c = data.config;
       if (el("authMode")) el("authMode").value = c.authMode || "local";
+      if (el("joinCode")) el("joinCode").value = c.joinCode || "";
       if (el("schoolName")) el("schoolName").value = c.schoolName || "";
       if (el("domain")) el("domain").value = c.domain || "";
       if (el("providerKey")) el("providerKey").value = c.providerKey || "";

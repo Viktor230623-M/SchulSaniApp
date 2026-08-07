@@ -260,6 +260,14 @@ function validateConfig(body) {
   const usesLocal = out.authMode === "local" || out.authMode === "local+oidc";
   const usesOidc = out.authMode === "oidc" || out.authMode === "local+oidc";
 
+  // Mindestens sechs Zeichen: Der Code ist die Eintrittskarte der Schule und
+  // haelt eine 15-Minuten-Rate von wenigen Versuchen pro Minute aus. Kuerzere
+  // Codes wuerde der Limiter nicht mehr vor Erraten schuetzen.
+  out.joinCode = trimOrEmpty(body.joinCode);
+  if (out.joinCode !== "" && (out.joinCode.length < 6 || out.joinCode.length > 200 || hasControlCharacter(out.joinCode))) {
+    errors.joinCode = "Schul-Zugangscode muss 6 bis 200 Zeichen lang sein.";
+  }
+
   out.schoolName = trimOrEmpty(body.schoolName);
   if (!out.schoolName || out.schoolName.length > 120 || hasControlCharacter(out.schoolName)) {
     errors.schoolName = "Bitte einen Namen zwischen 1 und 120 Zeichen ohne Steuerzeichen angeben.";
@@ -511,6 +519,7 @@ function buildBackendEnv(cfg, secrets) {
     envLine("APP_NAME", cfg.appName),
     envLine("SCHOOL_ID", cfg.schoolId || "school"),
     envLine("OWNER_USER_ID", cfg.ownerUserId || ""),
+    envLine("SCHOOL_JOIN_CODE", cfg.joinCode || ""),
     envLine("APP_BASE_URL", allowedOrigins),
     envLine("SMTP_HOST", cfg.smtpHost),
     envLine("SMTP_PORT", cfg.smtpPort),
@@ -792,6 +801,7 @@ function publicState() {
           bundleId: state.config.bundleId,
           schoolId: state.config.schoolId,
           ownerUserId: state.config.ownerUserId,
+          joinCode: state.config.joinCode,
           vapidSubject: state.config.vapidSubject,
         }
       : null,
