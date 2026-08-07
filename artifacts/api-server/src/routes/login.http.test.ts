@@ -1,12 +1,11 @@
 import { describe, expect, it, vi, beforeAll, beforeEach } from "vitest";
 import request from "supertest";
-import bcrypt from "bcryptjs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import type { Express } from "express";
 
 const hier = dirname(fileURLToPath(import.meta.url));
-const { activeUserId } = vi.hoisted(() => ({ activeUserId: { value: "nutzer-local-1" } }));
+const { activeUserId } = vi.hoisted(() => ({ activeUserId: { value: "nutzer-oidc-1" } }));
 
 interface FakeUserRow {
   id: string;
@@ -14,15 +13,11 @@ interface FakeUserRow {
   isApproved: boolean;
   schoolId: string | null;
   profileConfirmedAt: Date | null;
-  mustChangePassword: boolean;
-  oneTimePasswordExpiresAt: Date | null;
   firstName: string | null;
   lastName: string | null;
   email: string | null;
-  passwordHash: string;
   emailVerifiedAt: Date | null;
   username: string | null;
-  passwordVersion: number;
   authProvider: string;
   externalSubject: string;
   createdAt: Date;
@@ -55,14 +50,10 @@ vi.mock("@workspace/db", async () => {
     firstName: text("first_name"),
     lastName: text("last_name"),
     email: text("email"),
-    passwordHash: text("password_hash"),
     authProvider: text("auth_provider"),
     externalSubject: text("external_subject"),
     emailVerifiedAt: text("email_verified_at"),
     username: text("username"),
-    passwordVersion: text("password_version"),
-    mustChangePassword: text("must_change_password"),
-    oneTimePasswordExpiresAt: text("one_time_password_expires_at"),
   });
 
   const userIdentitiesTableMock = pgTable("user_identities", {
@@ -74,15 +65,6 @@ vi.mock("@workspace/db", async () => {
     emailAtLink: text("email_at_link"),
     createdAt: text("created_at"),
     lastUsedAt: text("last_used_at"),
-  });
-
-  const authTokensTableMock = pgTable("auth_tokens", {
-    id: text("id"),
-    userId: text("user_id"),
-    kind: text("kind"),
-    tokenHash: text("token_hash"),
-    expiresAt: text("expires_at"),
-    usedAt: text("used_at"),
   });
 
   function createMockTable(name: string) {
@@ -136,7 +118,6 @@ vi.mock("@workspace/db", async () => {
     pool: { query: () => Promise.resolve({ rows: [] }) },
     usersTable: usersTableMock,
     userIdentitiesTable: userIdentitiesTableMock,
-    authTokensTable: authTokensTableMock,
     newsTable: createMockTable("news"),
     loaTable: createMockTable("loa"),
     missionsTable: createMockTable("missions"),
@@ -158,9 +139,8 @@ vi.mock("@workspace/db", async () => {
   };
 });
 
-// createSession/resolveSession greifen auf eine echte Datenbank zu; der
-// Formular-Login nutzt sie hier nie (kein rememberMe), aber die Routen
-// importieren das Modul.
+// Die Auth-Routen importieren Sitzungsfunktionen; der Test braucht nur
+// einen deterministischen, nicht persistenten Ersatz.
 vi.mock("../lib/sessions", () => ({
   resolveSession: async () => null,
   createSession: async () => "irrelevant",
@@ -182,7 +162,7 @@ vi.mock("../middlewares/auth", async () => {
         res.status(401).json({ error: "Unauthorized" });
         return;
       }
-      const userId = token.startsWith("user:") ? token.slice(5) : "nutzer-local-1";
+      const userId = token.startsWith("user:") ? token.slice(5) : "nutzer-oidc-1";
       activeUserId.value = userId;
       req.user = { userId, role: "sanitaeter", permissions: [] };
       next();
@@ -190,38 +170,28 @@ vi.mock("../middlewares/auth", async () => {
   };
 });
 
-// Die Anmeldewege werden beim Import aus AUTH_PROVIDERS_PATH geladen. Die
-// Fixture hat nur lokale und OIDC-Wege -- laedt die App, beweist das schon:
-// ein Start ohne IServ bricht nicht mehr ab.
+// Die App wird mit einem OIDC-only Anbieter geladen.
 let app: Express;
 beforeAll(async () => {
-  process.env["AUTH_PROVIDERS_PATH"] = resolve(hier, "fixtures", "auth-providers.local-only.json");
+  process.env["AUTH_PROVIDERS_PATH"] = resolve(hier, "fixtures", "auth-providers.oidc-only.json");
   process.env["SCHOOL_ID"] = "school";
   app = (await import("../app")).default;
 });
 
-// Niedrige Kostenstufe nur fuer den Fixture-Hash; der Adapter vergleicht mit
-// derselben Funktion, egal mit welcher Kostenstufe der Hash erzeugt wurde.
-const existingUserHash = bcrypt.hashSync("das-richtige-passwort", 4);
-
-function localUser(overrides: Partial<FakeUserRow> = {}): FakeUserRow {
+function oidcUser(overrides: Partial<FakeUserRow> = {}): FakeUserRow {
   return {
-    id: "nutzer-local-1",
+    id: "nutzer-oidc-1",
     role: "sanitaeter",
     isApproved: true,
     schoolId: "school",
     profileConfirmedAt: null,
-    mustChangePassword: false,
-    oneTimePasswordExpiresAt: null,
     firstName: "Max",
     lastName: "Muster",
     email: "mmuster@vitest.beispiel.invalid",
     emailVerifiedAt: new Date(),
     username: null,
-    passwordVersion: 0,
-    passwordHash: existingUserHash,
-    authProvider: "local",
-    externalSubject: "mmuster",
+    authProvider: "oidc-beispiel",
+    externalSubject: "oidc-subjekt",
     createdAt: new Date("2026-08-01T10:00:00.000Z"),
     lastUsedAt: new Date("2026-08-07T10:00:00.000Z"),
     ...overrides,
@@ -233,33 +203,35 @@ async function postLogin(body: Record<string, unknown>) {
   return { status: res.status, body: res.body };
 }
 
-describe("Anbieterbewusster Formular-Login", () => {
+describe("OIDC-only Authentifizierung", () => {
   beforeEach(() => {
     fakeUsers = [];
     fakeIdentities = [];
   });
 
-  it("startet ohne iserv-form und listet die konfigurierten Wege", async () => {
+  it("listet den aktivierten OIDC-Anmeldeweg", async () => {
     const res = await request(app).get("/api/auth/providers");
 
     expect(res.status).toBe(200);
-    expect(res.body.providers.map((p: { key: string }) => p.key).sort()).toEqual(["local", "oidc-beispiel"]);
+    expect(res.body.providers).toEqual([
+      { key: "oidc-beispiel", displayName: "Schul-Login (OIDC)", type: "oidc-redirect" },
+    ]);
   });
 
-  it("listet nur die Identitäten des angemeldeten Kontos", async () => {
-    fakeUsers = [localUser()];
+  it("listet nur die Identitaeten des angemeldeten Kontos", async () => {
+    fakeUsers = [oidcUser()];
     fakeIdentities = [
       {
-        id: "primary-nutzer-local-1",
-        userId: "nutzer-local-1",
-        authProvider: "local",
+        id: "primary-nutzer-oidc-1",
+        userId: "nutzer-oidc-1",
+        authProvider: "oidc-beispiel",
         createdAt: new Date("2026-08-01T10:00:00.000Z"),
         lastUsedAt: new Date("2026-08-07T10:00:00.000Z"),
       },
       {
         id: "fremde-identitaet",
         userId: "anderes-konto",
-        authProvider: "local",
+        authProvider: "oidc-beispiel",
         createdAt: new Date("2026-08-01T10:00:00.000Z"),
         lastUsedAt: null,
       },
@@ -267,15 +239,15 @@ describe("Anbieterbewusster Formular-Login", () => {
 
     const res = await request(app)
       .get("/api/auth/identities")
-      .set("authorization", "Bearer user:nutzer-local-1");
+      .set("authorization", "Bearer user:nutzer-oidc-1");
 
     expect(res.status).toBe(200);
     expect(res.body.identities).toEqual([
       expect.objectContaining({
-        id: "primary-nutzer-local-1",
-        providerKey: "local",
-        displayName: "Schul-Konto",
-        type: "local",
+        id: "primary-nutzer-oidc-1",
+        providerKey: "oidc-beispiel",
+        displayName: "Schul-Login (OIDC)",
+        type: "oidc-redirect",
       }),
     ]);
   });
@@ -286,39 +258,15 @@ describe("Anbieterbewusster Formular-Login", () => {
     expect(res.status).toBe(401);
   });
 
-  it("meldet ein lokales Konto ueber den providerKey an", async () => {
-    fakeUsers = [localUser()];
+  it("weist den entfernten Formular-Login mit 404 ab", async () => {
+    const result = await postLogin({ providerKey: "entfernter-formularweg", username: "mmuster", password: "nicht-verarbeiten" });
 
-    const result = await postLogin({ providerKey: "local", username: "mmuster", password: "das-richtige-passwort" });
-
-    expect(result.status).toBe(200);
-    expect(result.body.token).toBeTruthy();
-    expect(result.body.user.id).toBe("nutzer-local-1");
-    expect(result.body.user.profileConfirmedAt).toBeNull();
-    expect(result.body.user.mustChangePassword).toBe(false);
-  });
-
-  it("lehnt ein falsches Passwort mit der generischen Meldung ab", async () => {
-    fakeUsers = [localUser()];
-
-    const result = await postLogin({ providerKey: "local", username: "mmuster", password: "falsch" });
-
-    expect(result.status).toBe(401);
-    expect(result.body.error).toBe("Ungültige Zugangsdaten");
-  });
-
-  it("sperrt ein Konto, das noch auf Freischaltung wartet", async () => {
-    fakeUsers = [localUser({ isApproved: false })];
-
-    const result = await postLogin({ providerKey: "local", username: "mmuster", password: "das-richtige-passwort" });
-
-    expect(result.status).toBe(403);
+    expect(result.status).toBe(404);
+    expect(result.body.error).toBe("Anmeldeweg nicht gefunden.");
   });
 
   it("weist einen unbekannten Anbieter mit 404 ab", async () => {
-    fakeUsers = [localUser()];
-
-    const result = await postLogin({ providerKey: "gibtsnicht", username: "mmuster", password: "das-richtige-passwort" });
+    const result = await postLogin({ providerKey: "gibtsnicht", username: "mmuster", password: "nicht-verarbeiten" });
 
     expect(result.status).toBe(404);
     expect(result.body.error).toBe("Anmeldeweg nicht gefunden.");

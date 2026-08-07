@@ -35,12 +35,6 @@ export const SCHOOL_NAME = pflicht(
   process.env["EXPO_PUBLIC_SCHOOL_NAME"],
 );
 
-/** Domain der IServ-Instanz, an der sich angemeldet wird. */
-export const ISERV_DOMAIN = pflicht(
-  "EXPO_PUBLIC_ISERV_DOMAIN",
-  process.env["EXPO_PUBLIC_ISERV_DOMAIN"],
-);
-
 /** Kurzer Anwendungsname: Startbildschirm, Manifest, Benachrichtigungen. */
 export const APP_NAME = pflicht(
   "EXPO_PUBLIC_APP_NAME",

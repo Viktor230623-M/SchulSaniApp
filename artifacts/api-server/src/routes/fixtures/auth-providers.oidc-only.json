@@ -1,0 +1,11 @@
+[
+  {
+    "key": "oidc-beispiel",
+    "displayName": "Schul-Login (OIDC)",
+    "type": "oidc-redirect",
+    "issuerUrl": "https://login.vitest.beispiel.invalid",
+    "clientId": "vitest-client",
+    "redirectUri": "https://vitest.beispiel.invalid/api/auth/oidc-beispiel/callback",
+    "scopes": ["openid", "email", "profile"]
+  }
+]

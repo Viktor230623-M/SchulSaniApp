@@ -22,7 +22,7 @@ const API_BASE = `https://${process.env["EXPO_PUBLIC_DOMAIN"]}/api`;
 export interface AuthProviderInfo {
   key: string;
   displayName: string;
-  type: "iserv-form" | "oidc-redirect" | "local";
+  type: "oidc-redirect";
 }
 
 export interface AuthIdentityInfo {
@@ -61,19 +61,6 @@ function headers() {
 }
 
 const ApiService = {
-  async login(credentials: { username: string; password: string; providerKey: string }, rememberMe?: boolean): Promise<{ user: User; isTealUnlocked: boolean; token: string }> {
-    const resp = await apiFetch(`${API_BASE}/auth/login`, {
-      method: "POST",
-      headers: headers(),
-      body: JSON.stringify({ providerKey: credentials.providerKey, username: credentials.username.trim(), password: credentials.password, rememberMe }),
-    });
-    const data = await resp.json();
-    if (!resp.ok) throw new Error(data.error ?? "Anmeldung fehlgeschlagen");
-    if (data.token) setAuthToken(data.token);
-    const user: User = { ...data.user, permissions: data.permissions ?? [] };
-    return { user, isTealUnlocked: data.isTealUnlocked, token: data.token };
-  },
-
   /**
    * Holt aus dem httpOnly-Sitzungscookie ein frisches Bearer-Token.
    *
@@ -173,74 +160,6 @@ const ApiService = {
     const params = new URLSearchParams({ returnTo });
     if (handoffChallenge) params.set("handoffChallenge", handoffChallenge);
     return `${url}?${params}`;
-  },
-
-  async registerLocalAccount(input: { email: string; password: string; username?: string; firstName?: string; lastName?: string }): Promise<string> {
-    const resp = await fetch(`${API_BASE}/auth/local/register`, {
-      method: "POST",
-      headers: { ...headers(), "Content-Type": "application/json" },
-      body: JSON.stringify(input),
-    });
-    const data = await resp.json().catch(() => ({}));
-    if (!resp.ok) throw new Error(data.error ?? "Registrierung fehlgeschlagen");
-    return data.message ?? "Wenn die Adresse genutzt werden kann, liegt gleich eine E-Mail im Postfach.";
-  },
-
-  async verifyLocalEmail(token: string): Promise<string> {
-    const resp = await fetch(`${API_BASE}/auth/local/verify`, {
-      method: "POST",
-      headers: { ...headers(), "Content-Type": "application/json" },
-      body: JSON.stringify({ token }),
-    });
-    const data = await resp.json().catch(() => ({}));
-    if (!resp.ok) throw new Error(data.error ?? "Bestätigungslink ist ungültig oder abgelaufen");
-    return data.message ?? "E-Mail-Adresse bestätigt";
-  },
-
-  async resendLocalVerification(email: string): Promise<string> {
-    const resp = await fetch(`${API_BASE}/auth/local/verify/resend`, {
-      method: "POST",
-      headers: { ...headers(), "Content-Type": "application/json" },
-      body: JSON.stringify({ email }),
-    });
-    const data = await resp.json().catch(() => ({}));
-    if (!resp.ok) throw new Error(data.error ?? "Bestätigungs-Mail konnte nicht angefordert werden");
-    return data.message ?? "Wenn die Adresse genutzt werden kann, liegt gleich eine E-Mail im Postfach.";
-  },
-
-  async requestPasswordReset(email: string): Promise<string> {
-    const resp = await fetch(`${API_BASE}/auth/local/password/forgot`, {
-      method: "POST",
-      headers: { ...headers(), "Content-Type": "application/json" },
-      body: JSON.stringify({ email }),
-    });
-    const data = await resp.json().catch(() => ({}));
-    if (!resp.ok) throw new Error(data.error ?? "Anfrage konnte nicht verarbeitet werden");
-    return data.message ?? "Wenn die Adresse genutzt werden kann, liegt gleich eine E-Mail im Postfach.";
-  },
-
-  async resetLocalPassword(token: string, password: string): Promise<void> {
-    const resp = await fetch(`${API_BASE}/auth/local/password/reset`, {
-      method: "POST",
-      headers: { ...headers(), "Content-Type": "application/json" },
-      body: JSON.stringify({ token, password }),
-    });
-    const data = await resp.json().catch(() => ({}));
-    if (!resp.ok) throw new Error(data.error ?? "Passwort konnte nicht zurückgesetzt werden");
-  },
-
-  async changePassword(currentPassword: string, newPassword: string): Promise<string> {
-    const resp = await fetch(`${API_BASE}/auth/password/change`, {
-      method: "POST",
-      headers: headers(),
-      credentials: "include",
-      body: JSON.stringify({ currentPassword, newPassword }),
-    });
-    const data = await resp.json().catch(() => ({}));
-    if (!resp.ok) throw new Error(data.error ?? "Passwort konnte nicht geaendert werden");
-    if (typeof data.token !== "string") throw new Error("Sitzung konnte nicht erneuert werden");
-    setAuthToken(data.token);
-    return data.token;
   },
 
   /** Setzt einmalig den bestaetigten Namen fuer das eigene Konto (PATCH /auth/profile). */

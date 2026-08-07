@@ -5,8 +5,7 @@
  * gelesen — und nur hier. Fehlt ein Pflichtwert, bricht der Start mit einer
  * Meldung ab, statt still auf die Werte einer bestimmten Schule zurueckzufallen.
  * Ein Vorgabewert waere hier gefaehrlich: eine falsch konfigurierte Instanz
- * wuerde Anmeldedaten an eine fremde IServ-Instanz schicken oder CORS fuer eine
- * fremde Domain oeffnen, ohne dass es jemandem auffaellt.
+ * koennte CORS fuer eine fremde Domain oeffnen, ohne dass es jemandem auffaellt.
  *
  * Vorlage mit allen Variablen: artifacts/api-server/.env.example
  */
@@ -27,35 +26,6 @@ function pflicht(name: string, hinweis: string): string {
     return "";
   }
   return wert;
-}
-
-/** Basis-URL ohne abschliessenden Schraegstrich, damit `${base}/pfad` stimmt. */
-function pflichtUrl(name: string, hinweis: string): string {
-  const roh = pflicht(name, hinweis);
-  if (roh === "") return "";
-  let url: URL;
-  try {
-    url = new URL(roh);
-  } catch {
-    fehlend.push(`${name} — keine gueltige URL: "${roh}"`);
-    return "";
-  }
-  if (url.protocol !== "https:") {
-    // Ueber diese Verbindung gehen Anmeldedaten. Klartext ist keine Option.
-    fehlend.push(`${name} — muss https sein, ist aber "${url.protocol}//"`);
-    return "";
-  }
-  return url.origin;
-}
-
-function pflichtDomain(name: string, hinweis: string): string {
-  const roh = pflicht(name, hinweis);
-  if (roh === "") return "";
-  if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i.test(roh)) {
-    fehlend.push(`${name} — keine gueltige Domain: "${roh}"`);
-    return "";
-  }
-  return roh.toLowerCase();
 }
 
 /**
@@ -98,16 +68,6 @@ export const config = {
   allowedOrigins: pflichtOrigins(
     "ALLOWED_ORIGINS",
     "kommagetrennte Liste der Web-Adressen dieser Instanz",
-  ),
-  /** Basis-URL der IServ-Instanz der Schule, ohne Pfad. */
-  iservBaseUrl: pflichtUrl(
-    "ISERV_BASE_URL",
-    "Basis-URL der IServ-Instanz der Schule",
-  ),
-  /** Mail-Domain, die aus dem IServ-Benutzernamen gebildet wird. */
-  emailDomain: pflichtDomain(
-    "EMAIL_DOMAIN",
-    "Mail-Domain der Schule",
   ),
   /** Anzeigename der Instanz, u. a. Rueckfalltitel fuer Benachrichtigungen. */
   appName: pflicht(

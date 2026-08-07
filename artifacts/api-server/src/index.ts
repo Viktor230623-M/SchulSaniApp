@@ -26,9 +26,6 @@ if (Number.isNaN(port) || port <= 0) {
 
 async function main(): Promise<void> {
   const { default: app } = await import("./app");
-  const { loadAuthProviders } = await import("./auth/registry");
-  const { mailerConfig, verifyMailer } = await import("./services/mailer");
-  if (mailerConfig.enabled && loadAuthProviders().some((provider) => provider.type === "local")) await verifyMailer();
   const { startScheduler } = await import("./jobs/scheduler");
   app.listen(port, () => {
     console.log(`Server listening on port ${port}`);

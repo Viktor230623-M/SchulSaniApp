@@ -13,7 +13,7 @@ import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
 import * as ImagePicker from "expo-image-picker";
 import Constants from "expo-constants";
-import { ISERV_DOMAIN, SCHOOL_NAME } from "@/constants/appConfig";
+import { SCHOOL_NAME } from "@/constants/appConfig";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
@@ -471,7 +471,7 @@ export default function SettingsScreen() {
             >
               <View style={[styles.identityIcon, { backgroundColor: theme.tintLight }]}>
                 <Ionicons
-                  name={identity.type === "local" ? "lock-closed-outline" : identity.type === "oidc-redirect" ? "globe-outline" : "school-outline"}
+                  name="globe-outline"
                   size={18}
                   color={theme.tint}
                   accessible={false}
@@ -1010,7 +1010,7 @@ export default function SettingsScreen() {
       </Pressable>
 
       <Text style={[styles.version, { color: theme.textTertiary }]}>
-        {t("settings.version", lang)} {Constants.expoConfig?.version ?? "2.0.0"} · {SCHOOL_NAME} · {ISERV_DOMAIN}
+        {t("settings.version", lang)} {Constants.expoConfig?.version ?? "2.0.0"} · {SCHOOL_NAME}
       </Text>
     </ScrollView>
   );
