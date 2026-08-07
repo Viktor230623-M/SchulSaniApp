@@ -22,7 +22,7 @@ import { useTopPad } from "@/hooks/useTopPad";
 import { SCHOOL_NAME } from "@/constants/appConfig";
 import { t } from "@/constants/i18n";
 import { getTheme, istDunklesThema } from "@/constants/theme";
-import ApiService, { type AuthProviderInfo } from "@/services/ApiService";
+import ApiService, { AuthError, type AuthProviderInfo } from "@/services/ApiService";
 import { useAppStore } from "@/store/useAppStore";
 
 async function createHandoffVerifier(): Promise<string> {
@@ -67,7 +67,7 @@ export default function LoginScreen() {
   useEffect(() => {
     let cancelled = false;
     ApiService.getAuthProviders()
-      .then((list) => {
+      .then(({ providers: list }) => {
         if (cancelled) return;
         if (list.length === 0) throw new Error("Keine Anmeldewege konfiguriert");
         setProviders(list);
@@ -125,6 +125,10 @@ export default function LoginScreen() {
     } catch (err) {
       if (err && typeof err === "object" && "code" in err && err.code === "ERR_REQUEST_CANCELED") {
         // Nutzer hat den Dialog abgebrochen -- kein Fehler, kein Text.
+      } else if (err instanceof AuthError && err.handoff) {
+        // Neues Konto auf einer Instanz mit Schul-Zugangscode: der einmalige
+        // Handoff fuehrt in den Schul-Code-Screen statt in die App.
+        router.replace({ pathname: "/schul-code", params: { handoff: err.handoff } });
       } else {
         setRedirectError(err instanceof Error ? err.message : t("auth.redirectFailed", lang));
       }
@@ -175,8 +179,15 @@ export default function LoginScreen() {
 
       const callback = result.url ? Linking.parse(result.url) : null;
       const code = typeof callback?.queryParams?.code === "string" ? callback.queryParams.code : null;
-      const restored = code && verifier ? await ApiService.exchangeNativeSession(code, verifier) : null;
+      const joinCodeHandoff = typeof callback?.queryParams?.handoff === "string" ? callback.queryParams.handoff : null;
       setRedirecting(false);
+      if (joinCodeHandoff) {
+        // Neues Konto auf einer Instanz mit Schul-Zugangscode: die App zeigt
+        // den Schul-Code-Screen, der den einmaligen Handoff einloest.
+        router.replace({ pathname: "/schul-code", params: { handoff: joinCodeHandoff } });
+        return;
+      }
+      const restored = code && verifier ? await ApiService.exchangeNativeSession(code, verifier) : null;
       if (!restored) {
         setRedirectError(t("auth.redirectFailed", lang));
         return;

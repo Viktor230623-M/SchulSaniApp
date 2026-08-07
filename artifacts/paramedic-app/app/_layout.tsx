@@ -111,6 +111,7 @@ function RootLayoutNav() {
         <Stack.Screen name="registrieren" options={{ headerShown: false }} />
         <Stack.Screen name="email-bestaetigen" options={{ headerShown: false }} />
         <Stack.Screen name="freischaltung-warten" options={{ headerShown: false }} />
+        <Stack.Screen name="schul-code" options={{ headerShown: false }} />
         <Stack.Screen name="passwort-vergessen" options={{ headerShown: false }} />
         <Stack.Screen name="passwort-zuruecksetzen" options={{ headerShown: false }} />
       </Stack.Protected>

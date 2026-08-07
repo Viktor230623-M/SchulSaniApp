@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text } from "react-native";
 import { AuthButton, AuthField, AuthLink, AuthMessage, AuthShell } from "@/components/AuthSurface";
 import { getTheme } from "@/constants/theme";
@@ -15,17 +15,29 @@ export default function RegistrierenScreen() {
   const [password, setPassword] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [joinCode, setJoinCode] = useState("");
+  const [joinCodeRequired, setJoinCodeRequired] = useState(false);
   const [visible, setVisible] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
+  // Das Code-Feld erscheint nur, wenn die Instanz einen Schul-Zugangscode
+  // verlangt — auf offenen Instanzen haette es keinen Zweck und wuerde
+  // nur verwirren.
+  useEffect(() => {
+    ApiService.getAuthProviders()
+      .then(({ joinCodeRequired: required }) => setJoinCodeRequired(required))
+      .catch(() => {});
+  }, []);
+
   async function submit() {
     if (!email.trim()) { setError(t("auth.emailRequired", lang)); return; }
     if (password.length < 10) { setError(t("auth.passwordTooShort", lang)); return; }
+    if (joinCodeRequired && !joinCode.trim()) { setError(t("auth.joinCodeFailed", lang)); return; }
     setLoading(true); setError(""); setMessage("");
     try {
-      await ApiService.registerLocalAccount({ email, password, username: username.trim() || undefined, firstName, lastName });
+      await ApiService.registerLocalAccount({ email, password, username: username.trim() || undefined, firstName, lastName, joinCode: joinCodeRequired ? joinCode.trim() : undefined });
       router.replace({ pathname: "/email-bestaetigen", params: { email } });
     } catch (err) {
       setError(err instanceof Error ? err.message : t("auth.loginFailed", lang));
@@ -38,6 +50,9 @@ export default function RegistrierenScreen() {
       <AuthField label={t("auth.usernameOptional", lang)} value={username} onChangeText={setUsername} theme={theme} icon="at-outline" autoComplete="username" />
       <AuthField label={t("auth.firstNameOptional", lang)} value={firstName} onChangeText={setFirstName} theme={theme} icon="person-outline" autoComplete="name" />
       <AuthField label={t("auth.lastNameOptional", lang)} value={lastName} onChangeText={setLastName} theme={theme} icon="person-outline" autoComplete="name" />
+      {joinCodeRequired && (
+        <AuthField label={t("auth.joinCodeLabel", lang)} value={joinCode} onChangeText={setJoinCode} theme={theme} icon="key-outline" autoComplete="username" />
+      )}
       <AuthField label={t("auth.password", lang)} value={password} onChangeText={setPassword} theme={theme} icon="lock-closed-outline" password visible={visible} onToggleVisibility={() => setVisible((v) => !v)} onSubmitEditing={submit} autoComplete="new-password" />
       {message ? <AuthMessage text={message} theme={theme} /> : null}
       {error ? <AuthMessage text={error} error theme={theme} /> : null}
