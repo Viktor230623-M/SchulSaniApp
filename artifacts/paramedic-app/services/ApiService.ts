@@ -147,7 +147,7 @@ const ApiService = {
     return `${url}?${params}`;
   },
 
-  async registerLocalAccount(input: { email: string; password: string; firstName?: string; lastName?: string }): Promise<string> {
+  async registerLocalAccount(input: { email: string; password: string; username?: string; firstName?: string; lastName?: string }): Promise<string> {
     const resp = await fetch(`${API_BASE}/auth/local/register`, {
       method: "POST",
       headers: { ...headers(), "Content-Type": "application/json" },

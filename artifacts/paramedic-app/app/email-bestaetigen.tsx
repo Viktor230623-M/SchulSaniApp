@@ -8,11 +8,12 @@ import ApiService from "@/services/ApiService";
 import { useAppStore } from "@/store/useAppStore";
 
 export default function EmailBestaetigenScreen() {
-  const { token: rawToken } = useLocalSearchParams<{ token?: string }>();
+  const { token: rawToken, email: rawEmail } = useLocalSearchParams<{ token?: string; email?: string }>();
   const token = typeof rawToken === "string" ? rawToken : "";
+  const initialEmail = typeof rawEmail === "string" ? rawEmail : "";
   const lang = useAppStore((s) => s.language);
   const theme = getTheme(useAppStore((s) => s.theme));
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(initialEmail);
   const [loading, setLoading] = useState(Boolean(token));
   const [message, setMessage] = useState("");
   const [error, setError] = useState(token ? "" : t("auth.verifyFailed", lang));
@@ -26,7 +27,7 @@ export default function EmailBestaetigenScreen() {
       if (!cancelled) { setError(err instanceof Error ? err.message : t("auth.verifyFailed", lang)); setLoading(false); }
     });
     return () => { cancelled = true; };
-  }, [lang, token]);
+  }, [token]);
 
   async function resend() {
     if (!email.trim()) { setError(t("auth.emailRequired", lang)); return; }
@@ -42,6 +43,7 @@ export default function EmailBestaetigenScreen() {
       {error ? <AuthMessage text={error} error theme={theme} /> : null}
       {!token && <AuthField label={t("auth.email", lang)} value={email} onChangeText={setEmail} theme={theme} icon="mail-outline" keyboardType="email-address" autoComplete="email" onSubmitEditing={resend} />}
       {!token && <AuthButton label={t("auth.resendVerification", lang)} loading={loading} disabled={!email} onPress={resend} theme={theme} />}
+
       <AuthLink label={t("auth.backToLogin", lang)} onPress={() => router.replace("/login")} theme={theme} />
     </AuthShell>
   );

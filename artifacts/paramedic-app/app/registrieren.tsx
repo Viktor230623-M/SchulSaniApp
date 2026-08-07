@@ -11,6 +11,7 @@ export default function RegistrierenScreen() {
   const lang = useAppStore((s) => s.language);
   const theme = getTheme(useAppStore((s) => s.theme));
   const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -24,8 +25,8 @@ export default function RegistrierenScreen() {
     if (password.length < 10) { setError(t("auth.passwordTooShort", lang)); return; }
     setLoading(true); setError(""); setMessage("");
     try {
-      await ApiService.registerLocalAccount({ email, password, firstName, lastName });
-      router.replace({ pathname: "/freischaltung-warten", params: { email } });
+      await ApiService.registerLocalAccount({ email, password, username: username.trim() || undefined, firstName, lastName });
+      router.replace({ pathname: "/email-bestaetigen", params: { email } });
     } catch (err) {
       setError(err instanceof Error ? err.message : t("auth.loginFailed", lang));
     } finally { setLoading(false); }
@@ -34,6 +35,7 @@ export default function RegistrierenScreen() {
   return (
     <AuthShell theme={theme} title={t("auth.registerHeading", lang)} body={t("auth.registerBody", lang)}>
       <AuthField label={t("auth.email", lang)} value={email} onChangeText={setEmail} theme={theme} icon="mail-outline" keyboardType="email-address" autoComplete="email" />
+      <AuthField label={t("auth.usernameOptional", lang)} value={username} onChangeText={setUsername} theme={theme} icon="at-outline" autoComplete="username" />
       <AuthField label={t("auth.firstNameOptional", lang)} value={firstName} onChangeText={setFirstName} theme={theme} icon="person-outline" autoComplete="name" />
       <AuthField label={t("auth.lastNameOptional", lang)} value={lastName} onChangeText={setLastName} theme={theme} icon="person-outline" autoComplete="name" />
       <AuthField label={t("auth.password", lang)} value={password} onChangeText={setPassword} theme={theme} icon="lock-closed-outline" password visible={visible} onToggleVisibility={() => setVisible((v) => !v)} onSubmitEditing={submit} autoComplete="new-password" />

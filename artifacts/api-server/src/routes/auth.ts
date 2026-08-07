@@ -139,7 +139,7 @@ async function getRoleForUser(groups: string[], providerKey: string, schoolId: s
 // Baut die Nutzerprojektion, wie sie sowohl Login als auch Sitzungswiederherstellung
 // in der Antwort zurueckgeben. Die Rolle wird hier nicht vorbelegt — das bleibt
 // Sache der Aufrufer, da Login und Session unterschiedliche Standardwerte nutzen.
-async function buildUserResponse(user: { id: string; firstName: string | null; lastName: string | null; email: string | null; role: string; schoolId: string | null; profileConfirmedAt: Date | null; mustChangePassword: boolean }) {
+async function buildUserResponse(user: { id: string; firstName: string | null; lastName: string | null; email: string | null; username?: string | null; role: string; schoolId: string | null; profileConfirmedAt: Date | null; mustChangePassword: boolean }) {
   // Die Rechte kommen mit der Anmeldeantwort, damit der Client nicht mehr aus
   // dem Rollennamen ableiten muss, was sichtbar ist. Bereich ist die Schule
   // der Nutzerzeile, nicht der globale Bereich -- sonst ueberschreibt eine
@@ -148,7 +148,7 @@ async function buildUserResponse(user: { id: string; firstName: string | null; l
   const isOwnerAccount = config.ownerUserId !== undefined && user.id === config.ownerUserId;
   return {
     user: {
-      id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email, role: user.role, isOwnerAccount,
+      id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email, username: user.username ?? null, role: user.role, isOwnerAccount,
       profileConfirmedAt: user.profileConfirmedAt ? user.profileConfirmedAt.toISOString() : null,
       mustChangePassword: user.mustChangePassword,
     },
@@ -227,6 +227,7 @@ router.post("/login", authLimiter, async (req, res) => {
         oneTimePasswordExpiresAt: usersTable.oneTimePasswordExpiresAt,
         profileConfirmedAt: usersTable.profileConfirmedAt,
         emailVerifiedAt: usersTable.emailVerifiedAt,
+        username: usersTable.username,
         authProvider: usersTable.authProvider,
         passwordVersion: usersTable.passwordVersion,
       })
@@ -298,6 +299,7 @@ router.post("/login", authLimiter, async (req, res) => {
         firstName,
         lastName,
         email,
+        username: existing[0]?.username ?? null,
         role: userRole,
         schoolId,
         profileConfirmedAt: existing[0]?.profileConfirmedAt ?? null,
@@ -327,9 +329,22 @@ function validPassword(value: unknown): value is string {
   return typeof value === "string" && value.length >= 10 && value.length <= 200;
 }
 
+function normaliseUsername(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const username = value.trim().toLowerCase();
+  if (username.length < 3 || username.length > 100 || !/^[a-z0-9][a-z0-9._-]*$/.test(username)) return null;
+  return username;
+}
+
 const localAccountLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 10,
+  message: { error: "Zu viele Anfragen, bitte spaeter erneut versuchen." },
+});
+
+const resetIpLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 30,
   message: { error: "Zu viele Anfragen, bitte spaeter erneut versuchen." },
 });
 
@@ -343,6 +358,14 @@ const resetEmailLimiter = rateLimit({
 const EMAIL_RESPONSE = "Wenn die Adresse genutzt werden kann, liegt gleich eine E-Mail im Postfach.";
 const AUTH_RESPONSE_FLOOR_MS = 400;
 
+function htmlMailText(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\n/g, "<br>");
+}
+
 async function waitForAuthResponse(startedAt: number): Promise<void> {
   const remaining = AUTH_RESPONSE_FLOOR_MS - (Date.now() - startedAt);
   if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
@@ -352,9 +375,17 @@ router.post("/local/register", localAccountLimiter, async (req, res) => {
   if (localAccountUnavailable(res)) return;
   const email = normaliseEmail(req.body?.email);
   const password = req.body?.password;
+  const rawUsername = req.body?.username;
+  const username = rawUsername === undefined || rawUsername === "" ? null : normaliseUsername(rawUsername);
   const firstName = typeof req.body?.firstName === "string" ? req.body.firstName.trim() : "";
   const lastName = typeof req.body?.lastName === "string" ? req.body.lastName.trim() : "";
-  if (!email || !validPassword(password) || firstName.length > 100 || lastName.length > 100) {
+  if (
+    !email ||
+    !validPassword(password) ||
+    (rawUsername !== undefined && rawUsername !== "" && !username) ||
+    firstName.length > 100 ||
+    lastName.length > 100
+  ) {
     res.status(400).json({ error: "E-Mail und Passwort sind ungueltig." });
     return;
   }
@@ -366,48 +397,67 @@ router.post("/local/register", localAccountLimiter, async (req, res) => {
     email: usersTable.email,
     authProvider: usersTable.authProvider,
     emailVerifiedAt: usersTable.emailVerifiedAt,
+    username: usersTable.username,
   })
     .from(usersTable)
     .where(eq(usersTable.email, email))
     .limit(1);
+  const usernameAccount = username
+    ? (await db.select({ id: usersTable.id, email: usersTable.email, authProvider: usersTable.authProvider })
+      .from(usersTable)
+      .where(and(eq(usersTable.schoolId, schoolId), eq(usersTable.username, username)))
+      .limit(1))[0]
+    : undefined;
 
   const passwordHash = await hashPassword(password);
-  let mail: { to: string; subject: string; text: string } | undefined;
+  let mail: { to: string; subject: string; text: string; html: string } | undefined;
   try {
     const account = existing[0];
-    if (account && !(account.authProvider === localProvider!.key && !account.emailVerifiedAt)) {
+    const usernameTaken = Boolean(usernameAccount && usernameAccount.id !== account?.id);
+    if (usernameTaken) {
+      // Einen fremden Benutzernamen nicht als Mailziel verwenden: sonst kann
+      // jeder mit einer bekannten Kennung deren Postfach fluten.
+    } else if (account?.authProvider === localProvider!.key && !account.emailVerifiedAt) {
+      const token = await issueAuthToken(account.id, "email_verify", new Date(Date.now() + 24 * 60 * 60 * 1000));
+      mail = {
+        to: account.email ?? email,
+        subject: "E-Mail-Adresse bestaetigen",
+        text: `Bestaetige deine E-Mail-Adresse innerhalb von 24 Stunden:\n\n${authLink("email-bestaetigen", token)}\n\nWenn du diese Registrierung nicht gestartet hast, ignoriere diese E-Mail.`,
+        html: htmlMailText(`Bestaetige deine E-Mail-Adresse innerhalb von 24 Stunden:\n\n${authLink("email-bestaetigen", token)}\n\nWenn du diese Registrierung nicht gestartet hast, ignoriere diese E-Mail.`),
+      };
+    } else if (account) {
       mail = {
         to: account.email ?? email,
         subject: "Registrierungsversuch mit deiner E-Mail-Adresse",
         text: "Es wurde versucht, mit dieser E-Mail-Adresse ein Konto anzulegen. Wenn du das nicht warst, musst du nichts tun.",
+        html: htmlMailText("Es wurde versucht, mit dieser E-Mail-Adresse ein Konto anzulegen. Wenn du das nicht warst, musst du nichts tun."),
       };
     } else {
-      const userId = account?.id ?? crypto.randomUUID();
-      if (!account) {
-        await db.insert(usersTable).values({
-          id: userId,
-          authProvider: localProvider!.key,
-          externalSubject: email,
-          email,
-          emailVerifiedAt: null,
-          username: null,
-          firstName,
-          lastName,
-          passwordHash,
-          role: "sanitaeter",
-          schoolId,
-          isApproved: false,
-          profileConfirmedAt: null,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        });
-      }
+      const userId = crypto.randomUUID();
+      await db.insert(usersTable).values({
+        id: userId,
+        authProvider: localProvider!.key,
+        externalSubject: email,
+        email,
+        emailVerifiedAt: null,
+        username,
+        firstName,
+        lastName,
+        passwordHash,
+        role: "sanitaeter",
+        schoolId,
+        isApproved: false,
+        profileConfirmedAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
 
       const token = await issueAuthToken(userId, "email_verify", new Date(Date.now() + 24 * 60 * 60 * 1000));
       mail = {
         to: email,
         subject: "E-Mail-Adresse bestaetigen",
         text: `Bestaetige deine E-Mail-Adresse innerhalb von 24 Stunden:\n\n${authLink("email-bestaetigen", token)}\n\nWenn du diese Registrierung nicht gestartet hast, ignoriere diese E-Mail.`,
+        html: htmlMailText(`Bestaetige deine E-Mail-Adresse innerhalb von 24 Stunden:\n\n${authLink("email-bestaetigen", token)}\n\nWenn du diese Registrierung nicht gestartet hast, ignoriere diese E-Mail.`),
       };
     }
   } catch (err) {
@@ -471,7 +521,7 @@ router.post("/local/verify/resend", localAccountLimiter, async (req, res) => {
     .from(usersTable)
     .where(and(eq(usersTable.email, email), eq(usersTable.authProvider, localProvider!.key)))
     .limit(1);
-  let mail: { to: string; subject: string; text: string } | undefined;
+  let mail: { to: string; subject: string; text: string; html: string } | undefined;
   if (user && !user.emailVerifiedAt) {
     try {
       const token = await issueAuthToken(user.id, "email_verify", new Date(Date.now() + 24 * 60 * 60 * 1000));
@@ -479,6 +529,7 @@ router.post("/local/verify/resend", localAccountLimiter, async (req, res) => {
         to: user.email ?? email,
         subject: "E-Mail-Adresse bestaetigen",
         text: `Bestaetige deine E-Mail-Adresse innerhalb von 24 Stunden:\n\n${authLink("email-bestaetigen", token)}\n\nWenn du diese Registrierung nicht gestartet hast, ignoriere diese E-Mail.`,
+        html: htmlMailText(`Bestaetige deine E-Mail-Adresse innerhalb von 24 Stunden:\n\n${authLink("email-bestaetigen", token)}\n\nWenn du diese Registrierung nicht gestartet hast, ignoriere diese E-Mail.`),
       };
     } catch (err) {
       console.error("Bestaetigungs-Mail konnte nicht versendet werden:", err instanceof Error ? err.message : "unbekannter Fehler");
@@ -489,7 +540,7 @@ router.post("/local/verify/resend", localAccountLimiter, async (req, res) => {
   res.status(202).json({ message: EMAIL_RESPONSE });
 });
 
-router.post("/local/password/forgot", resetEmailLimiter, async (req, res) => {
+router.post("/local/password/forgot", resetIpLimiter, resetEmailLimiter, async (req, res) => {
   if (localAccountUnavailable(res)) return;
   const email = normaliseEmail(req.body?.email);
   if (!email) {
@@ -502,7 +553,7 @@ router.post("/local/password/forgot", resetEmailLimiter, async (req, res) => {
     .from(usersTable)
     .where(and(eq(usersTable.email, email), eq(usersTable.authProvider, localProvider!.key)))
     .limit(1);
-  let mail: { to: string; subject: string; text: string } | undefined;
+  let mail: { to: string; subject: string; text: string; html: string } | undefined;
   if (user) {
     try {
       const token = await issueAuthToken(user.id, "password_reset", new Date(Date.now() + 60 * 60 * 1000));
@@ -510,6 +561,7 @@ router.post("/local/password/forgot", resetEmailLimiter, async (req, res) => {
         to: email,
         subject: "Passwort zuruecksetzen",
         text: `Setze dein Passwort innerhalb von 60 Minuten neu:\n\n${authLink("passwort-zuruecksetzen", token)}\n\nWenn du dies nicht angefordert hast, ignoriere diese E-Mail.`,
+        html: htmlMailText(`Setze dein Passwort innerhalb von 60 Minuten neu:\n\n${authLink("passwort-zuruecksetzen", token)}\n\nWenn du dies nicht angefordert hast, ignoriere diese E-Mail.`),
       };
     } catch (err) {
       console.error("Passwort-Reset-Mail konnte nicht versendet werden:", err instanceof Error ? err.message : "unbekannter Fehler");
@@ -686,6 +738,7 @@ router.post("/native-session", sessionLimiter, async (req, res) => {
       firstName: user.firstName,
       lastName: user.lastName,
       email: user.email,
+      username: user.username,
       role,
       schoolId: user.schoolId,
       profileConfirmedAt: user.profileConfirmedAt,
@@ -744,6 +797,7 @@ router.patch("/profile", profileLimiter, requireAuthAllowUnconfirmedProfile, asy
   res.json(
     await buildUserResponse({
       id: userId, firstName: updated!.firstName, lastName: updated!.lastName, email: updated!.email,
+      username: updated!.username,
       role: updated!.role,
       schoolId: updated!.schoolId,
       profileConfirmedAt: updated!.profileConfirmedAt,
@@ -803,6 +857,7 @@ router.get("/session", sessionLimiter, async (req, res) => {
       firstName: user.firstName,
       lastName: user.lastName,
       email: user.email,
+      username: user.username,
       role,
       schoolId: user.schoolId,
       profileConfirmedAt: user.profileConfirmedAt,

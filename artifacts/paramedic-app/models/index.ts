@@ -12,6 +12,8 @@ export interface User {
   firstName: string;
   lastName: string;
   email: string;
+  /** Optionale lokale Anmeldekennung; IServ/OIDC-Konten lassen sie leer. */
+  username?: string | null;
   phone: string;
   role: UserRole;
   schoolId: string;
