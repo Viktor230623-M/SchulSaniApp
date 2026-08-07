@@ -22,9 +22,19 @@ function hashToken(rawToken: string): string {
   return createHash("sha256").update(rawToken).digest("hex");
 }
 
-export async function createSession(userId: string, now: Date = new Date()): Promise<string> {
+export async function createSession(
+  userId: string,
+  now: Date = new Date(),
+  options?: { lifetimeMs?: number; absoluteLifetimeMs?: number },
+): Promise<string> {
   const rawToken = randomBytes(TOKEN_BYTES).toString("base64url");
-  const { expiresAt, absoluteExpiresAt } = computeNewSession(now);
+  const defaults = computeNewSession(now);
+  const expiresAt = options?.lifetimeMs === undefined
+    ? defaults.expiresAt
+    : new Date(now.getTime() + options.lifetimeMs);
+  const absoluteExpiresAt = options?.absoluteLifetimeMs === undefined
+    ? defaults.absoluteExpiresAt
+    : new Date(now.getTime() + options.absoluteLifetimeMs);
 
   await db.insert(sessionsTable).values({
     id: randomUUID(),
@@ -49,7 +59,7 @@ export async function createSession(userId: string, now: Date = new Date()): Pro
 export async function resolveSession(
   rawToken: string,
   now: Date = new Date(),
-): Promise<{ userId: string } | null> {
+): Promise<{ userId: string; authenticatedAt: Date } | null> {
   const rows = await db
     .select()
     .from(sessionsTable)
@@ -71,7 +81,7 @@ export async function resolveSession(
     .set({ expiresAt: computeSlidingExtension(timestamps, now), lastUsedAt: now })
     .where(eq(sessionsTable.id, row.id));
 
-  return { userId: row.userId };
+  return { userId: row.userId, authenticatedAt: row.createdAt ?? now };
 }
 
 export async function revokeSession(rawToken: string, now: Date = new Date()): Promise<void> {

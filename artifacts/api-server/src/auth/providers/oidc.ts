@@ -27,6 +27,7 @@ interface PendingRequest {
   codeVerifier: string;
   returnTo?: string;
   handoffChallenge?: string;
+  linkUserId?: string;
   createdAt: number;
 }
 
@@ -173,7 +174,14 @@ export function createOidcRedirectProvider(cfg: OidcRedirectProviderConfig): Red
       const codeChallenge = codeChallengeFromVerifier(codeVerifier);
 
       pruneExpired(Date.now());
-      pendingRequests.set(state, { nonce, codeVerifier, returnTo: options.returnTo, handoffChallenge: options.handoffChallenge, createdAt: Date.now() });
+      pendingRequests.set(state, {
+        nonce,
+        codeVerifier,
+        returnTo: options.returnTo,
+        handoffChallenge: options.handoffChallenge,
+        linkUserId: options.linkUserId,
+        createdAt: Date.now(),
+      });
 
       const url = new URL(doc.authorization_endpoint);
       url.searchParams.set("response_type", "code");
@@ -299,6 +307,7 @@ export function createOidcRedirectProvider(cfg: OidcRedirectProviderConfig): Red
         profile: { firstName, lastName, email, phone: "", groups },
         returnTo: pending.returnTo,
         handoffChallenge: pending.handoffChallenge,
+        linkUserId: pending.linkUserId,
       };
     },
   };

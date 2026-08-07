@@ -336,4 +336,12 @@ describe("Anbieterbewusster Formular-Login", () => {
 
     expect(result.status).toBe(404);
   });
+
+  it("verweigert das Verknuepfen ohne frisches Bearer-Token", async () => {
+    const res = await request(app)
+      .post("/api/auth/link/oidc-beispiel/start")
+      .send({ returnTo: "https://sani.vitest.beispiel.invalid/settings" });
+
+    expect(res.status).toBe(401);
+  });
 });

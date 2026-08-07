@@ -16,6 +16,7 @@ export interface JwtPayload {
   iat?: number;
   passwordVersion?: number;
   permissions?: string[];
+  authTime?: number;
 }
 
 export interface AuthRequest extends Request {
@@ -138,7 +139,13 @@ async function authenticate(
     res.status(403).json({ error: "Passwortwechsel erforderlich", code: "PASSWORD_CHANGE_REQUIRED" });
     return null;
   }
-  req.user = { userId: payload.userId, role: live.role, permissions: live.permissions };
+  req.user = {
+    userId: payload.userId,
+    role: live.role,
+    permissions: live.permissions,
+    iat: payload.iat,
+    authTime: payload.authTime ?? payload.iat,
+  };
   return live;
 }
 

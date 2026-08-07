@@ -99,6 +99,20 @@ describe("oidc-provider-tests", () => {
     await expect(provider.completeRedirect({ state, code: "abc" })).rejects.toThrow(/Nonce/);
   });
 
+  it("traegt den serverseitigen Link-Nutzer durch den OIDC-Ablauf", async () => {
+    const provider = buildProvider();
+    const { redirectUrl } = await provider.beginRedirect({ linkUserId: "konto-1" });
+    const url = new URL(redirectUrl);
+    const state = url.searchParams.get("state");
+    const nonce = url.searchParams.get("nonce");
+    if (!state || !nonce) throw new Error("Testaufbau: state oder nonce fehlt");
+    jwtVerifyMock.mockResolvedValueOnce({ payload: { sub: "user-1", nonce } } as never);
+
+    const result = await provider.completeRedirect({ state, code: "abc" });
+
+    expect(result.linkUserId).toBe("konto-1");
+  });
+
   it("traegt das sichere native Ruecksprungziel durch den OIDC-Ablauf", async () => {
     const provider = buildProvider();
     const returnTo = "paramedic-app://login";

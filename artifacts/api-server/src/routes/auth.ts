@@ -56,6 +56,11 @@ const passwordChangeLimiter = rateLimit({
 
 const SESSION_COOKIE = "sani-session";
 const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+const LINK_SESSION_FRESHNESS_MS = 15 * 60 * 1000;
+
+function currentAuthTime(): number {
+  return Math.floor(Date.now() / 1000);
+}
 const NATIVE_HANDOFF_TTL_MS = 2 * 60 * 1000;
 const nativeHandoffs = new Map<string, { sessionToken: string; verifierHash: string; expiresAt: number }>();
 
@@ -301,7 +306,7 @@ router.post("/login", authLimiter, async (req, res) => {
       return;
     }
 
-    const token = jwt.sign({ userId, role, passwordVersion: existing[0]?.passwordVersion ?? 0 }, JWT_SECRET, { expiresIn: "2h" });
+    const token = jwt.sign(    { userId, role, passwordVersion: existing[0]?.passwordVersion ?? 0, authTime: currentAuthTime() }, JWT_SECRET, { expiresIn: "2h" });
 
     // Das alte Cookie trug ein Bearer-Token direkt und wird nicht mehr
     // ausgewertet. Aktiv loeschen, damit kein toter Wert im Browser zurueckbleibt.
@@ -706,7 +711,7 @@ router.post("/password/change", passwordChangeLimiter, requireAuthForPasswordCha
   }
   invalidateUserCache(req.user!.userId);
   const token = jwt.sign(
-    { userId: updated.id, role: updated.role ?? req.user!.role, passwordVersion: updated.passwordVersion },
+    { userId: updated.id, role: updated.role ?? req.user!.role, passwordVersion: updated.passwordVersion, authTime: currentAuthTime() },
     JWT_SECRET,
     { expiresIn: "2h" },
   );
@@ -762,7 +767,12 @@ router.post("/native-session", sessionLimiter, async (req, res) => {
   }
 
   const role = user.role ?? "sanitaeter";
-  const token = jwt.sign({ userId: user.id, role, passwordVersion: user.passwordVersion }, JWT_SECRET, { expiresIn: "2h" });
+  const token = jwt.sign({
+    userId: user.id,
+    role,
+    passwordVersion: user.passwordVersion,
+    authTime: Math.floor(resolved.authenticatedAt.getTime() / 1000),
+  }, JWT_SECRET, { expiresIn: "2h" });
   res.json({
     token,
     ...(await buildUserResponse({
@@ -880,7 +890,12 @@ router.get("/session", sessionLimiter, async (req, res) => {
   }
 
   const role = user.role ?? "sanitaeter";
-  const token = jwt.sign({ userId: user.id, role, passwordVersion: user.passwordVersion }, JWT_SECRET, { expiresIn: "2h" });
+  const token = jwt.sign({
+    userId: user.id,
+    role,
+    passwordVersion: user.passwordVersion,
+    authTime: Math.floor(resolved.authenticatedAt.getTime() / 1000),
+  }, JWT_SECRET, { expiresIn: "2h" });
 
   res.json({
     token,
@@ -937,6 +952,40 @@ router.get("/identities", requireAuth, async (req: AuthRequest, res) => {
   });
 });
 
+router.post("/link/:provider/start", authLimiter, requireAuth, async (req: AuthRequest, res) => {
+  const provider = authProviders.find((p) => p.key === req.params["provider"]);
+  if (!provider || provider.type !== "oidc-redirect") {
+    res.status(404).json({ error: "Anmeldeweg nicht gefunden." });
+    return;
+  }
+
+  const authTime = req.user?.authTime ?? req.user?.iat;
+  if (!authTime || Date.now() - authTime * 1000 > LINK_SESSION_FRESHNESS_MS) {
+    res.status(403).json({ error: "Bitte melde dich erneut an, bevor du einen Anmeldeweg verknuepfst.", code: "LINK_SESSION_STALE" });
+    return;
+  }
+
+  const returnTo = typeof req.body?.returnTo === "string" ? req.body.returnTo : undefined;
+  if (returnTo && !isAllowedLinkReturnUrl(returnTo)) {
+    res.status(400).json({ error: "Ruecksprungziel ist nicht zulaessig." });
+    return;
+  }
+
+  try {
+    const linkUserId = req.user!.userId;
+    const sessionToken = await createSession(linkUserId, new Date(), {
+      lifetimeMs: LINK_SESSION_FRESHNESS_MS,
+      absoluteLifetimeMs: LINK_SESSION_FRESHNESS_MS,
+    });
+    res.cookie(SESSION_COOKIE, sessionToken, sessionCookieOptions());
+    const { redirectUrl } = await provider.beginRedirect({ returnTo, linkUserId });
+    res.json({ redirectUrl });
+  } catch (err) {
+    console.error("OIDC-Verknuepfung konnte nicht gestartet werden:", err);
+    res.status(503).json({ error: "Anmeldedienst nicht erreichbar. Bitte später erneut versuchen." });
+  }
+});
+
 /**
  * Startet den Weiterleitungs-Ablauf eines OIDC-Anmeldewegs. Ein unbekannter
  * oder nicht-weiterleitungsbasierter Schluessel liefert 404 -- ohne Hinweis
@@ -978,6 +1027,21 @@ router.get("/:provider/start", authLimiter, async (req, res) => {
  * Sitzungscookie (`createSession`, unveraendert), das der Client anschliessend
  * ueber GET /auth/session gegen Token und Nutzerprojektion eintauscht.
  */
+function isAllowedLinkReturnUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    if (url.username || url.password || url.search || url.hash) return false;
+    if (url.protocol === "paramedic-app:" && url.hostname === "settings" && ["", "/"].includes(url.pathname)) return true;
+    if (url.protocol === "exp:" && /^\/(--\/)?settings\/?$/.test(url.pathname)) {
+      const host = url.hostname.toLowerCase();
+      return host === "localhost" || host === "127.0.0.1" || host.startsWith("10.") || host.startsWith("192.168.") || /^172\.(1[6-9]|2\d|3[01])\./.test(host) || host.endsWith(".exp.direct") || host.endsWith(".exp.host");
+    }
+    return config.allowedOrigins.includes(url.origin) && url.pathname === "/settings";
+  } catch {
+    return false;
+  }
+}
+
 function isAllowedNativeReturnUrl(value: string): boolean {
   try {
     const url = new URL(value);
@@ -1041,6 +1105,71 @@ async function completeOidcCallback(req: import("express").Request, res: import(
         ),
       )
       .limit(1);
+
+    if (authResult.linkUserId) {
+      const linkResult = await db.transaction(async (tx) => {
+        const linkUserId = authResult.linkUserId!;
+        const [target] = await tx
+          .select({ id: usersTable.id, isApproved: usersTable.isApproved, mustChangePassword: usersTable.mustChangePassword })
+          .from(usersTable)
+          .where(eq(usersTable.id, linkUserId))
+          .limit(1);
+        if (!target || !target.isApproved || target.mustChangePassword) return "missing-target" as const;
+
+        const [identity] = await tx
+          .select({ id: userIdentitiesTable.id, userId: userIdentitiesTable.userId })
+          .from(userIdentitiesTable)
+          .where(and(
+            eq(userIdentitiesTable.schoolId, schoolId),
+            eq(userIdentitiesTable.authProvider, provider.key),
+            eq(userIdentitiesTable.externalSubject, subject),
+          ))
+          .limit(1);
+        if (identity && identity.userId !== linkUserId) return "collision" as const;
+
+        if (identity) {
+          await tx.update(userIdentitiesTable)
+            .set({ lastUsedAt: new Date() })
+            .where(eq(userIdentitiesTable.id, identity.id));
+          return "success" as const;
+        }
+
+        const inserted = await tx.insert(userIdentitiesTable).values({
+          id: `identity-${crypto.randomUUID()}`,
+          userId: linkUserId,
+          schoolId,
+          authProvider: provider.key,
+          externalSubject: subject,
+          emailAtLink: profile.email || null,
+          lastUsedAt: new Date(),
+        }).onConflictDoNothing().returning({ id: userIdentitiesTable.id });
+        return inserted.length > 0 ? "success" as const : "collision" as const;
+      });
+
+      if (linkResult === "missing-target") {
+        res.status(401).json({ error: "Verknuepfung ist nicht mehr gueltig." });
+        return;
+      }
+      if (linkResult === "collision") {
+        if (authResult.returnTo) {
+          const landingUrl = new URL(authResult.returnTo);
+          landingUrl.searchParams.set("link", "collision");
+          res.redirect(landingUrl.toString());
+        } else {
+          res.status(409).json({ error: "Dieser Anmeldeweg gehoert bereits zu einem anderen Konto. Wende dich an die Betreuung." });
+        }
+        return;
+      }
+
+      if (authResult.returnTo) {
+        const landingUrl = new URL(authResult.returnTo);
+        landingUrl.searchParams.set("link", "success");
+        res.redirect(landingUrl.toString());
+      } else {
+        res.json({ ok: true });
+      }
+      return;
+    }
 
     const userId: string = existing[0]?.id ?? crypto.randomUUID();
     const resolvedRole = existing[0]?.role ?? (await getRoleForUser(profile.groups ?? [], provider.key, schoolId));
