@@ -244,8 +244,8 @@
 
       <div class="field" data-field="domain">
         <label for="domain">Domain der App</label>
-        <input type="text" id="domain" name="domain" autocomplete="off" placeholder="sani.beispielschule.de" inputmode="url">
-        <div class="helper">Ohne "https://" — nur der Domainname.</div>
+        <input type="text" id="domain" name="domain" autocomplete="off" placeholder="sani.beispielschule.de:8443" inputmode="url">
+        <div class="helper">Ohne "https://" — nur der Domainname, optional mit :Port, wenn 80/443 belegt sind.</div>
         <div class="error"><span>—</span></div>
       </div>
 
@@ -578,7 +578,7 @@
     externalSubject: "Bitte den stabilen OIDC-sub-Claim angeben."
   };
 
-  var domainRe = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i;
+  var domainRe = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+(:[0-9]{1,5})?$/i;
   var identRe = /^[a-z0-9][a-z0-9._-]{1,63}$/i;
   var schoolIdRe = /^[a-z0-9_-]{1,40}$/i;
   var mailtoRe = /^mailto:[^@\s]+@[^@\s]+\.[^@\s]+$/;
@@ -591,7 +591,7 @@
     authMode:    function (v) { return v === "local" || v === "oidc" || v === "local+oidc"; },
     joinCode: function (v) { var t = v.trim(); return t === "" || (t.length >= 6 && t.length <= 200 && t.indexOf("\n") === -1 && t.indexOf("\r") === -1); },
     schoolName: function (v) { return v.trim().length > 0 && v.trim().length <= 120; },
-    domain: function (v) { return domainRe.test(v.trim()); },
+    domain: function (v) { var m = v.trim().match(/:([0-9]{1,5})$/); if (m && (Number(m[1]) < 1 || Number(m[1]) > 65535)) return false; return domainRe.test(v.trim()); },
     providerKey: function (v) { return providerKeyRe.test(v.trim()); },
     providerDisplayName: function (v) { return v.trim().length > 0 && v.trim().length <= 80; },
     providerIssuerUrl: function (v) { return issuerRe.test(v.trim()); },
