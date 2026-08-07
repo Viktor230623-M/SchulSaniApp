@@ -366,24 +366,25 @@ step_verify_workspace() {
     return 0
   fi
 
-  # tsx baut das Backend, expo den Web-Export, esbuild fuehrt beides aus.
-  # Fehlt eines, scheitern die Schritte hinter dem Assistenten erst spaet;
-  # die Pruefung zieht den Fehler an den Anfang des Laufs.
-  local script_dir app_root bin_dir missing=0
+  # tsx baut das Backend, expo den Web-Export. Die .bin-Wrapper legt pnpm
+  # nicht ins Root, sondern in die jeweiligen Workspace-Pakete; esbuild liegt
+  # nur im .pnpm-Verzeichnis. Fehlt eines, scheitern die Schritte hinter dem
+  # Assistenten erst spaet; die Pruefung zieht den Fehler an den Anfang des Laufs.
+  local script_dir app_root missing=0 esbuild_bin
   script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   app_root="$(cd "${script_dir}/../.." && pwd)"
-  bin_dir="${app_root}/node_modules/.bin"
 
-  if [[ ! -x "${bin_dir}/tsx" ]]; then
-    step_fail "tsx fehlt in node_modules/.bin."
+  if [[ ! -x "${app_root}/artifacts/api-server/node_modules/.bin/tsx" ]]; then
+    step_fail "tsx fehlt in artifacts/api-server/node_modules/.bin."
     missing=1
   fi
-  if [[ ! -x "${bin_dir}/expo" ]]; then
-    step_fail "expo fehlt in node_modules/.bin."
+  if [[ ! -x "${app_root}/artifacts/paramedic-app/node_modules/.bin/expo" ]]; then
+    step_fail "expo fehlt in artifacts/paramedic-app/node_modules/.bin."
     missing=1
   fi
-  if ! node -e "require('esbuild')" >/dev/null 2>&1; then
-    step_fail "esbuild ist nicht installiert oder nicht geladen."
+  esbuild_bin="$(find "${app_root}/node_modules/.pnpm" -path '*/node_modules/esbuild/bin/esbuild' -type f 2>/dev/null | head -1)"
+  if [[ -z "$esbuild_bin" ]] || ! "$esbuild_bin" --version >/dev/null 2>&1; then
+    step_fail "esbuild-Binary fehlt oder startet nicht."
     missing=1
   fi
   if [[ "$missing" -eq 1 ]]; then
