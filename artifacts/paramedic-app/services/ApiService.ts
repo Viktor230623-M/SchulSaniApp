@@ -25,6 +25,12 @@ export interface AuthProviderInfo {
   type: "local" | "oidc-redirect";
 }
 
+/** Antwort von GET /auth/providers: Wege plus Flag, ob ein Schul-Code noetig ist. */
+export interface AuthProvidersResult {
+  providers: AuthProviderInfo[];
+  joinCodeRequired: boolean;
+}
+
 export interface AuthIdentityInfo {
   id: string;
   providerKey: string;
@@ -38,6 +44,16 @@ let authToken: string | null = null;
 
 export function setAuthToken(token: string | null) {
   authToken = token;
+}
+
+/** Fehler mit Zusatzdaten, etwa dem Handoff des Schul-Zugangscode-Vorgangs. */
+export class AuthError extends Error {
+  readonly handoff?: string;
+  constructor(message: string, handoff?: string) {
+    super(message);
+    this.name = "AuthError";
+    this.handoff = handoff;
+  }
 }
 
 async function apiFetch(url: string, init?: RequestInit): Promise<Response> {
@@ -110,7 +126,7 @@ const ApiService = {
     return { user: { ...data.user, permissions: data.permissions ?? [] }, isTealUnlocked: data.isTealUnlocked, token: data.token };
   },
 
-  async registerLocalAccount(input: { email: string; password: string; username?: string; firstName?: string; lastName?: string }): Promise<string> {
+  async registerLocalAccount(input: { email: string; password: string; username?: string; firstName?: string; lastName?: string; joinCode?: string }): Promise<string> {
     const resp = await fetch(`${API_BASE}/auth/local/register`, { method: "POST", headers: headers(), body: JSON.stringify(input) });
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok) throw new Error(data.error ?? "Registrierung fehlgeschlagen");
@@ -177,7 +193,32 @@ const ApiService = {
       body: JSON.stringify(input),
     });
     const data = await resp.json().catch(() => ({}));
-    if (!resp.ok) throw new Error(data.error ?? "Anmeldung fehlgeschlagen");
+    if (!resp.ok) {
+      // Schul-Zugangscode noetig: die Fehlerantwort traegt den einmaligen
+      // Handoff mit, der den Schul-Code-Screen fuettert.
+      if (data?.code === "JOIN_CODE_REQUIRED" && typeof data.handoff === "string") {
+        throw new AuthError(data.error ?? "Der Schul-Zugangscode fehlt.", data.handoff);
+      }
+      throw new Error(data.error ?? "Anmeldung fehlgeschlagen");
+    }
+    if (typeof data.token !== "string") throw new Error("Anmeldung fehlgeschlagen");
+    setAuthToken(data.token);
+    return { user: { ...data.user, permissions: data.permissions ?? [] }, isTealUnlocked: data.isTealUnlocked, token: data.token };
+  },
+
+  /**
+   * Loest den Schul-Zugangscode eines frischen OIDC/Apple-Kontos ein
+   * (POST /auth/join-code). Erfolg ist ein Login wie jeder andere.
+   */
+  async completeJoinCode(handoff: string, joinCode: string): Promise<{ user: User; isTealUnlocked: boolean; token: string }> {
+    const resp = await fetch(`${API_BASE}/auth/join-code`, {
+      method: "POST",
+      headers: headers(),
+      credentials: "include",
+      body: JSON.stringify({ handoff, joinCode }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error ?? "Der Schul-Zugangscode ist falsch.");
     if (typeof data.token !== "string") throw new Error("Anmeldung fehlgeschlagen");
     setAuthToken(data.token);
     return { user: { ...data.user, permissions: data.permissions ?? [] }, isTealUnlocked: data.isTealUnlocked, token: data.token };
@@ -205,7 +246,7 @@ const ApiService = {
    * noetig. Wirft bei Netzfehler oder Zeitlimit -- der Aufrufer entscheidet,
    * wie der Anmeldebildschirm bei einem Ausfall dieses Abrufs aussieht.
    */
-  async getAuthProviders(): Promise<AuthProviderInfo[]> {
+  async getAuthProviders(): Promise<AuthProvidersResult> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 8_000);
     try {
@@ -215,7 +256,10 @@ const ApiService = {
       });
       if (!resp.ok) throw new Error("Anmeldewege konnten nicht geladen werden");
       const data = await resp.json();
-      return Array.isArray(data.providers) ? data.providers : [];
+      return {
+        providers: Array.isArray(data.providers) ? data.providers : [],
+        joinCodeRequired: data.joinCodeRequired === true,
+      };
     } finally {
       clearTimeout(timeout);
     }

@@ -68,7 +68,7 @@ export default function SettingsScreen() {
     "unsupported" | "needs-install" | "denied" | "granted" | "default"
   >("unsupported");
   const [identities, setIdentities] = useState<AuthIdentityInfo[]>([]);
-  const [providers, setProviders] = useState<Awaited<ReturnType<typeof ApiService.getAuthProviders>>>([]);
+  const [providers, setProviders] = useState<Awaited<ReturnType<typeof ApiService.getAuthProviders>>["providers"]>([]);
   const [loadingIdentities, setLoadingIdentities] = useState(false);
   const [linkingProvider, setLinkingProvider] = useState<string | null>(null);
   const [identityError, setIdentityError] = useState(false);
@@ -124,7 +124,7 @@ export default function SettingsScreen() {
 
   useEffect(() => {
     void loadIdentities();
-    ApiService.getAuthProviders().then(setProviders).catch(() => setProviders([]));
+    ApiService.getAuthProviders().then(({ providers }) => setProviders(providers)).catch(() => setProviders([]));
   }, [user?.id]);
 
   useEffect(() => {
