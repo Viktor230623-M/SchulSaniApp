@@ -17,15 +17,16 @@ export default function TabLayout() {
 
   return (
     <Tabs
-      // Die Leiste schwebt jetzt ueber dem Inhalt statt ihn abzuschneiden.
-      // Beschriftungen entfallen: in einer Pille mit sechs Eintraegen bliebe je
-      // Feld weniger als eine Zeile Platz, und die Symbole tragen allein.
+      // Die Leiste schwebt ueber dem Inhalt; die Hauptziele tragen kurze Labels.
+      // Einstellungen bleibt als sekundaerer Zugang ausserhalb der Tab-Pille.
       tabBar={(props) => (
         <GlasTabLeiste
           state={props.state}
           descriptors={props.descriptors}
           navigation={props.navigation}
           theme={theme}
+          settingsLabel={t("tabs.settings", lang)}
+          moreLabel={t("tabs.more", lang)}
         />
       )}
       screenOptions={{
@@ -43,6 +44,7 @@ export default function TabLayout() {
         name="news"
         options={{
           title: t("tabs.news", lang),
+          tabBarLabel: t("tabs.newsShort", lang),
           tabBarIcon: ({ color }) =>
             isIOS ? (
               <SymbolView name="newspaper" tintColor={color} size={22} />
@@ -55,6 +57,7 @@ export default function TabLayout() {
         name="loa"
         options={{
           title: t("tabs.loa", lang),
+          tabBarLabel: t("tabs.loaShort", lang),
           tabBarIcon: ({ color }) =>
             isIOS ? (
               <SymbolView name="calendar.badge.clock" tintColor={color} size={22} />
@@ -67,6 +70,7 @@ export default function TabLayout() {
         name="duty"
         options={{
           title: t("tabs.duty", lang),
+          tabBarLabel: t("tabs.dutyShort", lang),
           tabBarIcon: ({ color }) =>
             isIOS ? (
               <SymbolView name="cross.circle" tintColor={color} size={22} />
@@ -79,6 +83,7 @@ export default function TabLayout() {
         name="missions"
         options={{
           title: t("tabs.missions", lang),
+          tabBarLabel: t("tabs.missionsShort", lang),
           tabBarIcon: ({ color }) =>
             isIOS ? (
               <SymbolView name="bolt" tintColor={color} size={22} />
@@ -91,6 +96,7 @@ export default function TabLayout() {
         name="notifications"
         options={{
           title: t("tabs.notifications", lang),
+          tabBarLabel: t("tabs.notificationsShort", lang),
           tabBarIcon: ({ color }) =>
             isIOS ? (
               <SymbolView name="bell" tintColor={color} size={22} />
@@ -102,6 +108,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="settings"
         options={{
+          href: null,
           title: t("tabs.settings", lang),
           tabBarIcon: ({ color }) =>
             isIOS ? (

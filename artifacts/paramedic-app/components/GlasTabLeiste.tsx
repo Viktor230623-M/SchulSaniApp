@@ -27,6 +27,8 @@ interface TabRoute {
 interface TabLeisteProps {
   state: { index: number; routes: TabRoute[] };
   descriptors: Record<string, { options: TabOptionen }>;
+  settingsLabel?: string;
+  moreLabel?: string;
   navigation: {
     emit: (ereignis: any) => any;
     navigate: (...args: any[]) => void;
@@ -35,13 +37,14 @@ interface TabLeisteProps {
 
 interface TabOptionen {
   title?: string | undefined;
+  tabBarLabel?: unknown;
   tabBarAccessibilityLabel?: string | undefined;
   tabBarIcon?: ((props: { color: string; focused: boolean; size: number }) => React.ReactNode) | undefined;
 }
 
-const SEITENRAND = 16;
+const SEITENRAND = 10;
 const HOEHE = 62;
-const ABSTAND_ZUM_KNOPF = 10;
+const ABSTAND_ZUM_KNOPF = 8;
 
 /**
  * Platz, den ein Bildschirm unten freilassen muss, damit sein letztes Element
@@ -61,10 +64,9 @@ function mitDeckung(farbe: string, deckung: number): string {
 /**
  * Schwebende Leiste aus Glas statt der durchgehenden Leiste am unteren Rand.
  *
- * Aufteilung wie in der Vorlage: die ersten Eintraege liegen in einer Pille,
- * der letzte sitzt als eigener runder Knopf daneben. Sechs Symbole in einer
- * Pille waeren auf einem schmalen Telefon unter 50 Punkten je Feld -- zu wenig
- * fuer eine sichere Beruehrung.
+ * Fuenf Hauptziele liegen in einer beschrifteten Pille. Einstellungen bleibt
+ * als kleiner, klar beschrifteter Zugang daneben und nimmt keinen Platz in der
+ * Hauptnavigation ein.
  *
  * Drei Schichten machen das Material glaessig statt matt: der Weichzeichner
  * (auf iOS das native Apple-Material, im Web blur mit Saettigung), die helle
@@ -79,13 +81,14 @@ export function GlasTabLeiste({
   descriptors,
   navigation,
   theme,
+  settingsLabel,
+  moreLabel,
 }: TabLeisteProps & { theme: ThemeColors }) {
   const insets = useSafeAreaInsets();
   const dunkel = istDunklesThema(theme.background);
-
-  const inPille = state.routes.slice(0, -1);
-  const abgesetzt = state.routes[state.routes.length - 1];
-  const abgesetztAktiv = state.index === state.routes.length - 1;
+  const hauptRouten = state.routes.filter((route) => route.name !== "settings");
+  const einstellungen = state.routes.find((route) => route.name === "settings");
+  const einstellungenAktiv = einstellungen?.key === state.routes[state.index]?.key;
 
   return (
     <View
@@ -93,11 +96,11 @@ export function GlasTabLeiste({
       style={[styles.rahmen, { paddingBottom: Math.max(insets.bottom, 12) }]}
     >
       <Glasflaeche theme={theme} dunkel={dunkel} radius={HOEHE / 2} intensity={dunkel ? 60 : 50} style={styles.pille}>
-        {inPille.map((route, index) => (
+        {hauptRouten.map((route) => (
           <Feld
             key={route.key}
             route={route}
-            aktiv={state.index === index}
+            aktiv={state.routes[state.index]?.key === route.key}
             descriptors={descriptors}
             navigation={navigation}
             theme={theme}
@@ -105,7 +108,7 @@ export function GlasTabLeiste({
         ))}
       </Glasflaeche>
 
-      {abgesetzt && (
+      {einstellungen && (
         <Glasflaeche
           theme={theme}
           dunkel={dunkel}
@@ -114,11 +117,13 @@ export function GlasTabLeiste({
           style={[styles.knopf, { marginLeft: ABSTAND_ZUM_KNOPF }]}
         >
           <Feld
-            route={abgesetzt}
-            aktiv={abgesetztAktiv}
+            route={einstellungen}
+            aktiv={einstellungenAktiv}
             descriptors={descriptors}
             navigation={navigation}
             theme={theme}
+            accessibilityLabel={moreLabel && settingsLabel ? `${moreLabel}, ${settingsLabel}` : settingsLabel ?? moreLabel}
+            labelOverride={moreLabel}
             fuellendeBreite
           />
         </Glasflaeche>
@@ -251,6 +256,8 @@ function Feld({
   navigation,
   theme,
   fuellendeBreite = false,
+  accessibilityLabel,
+  labelOverride,
 }: {
   route: TabRoute;
   aktiv: boolean;
@@ -258,6 +265,8 @@ function Feld({
   navigation: TabLeisteProps["navigation"];
   theme: ThemeColors;
   fuellendeBreite?: boolean;
+  accessibilityLabel?: string;
+  labelOverride?: string;
 }) {
   const { options } = descriptors[route.key]!;
   const druck = useSharedValue(0);
@@ -297,12 +306,13 @@ function Feld({
   }
 
   const farbe = aktiv ? theme.tabBarActive : theme.tabBarInactive;
+  const label = labelOverride ?? (typeof options.tabBarLabel === "string" ? options.tabBarLabel : options.title);
 
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityState={aktiv ? { selected: true } : {}}
-      accessibilityLabel={options.tabBarAccessibilityLabel ?? options.title}
+      accessibilityLabel={accessibilityLabel ?? options.tabBarAccessibilityLabel ?? options.title}
       onPress={beiDruck}
       onPressIn={() => (druck.value = withTiming(1, { duration: 90 }))}
       onPressOut={() => (druck.value = withTiming(0, { duration: 140 }))}
@@ -315,6 +325,11 @@ function Feld({
       <Animated.View style={stil}>
         {options.tabBarIcon?.({ color: farbe, focused: aktiv, size: 22 })}
       </Animated.View>
+      {label && (
+        <Animated.Text style={[styles.label, { color: farbe }]} numberOfLines={1}>
+          {label}
+        </Animated.Text>
+      )}
     </Pressable>
   );
 }
@@ -357,14 +372,21 @@ const styles = StyleSheet.create({
   feld: {
     alignItems: "center",
     justifyContent: "center",
-    height: HOEHE - 12,
+    height: HOEHE - 8,
+    gap: 2,
   },
   feldAnteilig: { flex: 1 },
   feldVoll: { width: "100%" },
   hof: {
     position: "absolute",
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+  },
+  label: {
+    maxWidth: "100%",
+    fontSize: 10,
+    lineHeight: 12,
+    fontFamily: "Inter_600SemiBold",
   },
 });
