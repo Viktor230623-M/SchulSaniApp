@@ -1,6 +1,7 @@
-import { and, eq, lt, or, sql } from "drizzle-orm";
+import { and, eq, lt, or, sql, isNull } from "drizzle-orm";
 import {
   db,
+  authTokensTable,
   dbConsoleLogTable,
   incidentReportsTable,
   loaTable,
@@ -9,10 +10,12 @@ import {
   notificationsTable,
   profileChangeLogTable,
   reportAccessLogTable,
+  usersTable,
   roleChangeLogTable,
   sessionsTable,
 } from "@workspace/db";
 import { computeCutoffs } from "../lib/retentionRules";
+import { loadAuthProviders } from "../auth/registry";
 
 export interface RetentionResult {
   table: string;
@@ -29,6 +32,7 @@ export interface RetentionResult {
 export async function runRetention(now: Date = new Date()): Promise<RetentionResult[]> {
   const cutoffs = computeCutoffs(now);
   const results: RetentionResult[] = [];
+  const localProviderKey = loadAuthProviders().find((provider) => provider.type === "local")?.key;
 
   const submitted = await db
     .delete(incidentReportsTable)
@@ -111,8 +115,23 @@ export async function runRetention(now: Date = new Date()): Promise<RetentionRes
   // sie, sobald sie endgueltig nicht mehr gelten koennen: nach der absoluten
   // Obergrenze, oder 30 Tage nach einem Widerruf. Die Nachlauffrist beim Widerruf
   // laesst Raum, einem gemeldeten Missbrauch nachzugehen.
-  const sessions = await db
-    .delete(sessionsTable)
+  const authTokens = await db
+    .delete(authTokensTable)
+    .where(lt(authTokensTable.expiresAt, cutoffs.authTokens))
+    .returning({ id: authTokensTable.id });
+  results.push({ table: "auth_tokens", action: "deleted", count: authTokens.length });
+
+  const unverifiedAccounts = await db
+    .delete(usersTable)
+    .where(and(
+      eq(usersTable.authProvider, localProviderKey ?? "__local_provider_disabled__"),
+      isNull(usersTable.emailVerifiedAt),
+      lt(usersTable.createdAt, cutoffs.unverifiedAccounts),
+    ))
+    .returning({ id: usersTable.id });
+  results.push({ table: "users (unbestaetigt)", action: "deleted", count: unverifiedAccounts.length });
+
+  const sessions = await db.delete(sessionsTable)
     .where(or(
       lt(sessionsTable.absoluteExpiresAt, now),
       lt(sessionsTable.revokedAt, cutoffs.sessionsRevoked),

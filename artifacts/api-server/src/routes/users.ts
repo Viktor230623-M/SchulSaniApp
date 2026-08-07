@@ -1,11 +1,12 @@
 import { Router } from "express";
-import { eq } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, ne, or } from "drizzle-orm";
 import { db, usersTable, type UserRole } from "@workspace/db";
 import { requireAuth, requirePermission, invalidateUserCache, type AuthRequest } from "../middlewares/auth";
 import { assertAdminReachable, LockoutError } from "../lib/rolePermissions";
 import { logRoleChangeTx } from "../lib/roleChangeLog";
 import { logProfileChangeTx } from "../lib/profileChangeLog";
 import { validateProfileName } from "../lib/profileName";
+import { loadAuthProviders } from "../auth/registry";
 
 // Quelle der Rollen ist der Aufzaehlungstyp user_role (siehe
 // lib/db/src/schema/index.ts).
@@ -16,6 +17,7 @@ function isValidRole(value: string): value is (typeof VALID_ROLES)[number] {
 }
 
 const router = Router();
+const localProviderKey = loadAuthProviders().find((provider) => provider.type === "local")?.key;
 
 function safeUser(u: typeof usersTable.$inferSelect) {
   const { passwordHash: _, ...rest } = u;
@@ -44,7 +46,14 @@ router.get("/", requireAuth, requirePermission("users.read_all"), async (_req, r
 });
 
 router.get("/pending", requireAuth, requirePermission("users.read_pending"), async (_req, res) => {
-  const users = await db.select().from(usersTable).where(eq(usersTable.isApproved, false));
+  const users = await db.select().from(usersTable).where(and(
+    eq(usersTable.isApproved, false),
+    or(
+      isNull(usersTable.authProvider),
+      ne(usersTable.authProvider, localProviderKey ?? "local"),
+      isNotNull(usersTable.emailVerifiedAt),
+    ),
+  ));
   res.json(users.map(safeUser));
 });
 
@@ -107,6 +116,9 @@ router.patch("/:id/approve", requireAuth, requirePermission("users.approve"), as
 
   const [existing] = await db.select().from(usersTable).where(eq(usersTable.id, id));
   if (!existing) { res.status(404).json({ error: "User not found" }); return; }
+  if (existing.authProvider === localProviderKey && !existing.emailVerifiedAt) {
+    res.status(409).json({ error: "E-Mail-Adresse noch nicht bestaetigt" }); return;
+  }
 
   // Same gate as /role and DELETE: approving carries an optional role change, so
   // without this an admin could "approve" an owner account and demote it on the way.

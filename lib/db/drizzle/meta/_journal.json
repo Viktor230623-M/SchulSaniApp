@@ -57,6 +57,13 @@
       "when": 1786039911234,
       "tag": "0007_namensbestaetigung",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1786060800000,
+      "tag": "0008_lokale_konten_und_auth_tokens",
+      "breakpoints": true
     }
   ]
 }

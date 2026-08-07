@@ -9,6 +9,7 @@ export const missionPriorityEnum = pgEnum("mission_priority", ["high", "medium",
 export const missionStatusEnum = pgEnum("mission_status", ["pending", "accepted", "rejected", "completed", "archived"]);
 export const newsCategoryEnum = pgEnum("news_category", ["announcement", "training", "update", "alert"]);
 export const newsStatusEnum = pgEnum("news_status", ["pending", "approved", "rejected"]);
+export const authTokenKindEnum = pgEnum("auth_token_kind", ["email_verify", "password_reset"]);
 export const notificationTypeEnum = pgEnum("notification_type", [
   "mission_assigned", "mission_cancelled", "status_changed", "news", "loa_update",
   "reminder", "high_priority_alert", "mission_completed", "mission_created",
@@ -38,10 +39,13 @@ export const usersTable = pgTable("users", {
   firstName: text("first_name"),
   lastName: text("last_name"),
   email: text("email").unique(),
+  emailVerifiedAt: timestamp("email_verified_at"),
+  username: text("username"),
   phone: text("phone").default(""),
   role: userRoleEnum("role").default("sanitaeter").notNull(),
   schoolId: text("school_id"),
   passwordHash: text("password_hash").default(""),
+  passwordVersion: integer("password_version").default(0).notNull(),
   // Lokale Konten (R6, Schritt 6): erzwingt einen Passwortwechsel, solange das
   // aktuelle Passwort ein von einem Verwalter vergebenes Einmal-Passwort ist
   // (Einladung oder Zuruecksetzen). Bleibt fuer alle anderen Anmeldewege false.
@@ -62,6 +66,19 @@ export const usersTable = pgTable("users", {
   unique("users_school_id_auth_provider_external_subject_key").on(
     t.schoolId, t.authProvider, t.externalSubject,
   ),
+  unique("users_school_id_username_key").on(t.schoolId, t.username),
+]);
+
+export const authTokensTable = pgTable("auth_tokens", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  kind: authTokenKindEnum("kind").notNull(),
+  tokenHash: text("token_hash").notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  usedAt: timestamp("used_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [
+  index("auth_tokens_user_kind_idx").on(t.userId, t.kind),
 ]);
 
 // News table
@@ -295,6 +312,9 @@ export const sessionsTable = pgTable("sessions", {
 export type UserRole = (typeof userRoleEnum.enumValues)[number];
 export type User = typeof usersTable.$inferSelect;
 export type NewUser = typeof usersTable.$inferInsert;
+export type AuthTokenKind = (typeof authTokenKindEnum.enumValues)[number];
+export type AuthToken = typeof authTokensTable.$inferSelect;
+export type NewAuthToken = typeof authTokensTable.$inferInsert;
 export type News = typeof newsTable.$inferSelect;
 export type NewNews = typeof newsTable.$inferInsert;
 export type Mission = typeof missionsTable.$inferSelect;
