@@ -74,9 +74,16 @@ vi.mock("@workspace/db", async () => {
 
   function makeUpdateChain(isUsers: boolean): any {
     let whereId: string | undefined;
+    let changes: Record<string, unknown> = {};
     const chain: any = {
-      set: () => chain,
-      where: (cond: any) => { whereId = extractEqId(cond); return chain; },
+      set: (values: Record<string, unknown>) => { changes = values; return chain; },
+      where: (cond: any) => {
+        whereId = extractEqId(cond);
+        if (isUsers && whereId && fakeUsers[whereId]) {
+          fakeUsers[whereId] = { ...fakeUsers[whereId], ...changes } as FakeUserRow;
+        }
+        return chain;
+      },
       returning: () => isUsers && whereId && fakeUsers[whereId] ? Promise.resolve([fakeUsers[whereId]]) : Promise.resolve([]),
     };
     return chain;
@@ -250,22 +257,10 @@ describe("Namensbestaetigung -- Sperre, Endpunkt, Verwalter-Korrektur", () => {
     expect(result.status).toBe(400);
   });
 
-  it("bietet keinen Passwortwechsel-Endpunkt mehr an", async () => {
-    const result = await request(app).post("/api/auth/password/change").send({ currentPassword: "alt", newPassword: "neu" });
-
-    expect(result.status).toBe(404);
-  });
-
   it("weist einen Passwortwechsel ohne Authentifizierung ab", async () => {
     const result = await request(app).post("/api/auth/password/change").send({ currentPassword: "alt", newPassword: "neu" });
 
-    expect(result.status).toBe(404);
-  });
-
-  it("bietet keine zweite Passwortaenderung an", async () => {
-    const result = await request(app).post("/api/auth/password/change").send({ currentPassword: "alt", newPassword: "neu" });
-
-    expect(result.status).toBe(404);
+    expect(result.status).toBe(401);
   });
 
   it("weist einen zweiten Aufruf bei bereits bestaetigtem Konto mit 409 ab", async () => {
