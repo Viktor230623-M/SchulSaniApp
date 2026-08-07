@@ -11,7 +11,10 @@
 module.exports = {
   apps: [
     {
-      name: "sani-backend",
+      // <PM2_NAME> wird von install.sh durch den konfigurierten
+      // Prozessnamen ersetzt (Standard sani-backend), damit auf einem
+      // Mehrinstanzen-Server kein Prozess einen anderen ueberschreibt.
+      name: "<PM2_NAME>",
       cwd: "<APP_ROOT>/artifacts/api-server",
       script: "dist/index.cjs",
       env: {

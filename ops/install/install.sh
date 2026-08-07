@@ -9,8 +9,12 @@ DRY_RUN=0
 MIN_FREE_DISK_MB=2048
 NODE_MAJOR_VERSION="24"
 POSTGRES_MIN_MAJOR_VERSION="17"
-DB_NAME="schulSani"
-DB_ROLE="saniapp"
+# Datenbank und Rolle der Instanz sowie der PM2-Prozessname. Auf einem
+# Server mit mehreren Instanzen (oder bereits vorhandener Datenbank) ueber
+# die Umgebung umstellen, damit nichts Bestehendes angefasst wird.
+DB_NAME="${SCHULSANI_DB_NAME:-schulSani}"
+DB_ROLE="${SCHULSANI_DB_ROLE:-saniapp}"
+PM2_NAME="${SCHULSANI_PM2_NAME:-sani-backend}"
 
 # --- Ausgabegestaltung -------------------------------------------------
 
@@ -854,10 +858,10 @@ step_start_service_and_check() {
   if [[ ! -f "$ecosystem_file" ]]; then
     fail_with "PM2-Ecosystem-Datei fehlt (${ecosystem_file})."
   fi
-  sed -i -e "s#<APP_ROOT>#${app_root}#g" -e "s#<BACKEND_PORT>#${BACKEND_PORT}#g" "$ecosystem_file"
+  sed -i -e "s#<APP_ROOT>#${app_root}#g" -e "s#<BACKEND_PORT>#${BACKEND_PORT}#g" -e "s#<PM2_NAME>#${PM2_NAME}#g" "$ecosystem_file"
 
-  if pm2 describe sani-backend >/dev/null 2>&1; then
-    run pm2 restart sani-backend
+  if pm2 describe "$PM2_NAME" >/dev/null 2>&1; then
+    run pm2 restart "$PM2_NAME"
   else
     run pm2 start "$ecosystem_file"
   fi
@@ -867,7 +871,7 @@ step_start_service_and_check() {
   if [[ -n "$domain" ]]; then
     http_code="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 10 "https://${domain}/" || echo "000")"
   else
-    http_code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "http://localhost:3002/" || echo "000")"
+    http_code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "http://localhost:${BACKEND_PORT}/" || echo "000")"
   fi
   if [[ "$http_code" == "200" ]]; then
     step_ok "HTTP-Status ${http_code}."
@@ -876,10 +880,10 @@ step_start_service_and_check() {
   fi
 
   # PM2-Status pruefen.
-  if pm2 jlist 2>/dev/null | grep -q '"name":"sani-backend".*"status":"online"'; then
-    step_ok "PM2-Prozess sani-backend online."
+  if pm2 jlist 2>/dev/null | grep -q "\"name\":\"${PM2_NAME}\".*\"status\":\"online\""; then
+    step_ok "PM2-Prozess ${PM2_NAME} online."
   else
-    step_fail "PM2-Prozess sani-backend laeuft nicht."
+    step_fail "PM2-Prozess ${PM2_NAME} laeuft nicht."
   fi
 
   # Datenbankverbindung pruefen.
