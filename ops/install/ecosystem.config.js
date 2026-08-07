@@ -16,7 +16,9 @@ module.exports = {
       script: "dist/index.cjs",
       env: {
         NODE_ENV: "production",
-        PORT: "3002",
+        // <BACKEND_PORT> wird von install.sh durch den konfigurierten
+        // Backend-Port ersetzt (Standard 3002).
+        PORT: "<BACKEND_PORT>",
       },
       instances: 1,
       exec_mode: "fork",

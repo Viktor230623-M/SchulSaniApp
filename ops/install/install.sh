@@ -97,38 +97,82 @@ run() {
 
 UPDATE_MODE=0
 
+# Ports der Instanz. Auf einem Server, auf dem 80/443 bereits belegt sind,
+# freie Ports waehlen (--http-port/--https-port oder SCHULSANI_HTTP_PORT /
+# SCHULSANI_HTTPS_PORT); der Backend-Port ist nur intern relevant.
+HTTP_PORT="${SCHULSANI_HTTP_PORT:-80}"
+HTTPS_PORT="${SCHULSANI_HTTPS_PORT:-443}"
+BACKEND_PORT="${SCHULSANI_BACKEND_PORT:-3002}"
+
+port_valid() {
+  [[ "$1" =~ ^[0-9]+$ ]] && (( $1 >= 1 && $1 <= 65535 ))
+}
+
+for p in "$HTTP_PORT" "$HTTPS_PORT" "$BACKEND_PORT"; do
+  if ! port_valid "$p"; then
+    echo "Ungueltiger Port: $p (1-65535)." >&2
+    exit 1
+  fi
+done
+if [[ "$HTTP_PORT" == "$HTTPS_PORT" ]]; then
+  echo "HTTP- und HTTPS-Port duerfen nicht gleich sein." >&2
+  exit 1
+fi
+
 usage() {
   cat <<'EOF'
-Verwendung: install.sh [--dry-run] [--update]
+Verwendung: install.sh [--dry-run] [--update] [--http-port N] [--https-port N] [--backend-port N]
 
-  --dry-run   Fuehrt nichts aus, zeigt nur an, was das Skript taete.
-              Installiert keine Pakete, legt keine Datenbank an,
-              schreibt keine Dateien ausserhalb des Protokolls.
-  --update    Ueberspringt Systemteil und Einrichtungsassistenten. Liest die
-              vorhandenen .env-Dateien, fuehrt nur Migrationen, Web-Export
-              und einen Dienst-Neustart aus. Fuer eine bereits eingerichtete
-              Instanz (z. B. nach einem Deploy neuer Migrationen).
+  --dry-run       Fuehrt nichts aus, zeigt nur an, was das Skript taete.
+                  Installiert keine Pakete, legt keine Datenbank an,
+                  schreibt keine Dateien ausserhalb des Protokolls.
+  --update        Ueberspringt Systemteil und Einrichtungsassistenten. Liest die
+                  vorhandenen .env-Dateien, fuehrt nur Migrationen, Web-Export
+                  und einen Dienst-Neustart aus. Fuer eine bereits eingerichtete
+                  Instanz (z. B. nach einem Deploy neuer Migrationen).
+  --http-port N   HTTP-Port der Instanz (Standard: 80, sonst SCHULSANI_HTTP_PORT).
+                  Auf einem geteilten Server freie Ports waehlen, z. B. 8080.
+  --https-port N  HTTPS-Port der Instanz (Standard: 443, sonst SCHULSANI_HTTPS_PORT).
+                  Bei einem benutzerdefinierten Port holt install.sh das
+                  Zertifikat ueber certbot --standalone mit --http-01-port.
+  --backend-port N
+                  Interner API-Port (Standard: 3002, sonst SCHULSANI_BACKEND_PORT).
 
+Alle Ports lassen sich auch ueber die Umgebung setzen; die Optionen gewinnen.
 Muss als root ausgefuehrt werden (sudo install.sh).
 EOF
 }
 
 # --- Argumente -------------------------------------------------------------
 
-for arg in "$@"; do
-  case "$arg" in
+while [[ $# -gt 0 ]]; do
+  case "$1" in
     --dry-run)
       DRY_RUN=1
+      shift
       ;;
     --update)
       UPDATE_MODE=1
+      shift
+      ;;
+    --http-port)
+      HTTP_PORT="${2:?--http-port braucht eine Portnummer}"
+      shift 2
+      ;;
+    --https-port)
+      HTTPS_PORT="${2:?--https-port braucht eine Portnummer}"
+      shift 2
+      ;;
+    --backend-port)
+      BACKEND_PORT="${2:?--backend-port braucht eine Portnummer}"
+      shift 2
       ;;
     -h|--help)
       usage
       exit 0
       ;;
     *)
-      echo "Unbekannte Option: $arg" >&2
+      echo "Unbekannte Option: $1" >&2
       usage >&2
       exit 1
       ;;
@@ -216,10 +260,10 @@ port_is_free() {
 }
 
 step_check_ports() {
-  step_start "Ports 80 und 443 pruefen"
+  step_start "Ports ${HTTP_PORT} und ${HTTPS_PORT} pruefen"
   local port
   local all_free=1
-  for port in 80 443; do
+  for port in "$HTTP_PORT" "$HTTPS_PORT"; do
     if port_is_free "$port"; then
       step_ok "Port $port ist frei."
     else
@@ -229,7 +273,7 @@ step_check_ports() {
   done
   if [[ "$all_free" -ne 1 ]]; then
     fail_with "Mindestens ein benoetigter Port ist belegt." \
-      "Pruefen mit: ss -tlnp | grep -E ':80|:443' — belegenden Dienst stoppen oder Server wechseln."
+      "Belegenden Dienst stoppen (ss -tlnp) oder freie Ports waehlen: --http-port / --https-port (bzw. SCHULSANI_HTTP_PORT / SCHULSANI_HTTPS_PORT). Bei benutzerdefinierten Ports holt install.sh das TLS-Zertifikat ueber certbot --standalone."
   fi
 }
 
@@ -458,24 +502,30 @@ step_install_pm2_ecosystem() {
 # --- nginx-Vorlage einrichten -----------------------------------------
 
 step_install_nginx_template() {
-  step_start "nginx-Vorlage bereitstellen"
-  local script_dir target_dir target_file
+  step_start "nginx-Vorlagen bereitstellen"
+  local script_dir target_dir
   script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   target_dir="/etc/nginx/schulsani"
-  target_file="${target_dir}/nginx.conf.template"
 
-  if [[ ! -f "${script_dir}/nginx.conf.template" ]]; then
-    fail_with "Vorlage ${script_dir}/nginx.conf.template fehlt im Repository."
+  if [[ ! -f "${script_dir}/nginx.conf.template" ]] || [[ ! -f "${script_dir}/nginx-locations.conf" ]]; then
+    fail_with "nginx-Vorlagen fehlen im Repository (${script_dir}/nginx.conf.template, nginx-locations.conf)."
   fi
 
-  if [[ -f "$target_file" ]]; then
-    step_skip "nginx-Vorlage existiert bereits unter ${target_file}."
-    return 0
-  fi
-
+  # Beide Vorlagen kopieren, falls nicht vorhanden; das Rendern mit den echten
+  # Werten passiert in step_setup_tls. Die Locations-Datei wird von beiden
+  # Server-Bloecken (HTTP und optionaler TLS-Block) eingebunden.
   run mkdir -p "$target_dir"
-  run install -m 644 "${script_dir}/nginx.conf.template" "$target_file"
-  step_ok "Vorlage nach ${target_file} kopiert — wird vom Einrichtungsassistenten mit Domain/Pfad gerendert und aktiviert."
+  if [[ ! -f "${target_dir}/nginx.conf.template" ]]; then
+    run install -m 644 "${script_dir}/nginx.conf.template" "${target_dir}/nginx.conf.template"
+  else
+    step_skip "nginx.conf.template existiert bereits unter ${target_dir}/."
+  fi
+  if [[ ! -f "${target_dir}/nginx-locations.conf.template" ]]; then
+    run install -m 644 "${script_dir}/nginx-locations.conf" "${target_dir}/nginx-locations.conf.template"
+  else
+    step_skip "nginx-locations.conf.template existiert bereits unter ${target_dir}/."
+  fi
+  step_ok "nginx-Vorlagen unter ${target_dir}/ bereit — werden mit Ports/Pfad gerendert und aktiviert."
 }
 
 # --- Einrichtungsassistent starten ----------------------------------------
@@ -520,7 +570,8 @@ step_start_assistant() {
   run chmod 700 "$STATE_DIR"
 
   token="$(openssl rand -hex 32)"
-  port=$(( (RANDOM % 10000) + 40000 ))
+  # Eigener Assistenten-Port, falls die Standardspanne nicht passt.
+  port="${SCHULSANI_ASSISTANT_PORT:-$(( (RANDOM % 10000) + 40000 ))}"
   ip="$(server_ip_hint)"
 
   printf '\n  Adresse fuer die Einrichtung (von einem Geraet im selben Netz aufrufen):\n'
@@ -536,6 +587,7 @@ step_start_assistant() {
   SCHULSANI_LOG_FILE="$LOG_FILE" \
   SCHULSANI_APP_ROOT="$app_root" \
   SCHULSANI_DATABASE_URL="postgres://${DB_ROLE}:${DB_PASSWORD}@localhost:5432/${DB_NAME}" \
+  SCHULSANI_BACKEND_PORT="$BACKEND_PORT" \
   "$node_bin" "$assistant_script"
   rc=$?
   set -e
@@ -676,35 +728,92 @@ step_setup_tls() {
     fail_with "Web-Export fehlt (${dist_path})." "Schritt 'Web-Export bauen' erneut pruefen."
   fi
 
+  # Die Domain kann einen Port tragen (sani.beispielschule.de:8443), wenn die
+  # Standard-Ports belegt sind. server_name und certbot brauchen den reinen
+  # Hostnamen; der Port bestimmt den HTTPS-Port der Instanz.
+  host="${domain%%:*}"
+  https_port="${HTTPS_PORT}"
+  if [[ "$domain" == *:* ]]; then
+    https_port="${domain##*:}"
+  fi
+
   site_file="/etc/nginx/sites-available/schulsani"
-  sed -e "s#<DOMAIN>#${domain}#g" -e "s#<DIST_PATH>#${dist_path}#g" \
-    "${script_dir}/nginx.conf.template" >"$site_file"
-  log_line "BEFEHL: nginx-Site fuer ${domain} nach ${site_file} gerendert."
+  if [[ "$https_port" == "443" ]]; then
+    # Standardpfad: ein Block auf dem HTTP-Port, certbot --nginx ergaenzt TLS.
+    sed -e "s#<DOMAIN>#${host}#g" -e "s#<HTTP_PORT>#${HTTP_PORT}#g" \
+      "${script_dir}/nginx.conf.template" >"$site_file"
+  else
+    # Benutzerdefinierter HTTPS-Port: der HTTP-Block leitet nur um, der
+    # TLS-Block wird nach dem Zertifikat angehaengt (gleiche Locations-Datei).
+    cat >"$site_file" <<EOF
+server {
+    listen ${HTTP_PORT};
+    listen [::]:${HTTP_PORT};
+    server_name ${host};
+    return 301 https://\$host:${https_port}\$request_uri;
+}
+EOF
+  fi
+
+  # Gemeinsame Locations fuer HTTP- und TLS-Block rendern und ablegen.
+  sed -e "s#<DIST_PATH>#${dist_path}#g" -e "s#<BACKEND_PORT>#${BACKEND_PORT}#g" \
+    "${script_dir}/nginx-locations.conf" >"/etc/nginx/schulsani/locations.conf"
+  log_line "BEFEHL: nginx-Site fuer ${host} nach ${site_file} gerendert (http ${HTTP_PORT}, https ${https_port})."
   run ln -sf "$site_file" "/etc/nginx/sites-enabled/schulsani"
   run nginx -t
   run systemctl reload nginx
-  step_ok "nginx-Site fuer ${domain} aktiviert."
+  step_ok "nginx-Site fuer ${host} aktiviert."
 
-  resolved_ip="$(getent hosts "$domain" 2>/dev/null | awk '{print $1}' | head -1)"
+  resolved_ip="$(getent hosts "$host" 2>/dev/null | awk '{print $1}' | head -1)"
   server_ip="$(server_ip_hint)"
   if [[ -z "$resolved_ip" ]]; then
-    fail_with "DNS-Eintrag fuer ${domain} nicht gefunden." \
-      "A-Record fuer ${domain} auf ${server_ip} anlegen, dann install.sh erneut ausfuehren."
+    fail_with "DNS-Eintrag fuer ${host} nicht gefunden." \
+      "A-Record fuer ${host} auf ${server_ip} anlegen, dann install.sh erneut ausfuehren."
   fi
   if [[ "$resolved_ip" != "$server_ip" ]] && [[ "$server_ip" != "<server-ip>" ]]; then
     printf '  %sHinweis:%s %s zeigt auf %s, dieser Server hat %s — kann bei Mehrfach-NAT normal sein.\n' \
-      "$COLOR_YELLOW" "$COLOR_RESET" "$domain" "$resolved_ip" "$server_ip"
+      "$COLOR_YELLOW" "$COLOR_RESET" "$host" "$resolved_ip" "$server_ip"
   fi
 
-  set +e
-  certbot --nginx -d "$domain" --non-interactive --agree-tos -m "admin@${domain#*.}" --redirect
-  local rc=$?
-  set -e
-  if [[ "$rc" -ne 0 ]]; then
-    fail_with "certbot ist fehlgeschlagen (Code ${rc})." \
-      "Haeufigste Ursache: DNS zeigt noch nicht auf diesen Server, oder Port 80 ist von aussen nicht erreichbar."
+  if [[ "$https_port" == "443" ]]; then
+    set +e
+    certbot --nginx -d "$host" --non-interactive --agree-tos -m "admin@${host#*.}" --redirect
+    local rc=$?
+    set -e
+    if [[ "$rc" -ne 0 ]]; then
+      fail_with "certbot ist fehlgeschlagen (Code ${rc})." \
+        "Haeufigste Ursache: DNS zeigt noch nicht auf diesen Server, oder Port ${HTTP_PORT} ist von aussen nicht erreichbar."
+    fi
+    step_ok "TLS-Zertifikat fuer ${host} bezogen."
+  else
+    # eigener HTTPS-Port: Zertifikat zuerst holen. certbot --standalone nutzt
+    # dafuer kurz den (freien) HTTP-Port; nginx muss ihn nicht freigeben.
+    set +e
+    certbot certonly --standalone --http-01-port "$HTTP_PORT" --non-interactive --agree-tos -m "admin@${host#*.}" -d "$host"
+    local rc=$?
+    set -e
+    if [[ "$rc" -ne 0 ]]; then
+      step_fail "certbot --standalone fehlgeschlagen (Code ${rc}). Die Seite bleibt vorerst ueber http://${host}:${HTTP_PORT} erreichbar."
+      printf '  Von Hand nachholen: certbot certonly --standalone --http-01-port %s -d %s,\n  dann den TLS-Block an %s anhaengen (Vorlage: ops/install/nginx.conf.template).\n' \
+        "$HTTP_PORT" "$host" "$site_file"
+      return 0
+    fi
+    cat >>"$site_file" <<EOF
+
+server {
+    listen ${https_port} ssl;
+    listen [::]:${https_port} ssl;
+    ssl_certificate /etc/letsencrypt/live/${host}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${host}/privkey.pem;
+    server_name ${host};
+
+    include /etc/nginx/schulsani/locations.conf;
+}
+EOF
+    run nginx -t
+    run systemctl reload nginx
+    step_ok "TLS-Block fuer ${host}:${https_port} aktiviert."
   fi
-  step_ok "TLS-Zertifikat fuer ${domain} bezogen."
 }
 
 # --- Dienst starten und Selbstpruefung (Schritt 12) ------------------------
@@ -728,7 +837,7 @@ step_start_service_and_check() {
   if [[ ! -f "$ecosystem_file" ]]; then
     fail_with "PM2-Ecosystem-Datei fehlt (${ecosystem_file})."
   fi
-  sed -i "s#<APP_ROOT>#${app_root}#g" "$ecosystem_file"
+  sed -i -e "s#<APP_ROOT>#${app_root}#g" -e "s#<BACKEND_PORT>#${BACKEND_PORT}#g" "$ecosystem_file"
 
   if pm2 describe sani-backend >/dev/null 2>&1; then
     run pm2 restart sani-backend

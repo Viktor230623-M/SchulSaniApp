@@ -99,7 +99,9 @@ loadPendingSecrets();
 
 // --- Hilfsfunktionen: Validierung (spiegelt config.ts / app.config.ts) --
 
-const DOMAIN_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i;
+// Optionaler Port am Ende (sani.beispielschule.de:8443), wenn die
+// Standard-Ports 80/443 auf dem Server belegt sind.
+const DOMAIN_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+(:[0-9]{1,5})?$/i;
 const IDENTIFIER_RE = /^[a-z0-9][a-z0-9._-]{1,63}$/i;
 const SCHOOL_ID_RE = /^[a-z0-9_-]{1,40}$/i;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -280,8 +282,12 @@ function validateConfig(body) {
   }
 
   out.domain = trimOrEmpty(body.domain).toLowerCase();
+  const domainPort = out.domain.match(/:([0-9]{1,5})$/);
+  if (domainPort && (Number(domainPort[1]) < 1 || Number(domainPort[1]) > 65535)) {
+    errors.domain = "Der Port muss zwischen 1 und 65535 liegen.";
+  }
   if (!DOMAIN_RE.test(out.domain)) {
-    errors.domain = 'Das ist keine gueltige Domain (Beispiel: sani.beispielschule.de), ohne "https://".';
+    errors.domain = 'Das ist keine gueltige Domain (Beispiel: sani.beispielschule.de:8443), ohne "https://".';
   }
 
   out.providerKey = usesOidc ? trimOrEmpty(body.providerKey).toLowerCase() : "local";
@@ -507,7 +513,9 @@ function buildBackendEnv(cfg, secrets) {
   return [
     "# Automatisch vom Einrichtungsassistenten erzeugt.",
     envLine("DATABASE_URL", DATABASE_URL),
-    "PORT=3002",
+    // Backend-Port kann install.sh auf einem belegten 3002 ueber
+    // SCHULSANI_BACKEND_PORT umstellen.
+    envLine("PORT", process.env.SCHULSANI_BACKEND_PORT || "3002"),
     envLine("JWT_SECRET", secrets.jwtSecret),
     "NODE_ENV=production",
     envLine("ALLOWED_ORIGINS", allowedOrigins),
