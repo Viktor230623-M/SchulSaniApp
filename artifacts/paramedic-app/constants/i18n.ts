@@ -5,11 +5,17 @@ const translations = {
   de: {
     tabs: {
       news: "Neuigkeiten",
+      newsShort: "News",
       loa: "Abwesenheiten",
+      loaShort: "LOA",
       duty: "Dienst",
+      dutyShort: "Dienst",
       missions: "Einsätze",
+      missionsShort: "Einsatz",
       notifications: "Meldungen",
+      notificationsShort: "Meldungen",
       settings: "Einstellungen",
+      more: "Mehr",
     },
     activityLog: {
       title: "Mein Aktivitätslog",
@@ -480,11 +486,17 @@ const translations = {
   en: {
     tabs: {
       news: "News",
+      newsShort: "News",
       loa: "Absences",
+      loaShort: "LOA",
       duty: "Duty",
+      dutyShort: "Duty",
       missions: "Missions",
+      missionsShort: "Mission",
       notifications: "Alerts",
+      notificationsShort: "Alerts",
       settings: "Settings",
+      more: "More",
     },
     activityLog: {
       title: "My Activity Log",
