@@ -71,7 +71,8 @@ sudo ops/install/install.sh --update
    Vordergrund, bis die Einrichtung im Browser abgeschlossen ist oder 60 Minuten
    ohne Eingabe vergehen. Bash und Browser verwenden denselben Vertrag: Der
    Assistent fragt Domain, Schulname, Anmeldemodus, SMTP-Mailserver,
-   Anwendungsname, Themefarbe, Bundle-Kennung und optionale Werte ab. Erzeugt
+   Schul-Zugangscode und optionale Werte ab; Anwendungsname, Themefarbe und
+   Bundle-Kennung sind fest verdrahtet (Prinzipien unten). Erzeugt
    `JWT_SECRET` und das VAPID-Schluesselpaar, schreibt
    `artifacts/api-server/.env`, `artifacts/paramedic-app/.env` und
    `/etc/schulsani/auth-providers.json` jeweils mit restriktiven Dateirechten.   Lokale E-Mail-Anmeldung und OIDC sind vorgesehen; E-Mail kann zusammen mit
@@ -136,3 +137,32 @@ Klartext protokolliert.
 - `pnpm --filter @workspace/db migrate` setzt einen entsprechenden
   Migrationsbefehl in `lib/db/package.json` voraus (R1); ist er noch nicht
   vorhanden, bricht Schritt 7 mit einer erklaerenden Meldung ab.
+
+## Prinzipien und Pflege
+
+Der Einrichtungsassistent ist der Schreibpartner des Konfigurationsvertrags:
+`server.js` validiert und erzeugt dieselben Werte, die `config.ts` (Backend)
+und `app.config.ts` (App) erwarten. Aendert sich an Backend oder App etwas an
+der Konfiguration — neue Env-Variable, neuer Anmeldeweg, neues Pflichtfeld —,
+gehoert dieselbe Aenderung immer auch in `assistant/server.js`,
+`assistant/wizard.html` und `artifacts/api-server/.env.example`. Der Installer
+darf nie hinter dem Stand von Backend und App zurueckbleiben.
+
+Die App-Kennung ist kein Feld der Einrichtung. Name, Farbe und Bundle-ID sind
+fest verdrahtet (`BRAND_*` in `server.js`): `SchulSani`, `#22C55E`,
+`com.schulsani.app`. Eine Bundle-ID fuer alle Instanzen ist das SaaS-Modell —
+eine App im Store, jede Schule eine eigene Instanz (Subdomain auf einem
+gehosteten Server oder eigener Server). Die Schule konfiguriert nur Domain,
+Anmeldewege, SMTP, Schul-Zugangscode und das Eigentuemerkonto. Eine Aenderung
+an der Marke betrifft alle Schulen gleichzeitig und passiert nur in Absprache
+mit dem Eigentuemer.
+
+Betriebsregeln: einmaliges Setup-Token, Sitzung per HttpOnly-Cookie, der
+Assistent beendet sich nach Abschluss oder nach 60 Minuten ohne Eingabe.
+Geheimnisse (JWT, VAPID, Passwoerter) werden nie protokolliert und liegen nur
+mit `chmod 600` auf der Platte. Der Schul-Zugangscode hat mindestens 6
+Zeichen, damit der Login-Limiter das Erraten innerhalb der Handoff-Frist
+verhindert. Vor Auslieferung wird der Assistent auf einer Test-Instanz
+geprueft (eigener Port, eigene Datenbank, eigener auth-providers-Pfad,
+Firewall zu, Zugriff nur per SSH-Tunnel); der aktuelle Stand dazu steht in
+der Handover-Datei unter `docs/superpowers/`.

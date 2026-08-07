@@ -34,6 +34,7 @@ Verwaltet mit pnpm-Workspaces (`pnpm-workspace.yaml`).
 | `lib/api-client-react`        | Aus der OpenAPI-Spec generierter React-Query-Client                 |
 | `scripts`                     | Repo-interne Hilfsskripte                                           |
 | `ops/backup`                  | Backup-bezogene Betriebsskripte                                     |
+| `ops/install`                 | Installer: Systemteil + Einrichtungsassistent (Prinzipien: `ops/install/README.md`) |
 
 ## Lokale Einrichtung
 
