@@ -358,6 +358,41 @@ step_install_workspace() {
   step_ok "Workspace-Abhaengigkeiten installiert."
 }
 
+step_verify_workspace() {
+  step_start "Workspace-Build-Werkzeuge pruefen"
+
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    step_skip "Trockenlauf — Build-Werkzeuge werden nicht geprueft."
+    return 0
+  fi
+
+  # tsx baut das Backend, expo den Web-Export, esbuild fuehrt beides aus.
+  # Fehlt eines, scheitern die Schritte hinter dem Assistenten erst spaet;
+  # die Pruefung zieht den Fehler an den Anfang des Laufs.
+  local script_dir app_root bin_dir missing=0
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  app_root="$(cd "${script_dir}/../.." && pwd)"
+  bin_dir="${app_root}/node_modules/.bin"
+
+  if [[ ! -x "${bin_dir}/tsx" ]]; then
+    step_fail "tsx fehlt in node_modules/.bin."
+    missing=1
+  fi
+  if [[ ! -x "${bin_dir}/expo" ]]; then
+    step_fail "expo fehlt in node_modules/.bin."
+    missing=1
+  fi
+  if ! node -e "require('esbuild')" >/dev/null 2>&1; then
+    step_fail "esbuild ist nicht installiert oder nicht geladen."
+    missing=1
+  fi
+  if [[ "$missing" -eq 1 ]]; then
+    fail_with "Workspace-Abhaengigkeiten unvollstaendig." \
+      "pnpm install --frozen-lockfile im Repo-Root erneut ausfuehren und die Ausgabe auf Fehler pruefen."
+  fi
+  step_ok "tsx, expo und esbuild vorhanden."
+}
+
 postgres_major_version() {
   # Ermittelt die Hauptversion des installierten Server-Pakets, nicht der
   # Client-Bibliothek — beide koennen auseinanderlaufen.
@@ -867,9 +902,14 @@ step_start_service_and_check() {
   fi
   run pm2 save
 
-  # HTTP-Status pruefen.
-  if [[ -n "$domain" ]]; then
+  # HTTP-Status pruefen. Liegt kein Zertifikat vor (TLS-Fallback), antwortet
+  # https auf dem Domain-Port nicht — dann gilt der HTTP-Port der Instanz.
+  local cert_dir
+  cert_dir="/etc/letsencrypt/live/${domain%%:*}"
+  if [[ -n "$domain" ]] && [[ -d "$cert_dir" ]]; then
     http_code="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 10 "https://${domain}/" || echo "000")"
+  elif [[ -n "$domain" ]]; then
+    http_code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "http://${domain%%:*}:${HTTP_PORT}/" || echo "000")"
   else
     http_code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "http://localhost:${BACKEND_PORT}/" || echo "000")"
   fi
@@ -925,6 +965,7 @@ main() {
   step_install_node
   step_install_pnpm
   step_install_workspace
+  step_verify_workspace
   step_install_postgres
   step_install_nginx
   step_install_certbot
