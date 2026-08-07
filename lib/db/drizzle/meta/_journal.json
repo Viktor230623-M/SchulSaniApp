@@ -64,6 +64,13 @@
       "when": 1786060800000,
       "tag": "0008_lokale_konten_und_auth_tokens",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1786094736964,
+      "tag": "0009_equal_ben_parker",
+      "breakpoints": true
     }
   ]
 }

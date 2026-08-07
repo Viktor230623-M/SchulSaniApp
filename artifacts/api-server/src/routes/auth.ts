@@ -3,7 +3,7 @@ import { Router } from "express";
 import jwt from "jsonwebtoken";
 import rateLimit from "express-rate-limit";
 import { eq, and, or, isNull, gt, sql } from "drizzle-orm";
-import { db, authTokensTable, usersTable, rolesTable, sessionsTable, userRoleEnum, type UserRole } from "@workspace/db";
+import { db, authTokensTable, userIdentitiesTable, usersTable, rolesTable, sessionsTable, userRoleEnum, type UserRole } from "@workspace/db";
 import { permissionsForRole } from "../lib/rolePermissions";
 import {
   requireAuth,
@@ -220,6 +220,7 @@ router.post("/login", authLimiter, async (req, res) => {
     // beide dieselbe Datenbank teilen und denselben Benutzernamen kennen.
     const existing = await db
       .select({
+        identityId: userIdentitiesTable.id,
         id: usersTable.id,
         role: usersTable.role,
         isApproved: usersTable.isApproved,
@@ -231,12 +232,13 @@ router.post("/login", authLimiter, async (req, res) => {
         authProvider: usersTable.authProvider,
         passwordVersion: usersTable.passwordVersion,
       })
-      .from(usersTable)
+      .from(userIdentitiesTable)
+      .innerJoin(usersTable, eq(usersTable.id, userIdentitiesTable.userId))
       .where(
         and(
-          eq(usersTable.schoolId, schoolId),
-          eq(usersTable.authProvider, provider.key),
-          eq(usersTable.externalSubject, subject),
+          eq(userIdentitiesTable.schoolId, schoolId),
+          eq(userIdentitiesTable.authProvider, provider.key),
+          eq(userIdentitiesTable.externalSubject, subject),
         ),
       )
       .limit(1);
@@ -265,9 +267,29 @@ router.post("/login", authLimiter, async (req, res) => {
       updatedAt: new Date(),
     };
 
-    await db.insert(usersTable).values(userValues).onConflictDoUpdate({
-      target: usersTable.id,
-      set: { firstName, lastName, email, updatedAt: new Date() },
+    await db.transaction(async (tx) => {
+      await tx.insert(usersTable).values(userValues).onConflictDoUpdate({
+        target: usersTable.id,
+        set: { firstName, lastName, email, updatedAt: new Date() },
+      });
+
+      if (existing[0]?.identityId) {
+        await tx.update(userIdentitiesTable)
+          .set({ lastUsedAt: new Date() })
+          .where(eq(userIdentitiesTable.id, existing[0].identityId));
+      } else {
+        // Ein paralleler Erstlogin darf keine zweite, verwaiste Nutzerzeile
+        // hinterlassen: der Unique-Konflikt rollt beide Inserts zurueck.
+        await tx.insert(userIdentitiesTable).values({
+          id: `primary-${userId}`,
+          userId,
+          schoolId,
+          authProvider: provider.key,
+          externalSubject: subject,
+          emailAtLink: email,
+          lastUsedAt: new Date(),
+        });
+      }
     });
 
     if (!isApproved) {
@@ -434,22 +456,32 @@ router.post("/local/register", localAccountLimiter, async (req, res) => {
       };
     } else {
       const userId = crypto.randomUUID();
-      await db.insert(usersTable).values({
-        id: userId,
-        authProvider: localProvider!.key,
-        externalSubject: email,
-        email,
-        emailVerifiedAt: null,
-        username,
-        firstName,
-        lastName,
-        passwordHash,
-        role: "sanitaeter",
-        schoolId,
-        isApproved: false,
-        profileConfirmedAt: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+      await db.transaction(async (tx) => {
+        await tx.insert(usersTable).values({
+          id: userId,
+          authProvider: localProvider!.key,
+          externalSubject: email,
+          email,
+          emailVerifiedAt: null,
+          username,
+          firstName,
+          lastName,
+          passwordHash,
+          role: "sanitaeter",
+          schoolId,
+          isApproved: false,
+          profileConfirmedAt: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+        await tx.insert(userIdentitiesTable).values({
+          id: `primary-${userId}`,
+          userId,
+          schoolId,
+          authProvider: localProvider!.key,
+          externalSubject: email,
+          emailAtLink: email,
+        });
       });
 
       const token = await issueAuthToken(userId, "email_verify", new Date(Date.now() + 24 * 60 * 60 * 1000));
@@ -964,6 +996,7 @@ async function completeOidcCallback(req: import("express").Request, res: import(
   try {
     const existing = await db
       .select({
+        identityId: userIdentitiesTable.id,
         id: usersTable.id,
         role: usersTable.role,
         isApproved: usersTable.isApproved,
@@ -971,12 +1004,13 @@ async function completeOidcCallback(req: import("express").Request, res: import(
         lastName: usersTable.lastName,
         email: usersTable.email,
       })
-      .from(usersTable)
+      .from(userIdentitiesTable)
+      .innerJoin(usersTable, eq(usersTable.id, userIdentitiesTable.userId))
       .where(
         and(
-          eq(usersTable.schoolId, schoolId),
-          eq(usersTable.authProvider, provider.key),
-          eq(usersTable.externalSubject, subject),
+          eq(userIdentitiesTable.schoolId, schoolId),
+          eq(userIdentitiesTable.authProvider, provider.key),
+          eq(userIdentitiesTable.externalSubject, subject),
         ),
       )
       .limit(1);
@@ -995,9 +1029,8 @@ async function completeOidcCallback(req: import("express").Request, res: import(
     const email = profile.email || existing[0]?.email || null;
     const phone = profile.phone;
 
-    await db
-      .insert(usersTable)
-      .values({
+    await db.transaction(async (tx) => {
+      await tx.insert(usersTable).values({
         id: userId,
         authProvider: provider.key,
         externalSubject: subject,
@@ -1015,6 +1048,23 @@ async function completeOidcCallback(req: import("express").Request, res: import(
         target: usersTable.id,
         set: { firstName, lastName, email, updatedAt: new Date() },
       });
+
+      if (existing[0]?.identityId) {
+        await tx.update(userIdentitiesTable)
+          .set({ lastUsedAt: new Date() })
+          .where(eq(userIdentitiesTable.id, existing[0].identityId));
+      } else {
+        await tx.insert(userIdentitiesTable).values({
+          id: `primary-${userId}`,
+          userId,
+          schoolId,
+          authProvider: provider.key,
+          externalSubject: subject,
+          emailAtLink: email,
+          lastUsedAt: new Date(),
+        });
+      }
+    });
 
     if (!isApproved) {
       res.status(403).json({ error: "Dein Account wartet auf Freischaltung durch einen Administrator." });

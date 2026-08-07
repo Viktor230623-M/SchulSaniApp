@@ -5,6 +5,7 @@ import { join } from "node:path";
 vi.mock("@workspace/db", () => ({
   db: {},
   usersTable: {},
+  userIdentitiesTable: {},
 }));
 
 import { loadAuthProviders } from "./registry";

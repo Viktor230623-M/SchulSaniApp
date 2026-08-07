@@ -11,15 +11,18 @@ let mockRows: Array<Record<string, unknown>> = [];
 
 vi.mock("@workspace/db", () => ({
   db: {
-    select: () => ({
-      from: () => ({
-        where: () => ({
-          limit: async () => mockRows,
-        }),
-      }),
-    }),
+    select: () => {
+      const chain: any = {
+        from: () => chain,
+        innerJoin: () => chain,
+        where: () => chain,
+        limit: async () => mockRows.length > 0 ? [{ user: mockRows[0], identity: { externalSubject: mockRows[0]?.externalSubject } }] : [],
+      };
+      return chain;
+    },
   },
   usersTable: {},
+  userIdentitiesTable: {},
 }));
 
 import { createLocalProvider } from "./local";
@@ -50,6 +53,12 @@ describe("local-provider-tests", () => {
     await expect(provider.authenticate({ username: "mmuster", password: "falsches-passwort" })).rejects.toThrow(
       "Ungültige Zugangsdaten",
     );
+  });
+
+  it("gibt das Subjekt der gefundenen Identitaet zurueck", async () => {
+    mockRows = [existingUser];
+    const result = await provider.authenticate({ username: "mmuster", password: "das-richtige-passwort" });
+    expect(result.subject).toBe("mmuster");
   });
 
   it("lehnt unbekannten Nutzer ab", async () => {

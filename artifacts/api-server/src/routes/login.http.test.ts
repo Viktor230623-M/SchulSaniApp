@@ -53,6 +53,16 @@ vi.mock("@workspace/db", async () => {
     oneTimePasswordExpiresAt: text("one_time_password_expires_at"),
   });
 
+  const userIdentitiesTableMock = pgTable("user_identities", {
+    id: text("id"),
+    userId: text("user_id"),
+    schoolId: text("school_id"),
+    authProvider: text("auth_provider"),
+    externalSubject: text("external_subject"),
+    emailAtLink: text("email_at_link"),
+    lastUsedAt: text("last_used_at"),
+  });
+
   const authTokensTableMock = pgTable("auth_tokens", {
     id: text("id"),
     userId: text("user_id"),
@@ -67,23 +77,23 @@ vi.mock("@workspace/db", async () => {
   }
 
   function makeSelectChain(): any {
-    let isUsers = false;
+    let selectsUsers = false;
     const chain: any = {
-      from: (t: any) => { isUsers = t === usersTableMock; return chain; },
+      from: (t: any) => { selectsUsers = t === usersTableMock || t === userIdentitiesTableMock; return chain; },
       innerJoin: () => chain,
       where: () => chain,
       limit: () => chain,
       then: (onFulfilled: any, onRejected?: any) =>
-        Promise.resolve(isUsers ? fakeUsers : []).then(onFulfilled, onRejected),
+        Promise.resolve(selectsUsers ? fakeUsers.map((user) => ({ ...user, identityId: `primary-${user.id}`, user, identity: { externalSubject: user.externalSubject } })) : []).then(onFulfilled, onRejected),
       catch: (onRejected: any) =>
-        Promise.resolve(isUsers ? fakeUsers : []).catch(onRejected),
+        Promise.resolve(selectsUsers ? fakeUsers.map((user) => ({ ...user, identityId: `primary-${user.id}`, user, identity: { externalSubject: user.externalSubject } })) : []).catch(onRejected),
     };
     return chain;
   }
 
   const dbMock: any = {
     select: () => makeSelectChain(),
-    insert: () => ({ values: () => ({ onConflictDoUpdate: () => Promise.resolve() }) }),
+    insert: () => ({ values: () => ({ onConflictDoUpdate: () => Promise.resolve(), onConflictDoNothing: () => Promise.resolve() }) }),
     update: () => ({ set: () => ({ where: () => ({ returning: () => Promise.resolve([]) }) }) }),
     delete: () => ({ where: () => Promise.resolve() }),
     transaction: async (cb: (tx: any) => Promise<any>) => cb(dbMock),
@@ -93,6 +103,7 @@ vi.mock("@workspace/db", async () => {
     db: dbMock,
     pool: { query: () => Promise.resolve({ rows: [] }) },
     usersTable: usersTableMock,
+    userIdentitiesTable: userIdentitiesTableMock,
     authTokensTable: authTokensTableMock,
     newsTable: createMockTable("news"),
     loaTable: createMockTable("loa"),

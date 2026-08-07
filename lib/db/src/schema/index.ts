@@ -63,10 +63,24 @@ export const usersTable = pgTable("users", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (t) => [
-  unique("users_school_id_auth_provider_external_subject_key").on(
-    t.schoolId, t.authProvider, t.externalSubject,
-  ),
   unique("users_school_id_username_key").on(t.schoolId, t.username),
+]);
+
+// Zweite und weitere Anmeldewege eines Kontos. Die primaere Identitaet bleibt
+// vorerst zusaetzlich auf users erhalten, damit die Umstellung in kleinen,
+// pruefbaren Schritten erfolgen kann.
+export const userIdentitiesTable = pgTable("user_identities", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  schoolId: text("school_id"),
+  authProvider: text("auth_provider").notNull(),
+  externalSubject: text("external_subject").notNull(),
+  emailAtLink: text("email_at_link"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  lastUsedAt: timestamp("last_used_at"),
+}, (t) => [
+  unique("user_identities_school_provider_subject_key").on(t.schoolId, t.authProvider, t.externalSubject),
+  index("user_identities_user_id_idx").on(t.userId),
 ]);
 
 export const authTokensTable = pgTable("auth_tokens", {
@@ -312,6 +326,8 @@ export const sessionsTable = pgTable("sessions", {
 export type UserRole = (typeof userRoleEnum.enumValues)[number];
 export type User = typeof usersTable.$inferSelect;
 export type NewUser = typeof usersTable.$inferInsert;
+export type UserIdentity = typeof userIdentitiesTable.$inferSelect;
+export type NewUserIdentity = typeof userIdentitiesTable.$inferInsert;
 export type AuthTokenKind = (typeof authTokenKindEnum.enumValues)[number];
 export type AuthToken = typeof authTokensTable.$inferSelect;
 export type NewAuthToken = typeof authTokensTable.$inferInsert;

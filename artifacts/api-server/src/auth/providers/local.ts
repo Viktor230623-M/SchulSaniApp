@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { and, eq, or } from "drizzle-orm";
-import { db, usersTable } from "@workspace/db";
+import { db, userIdentitiesTable, usersTable } from "@workspace/db";
 import type { PasswordAuthProvider } from "../types";
 
 /**
@@ -69,14 +69,15 @@ export function createLocalProvider(cfg: LocalProviderConfig): PasswordAuthProvi
       const username = credentials.username.toLowerCase().trim();
 
       const rows = await db
-        .select()
-        .from(usersTable)
+        .select({ user: usersTable, identity: userIdentitiesTable })
+        .from(userIdentitiesTable)
+        .innerJoin(usersTable, eq(usersTable.id, userIdentitiesTable.userId))
         .where(
           and(
-            eq(usersTable.schoolId, schoolId),
-            eq(usersTable.authProvider, key),
+            eq(userIdentitiesTable.schoolId, schoolId),
+            eq(userIdentitiesTable.authProvider, key),
             or(
-              eq(usersTable.externalSubject, username),
+              eq(userIdentitiesTable.externalSubject, username),
               eq(usersTable.email, username),
               eq(usersTable.username, username),
             ),
@@ -84,7 +85,8 @@ export function createLocalProvider(cfg: LocalProviderConfig): PasswordAuthProvi
         )
         .limit(1);
 
-      const user = rows[0];
+      const match = rows[0];
+      const user = match?.user;
       const hashToCheck = user?.passwordHash && user.passwordHash.length > 0 ? user.passwordHash : DUMMY_HASH;
 
       // Immer genau ein bcrypt-Vergleich, unabhaengig davon, ob das Konto
@@ -101,7 +103,7 @@ export function createLocalProvider(cfg: LocalProviderConfig): PasswordAuthProvi
       }
 
       return {
-        subject: user.externalSubject ?? username,
+        subject: match?.identity?.externalSubject ?? username,
         profile: {
           firstName: user.firstName ?? "",
           lastName: user.lastName ?? "",
