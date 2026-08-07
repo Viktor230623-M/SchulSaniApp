@@ -910,6 +910,33 @@ router.get("/providers", (_req, res) => {
   });
 });
 
+router.get("/identities", requireAuth, async (req: AuthRequest, res) => {
+  const rows = await db
+    .select({
+      id: userIdentitiesTable.id,
+      providerKey: userIdentitiesTable.authProvider,
+      createdAt: userIdentitiesTable.createdAt,
+      lastUsedAt: userIdentitiesTable.lastUsedAt,
+    })
+    .from(userIdentitiesTable)
+    .where(eq(userIdentitiesTable.userId, req.user!.userId));
+
+  const providerByKey = new Map(authProviders.map((provider) => [provider.key, provider]));
+  res.json({
+    identities: rows.map((row) => {
+      const provider = providerByKey.get(row.providerKey);
+      return {
+        id: row.id,
+        providerKey: row.providerKey,
+        displayName: provider?.displayName ?? "Nicht mehr verfügbar",
+        type: provider?.type ?? "unknown",
+        createdAt: row.createdAt.toISOString(),
+        lastUsedAt: row.lastUsedAt?.toISOString() ?? null,
+      };
+    }),
+  });
+});
+
 /**
  * Startet den Weiterleitungs-Ablauf eines OIDC-Anmeldewegs. Ein unbekannter
  * oder nicht-weiterleitungsbasierter Schluessel liefert 404 -- ohne Hinweis
