@@ -35,6 +35,13 @@ export interface RedirectAuthProvider extends AuthProviderBase {
   readonly type: "oidc-redirect";
   beginRedirect(options?: { returnTo?: string; handoffChallenge?: string; linkUserId?: string }): Promise<{ redirectUrl: string }>;
   completeRedirect(params: Record<string, string>): Promise<AuthResult>;
+  /** Nur Apple: verifiziert das Identity-Token des nativen App-Logins. */
+  verifyNativeToken?(params: {
+    identityToken: string;
+    nonce: string;
+    fullName?: { givenName?: string; familyName?: string };
+    email?: string;
+  }): Promise<AuthResult>;
 }
 
 export type AuthProvider = PasswordAuthProvider | RedirectAuthProvider;

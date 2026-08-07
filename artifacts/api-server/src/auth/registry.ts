@@ -27,6 +27,8 @@ interface RawOidcRedirectProviderConfig {
   appleTeamId?: string;
   appleKeyId?: string;
   applePrivateKeyPath?: string;
+  /** Bundle-ID des nativen iOS-Clients (audience des nativen Identity-Tokens). */
+  appleNativeClientId?: string;
   responseMode?: "query" | "form_post";
   /** Gruppe-zu-Rolle-Abbildung dieses Anbieters. */
   groupToRoleMap?: Record<string, string>;
@@ -88,6 +90,7 @@ function buildProvider(raw: RawLocalProviderConfig | RawOidcRedirectProviderConf
       appleTeamId: raw.appleTeamId,
       appleKeyId: raw.appleKeyId,
       applePrivateKeyPath: raw.applePrivateKeyPath,
+      appleNativeClientId: raw.appleNativeClientId,
       responseMode: raw.responseMode,
     }),
     groupToRoleMap: raw.groupToRoleMap ?? {},

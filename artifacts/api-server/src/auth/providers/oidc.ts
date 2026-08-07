@@ -59,6 +59,8 @@ export interface OidcRedirectProviderConfig {
   appleTeamId?: string;
   appleKeyId?: string;
   applePrivateKeyPath?: string;
+  /** Bundle-ID des nativen iOS-Clients; dessen Identity-Token nennt sie als audience. */
+  appleNativeClientId?: string;
   /** Apple kann den Ruecksprung als application/x-www-form-urlencoded senden. */
   responseMode?: "query" | "form_post";
 }
@@ -112,6 +114,7 @@ export function createOidcRedirectProvider(cfg: OidcRedirectProviderConfig): Red
 
   let discoveryPromise: Promise<OidcDiscoveryDocument> | undefined;
   let jwksSet: ReturnType<typeof createRemoteJWKSet> | undefined;
+  let appleNativeJwks: ReturnType<typeof createRemoteJWKSet> | undefined;
 
   async function discover(): Promise<OidcDiscoveryDocument> {
     if (!discoveryPromise) {
@@ -308,6 +311,44 @@ export function createOidcRedirectProvider(cfg: OidcRedirectProviderConfig): Red
         returnTo: pending.returnTo,
         handoffChallenge: pending.handoffChallenge,
         linkUserId: pending.linkUserId,
+      };
+    },
+
+    // Der native App-Login kennt keinen Redirect: Die App bekommt das
+    // Identity-Token direkt von Apple und schickt es hierher. Verifiziert wird
+    // gegen dieselben Apple-JWKS, aber mit der Bundle-ID des Apps als
+    // Zielgruppe statt der Services-ID des Web-Clients.
+    async verifyNativeToken({ identityToken, nonce, fullName, email: claimedEmail }) {
+      if (!cfg.appleNativeClientId) {
+        throw new Error(`Apple-Anmeldeweg "${key}" hat keine appleNativeClientId.`);
+      }
+      if (!appleNativeJwks) {
+        appleNativeJwks = createRemoteJWKSet(new URL("https://appleid.apple.com/auth/keys"));
+      }
+      const { payload } = await jwtVerify(identityToken, appleNativeJwks, {
+        issuer: "https://appleid.apple.com",
+        audience: cfg.appleNativeClientId,
+      });
+      if (payload["nonce"] !== nonce) {
+        throw new Error("Nonce im Apple-Token stimmt nicht ueberein -- Anmeldung abgebrochen.");
+      }
+      const sub = payload.sub;
+      if (!sub || typeof sub !== "string") {
+        throw new Error("Apple-Token enthaelt keinen sub-Claim.");
+      }
+      // Die Adresse kommt aus dem verifizierten Token, nicht aus dem Client:
+      // der schickt sie nur mit, weil Apple sie beim Erst-Login ausserhalb des
+      // Tokens zurueckgibt. Ein manipulierter Client darf sie nicht setzen.
+      let email = typeof payload["email"] === "string" ? payload["email"] : "";
+      if (!email && typeof claimedEmail === "string") email = claimedEmail;
+      return {
+        subject: sub,
+        profile: {
+          firstName: fullName?.givenName ?? "",
+          lastName: fullName?.familyName ?? "",
+          email,
+          phone: "",
+        },
       };
     },
   };
