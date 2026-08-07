@@ -30,6 +30,10 @@ export interface AuthResult {
   /** Eindeutige Kennung des Nutzers beim Anbieter (z. B. IServ-Benutzername). */
   subject: string;
   profile: AuthProfile;
+  /** Ziel fuer den Ruecksprung nach einer nativen Weiterleitung. */
+  returnTo?: string;
+  /** Gehashter Nachweis fuer den nativen Sitzungsuebergang. */
+  handoffChallenge?: string;
   /**
    * Nur beim lokalen Anbieter gesetzt: das gerade gepruefte Passwort war ein
    * Einmal-Passwort (Einladung oder Zuruecksetzen durch einen Verwalter).
@@ -67,15 +71,10 @@ export interface PasswordAuthProvider extends AuthProviderBase {
   authenticate(credentials: { username: string; password: string }): Promise<AuthResult>;
 }
 
-/**
- * Weiterleitungsbasierter Anmeldeweg (z. B. OIDC mit PKCE). Nur das
- * Interface ist hier vorgesehen -- fuer neue Schulen der Standardweg, in
- * dieser Installation nicht eingeschaltet. Eine Implementierung (Discovery,
- * State/Nonce, ID-Token-Pruefung gegen JWKS) folgt in einem spaeteren Schritt.
- */
+/** Weiterleitungsbasierter Anmeldeweg mit OIDC Authorization Code und PKCE. */
 export interface RedirectAuthProvider extends AuthProviderBase {
   readonly type: "oidc-redirect";
-  beginRedirect(): Promise<{ redirectUrl: string }>;
+  beginRedirect(options?: { returnTo?: string; handoffChallenge?: string }): Promise<{ redirectUrl: string }>;
   completeRedirect(params: Record<string, string>): Promise<AuthResult>;
 }
 

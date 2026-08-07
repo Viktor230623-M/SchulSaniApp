@@ -1,5 +1,6 @@
 import { randomBytes, createHash } from "node:crypto";
-import { createRemoteJWKSet, jwtVerify } from "jose";
+import { readFile } from "node:fs/promises";
+import { createRemoteJWKSet, importPKCS8, jwtVerify, SignJWT } from "jose";
 import type { RedirectAuthProvider, AuthResult } from "../types";
 
 /**
@@ -24,6 +25,8 @@ const STATE_TTL_MS = 10 * 60 * 1000;
 interface PendingRequest {
   nonce: string;
   codeVerifier: string;
+  returnTo?: string;
+  handoffChallenge?: string;
   createdAt: number;
 }
 
@@ -48,6 +51,15 @@ export interface OidcRedirectProviderConfig {
   scopes?: string[];
   /** Anspruch im ID-Token, der die Gruppen traegt. Ohne Angabe: "groups". */
   groupsClaim?: string;
+  /** Fuer Google: nur bestaetigte Workspace-Domaenen zulassen. */
+  allowedHostedDomains?: string[];
+  /** Apple erzeugt das kurzlebige client_secret aus einer .p8-Datei. */
+  clientSecretMode?: "static" | "apple-jwt";
+  appleTeamId?: string;
+  appleKeyId?: string;
+  applePrivateKeyPath?: string;
+  /** Apple kann den Ruecksprung als application/x-www-form-urlencoded senden. */
+  responseMode?: "query" | "form_post";
 }
 
 function generateCodeVerifier(): string {
@@ -77,8 +89,19 @@ function generateOpaqueToken(): string {
 export function createOidcRedirectProvider(cfg: OidcRedirectProviderConfig): RedirectAuthProvider {
   const { key, displayName, issuerUrl, clientId, clientSecret, redirectUri } = cfg;
   const scopes = Array.from(new Set(["openid", ...(cfg.scopes ?? ["email", "profile"])]));
+  const normalizedIssuer = issuerUrl.replace(/\/$/, "");
+  const isGoogle = normalizedIssuer === "https://accounts.google.com";
+  const isApple = normalizedIssuer === "https://appleid.apple.com";
+  const usesAppleJwt = cfg.clientSecretMode === "apple-jwt";
+  if (isApple && cfg.clientSecretMode !== "apple-jwt") {
+    throw new Error(`Apple-Anmeldeweg "${key}" braucht clientSecretMode "apple-jwt".`);
+  }
+  if (usesAppleJwt && (!cfg.appleTeamId || !cfg.appleKeyId || !cfg.applePrivateKeyPath)) {
+    throw new Error(`Apple-JWT-Konfiguration fuer "${key}" ist unvollstaendig.`);
+  }
 
   const pendingRequests = new Map<string, PendingRequest>();
+  let appleSecret: { value: string; expiresAt: number } | undefined;
 
   function pruneExpired(now: number): void {
     for (const [state, entry] of pendingRequests) {
@@ -117,12 +140,31 @@ export function createOidcRedirectProvider(cfg: OidcRedirectProviderConfig): Red
     return jwksSet;
   }
 
+  async function resolveClientSecret(): Promise<string | undefined> {
+    if (!usesAppleJwt) return clientSecret;
+    if (appleSecret && appleSecret.expiresAt > Date.now() + 60_000) return appleSecret.value;
+
+    const privateKey = await readFile(cfg.applePrivateKeyPath!, "utf8");
+    const signingKey = await importPKCS8(privateKey, "ES256");
+    const now = Math.floor(Date.now() / 1000);
+    const value = await new SignJWT({})
+      .setProtectedHeader({ alg: "ES256", kid: cfg.appleKeyId! })
+      .setIssuedAt(now)
+      .setIssuer(cfg.appleTeamId!)
+      .setAudience("https://appleid.apple.com")
+      .setSubject(clientId)
+      .setExpirationTime(now + 60 * 60)
+      .sign(signingKey);
+    appleSecret = { value, expiresAt: (now + 60 * 60) * 1000 };
+    return value;
+  }
+
   return {
     key,
     displayName,
     type: "oidc-redirect",
 
-    async beginRedirect() {
+    async beginRedirect(options = {}) {
       const doc = await discover();
 
       const state = generateOpaqueToken();
@@ -131,7 +173,7 @@ export function createOidcRedirectProvider(cfg: OidcRedirectProviderConfig): Red
       const codeChallenge = codeChallengeFromVerifier(codeVerifier);
 
       pruneExpired(Date.now());
-      pendingRequests.set(state, { nonce, codeVerifier, createdAt: Date.now() });
+      pendingRequests.set(state, { nonce, codeVerifier, returnTo: options.returnTo, handoffChallenge: options.handoffChallenge, createdAt: Date.now() });
 
       const url = new URL(doc.authorization_endpoint);
       url.searchParams.set("response_type", "code");
@@ -142,6 +184,7 @@ export function createOidcRedirectProvider(cfg: OidcRedirectProviderConfig): Red
       url.searchParams.set("nonce", nonce);
       url.searchParams.set("code_challenge", codeChallenge);
       url.searchParams.set("code_challenge_method", "S256");
+      if (cfg.responseMode === "form_post") url.searchParams.set("response_mode", "form_post");
 
       return { redirectUrl: url.toString() };
     },
@@ -180,8 +223,11 @@ export function createOidcRedirectProvider(cfg: OidcRedirectProviderConfig): Red
         "Content-Type": "application/x-www-form-urlencoded",
         Accept: "application/json",
       };
-      if (clientSecret) {
-        tokenHeaders["Authorization"] = `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`;
+      const resolvedClientSecret = await resolveClientSecret();
+      if (isApple && resolvedClientSecret) {
+        tokenBody.set("client_secret", resolvedClientSecret);
+      } else if (resolvedClientSecret) {
+        tokenHeaders["Authorization"] = `Basic ${Buffer.from(`${clientId}:${resolvedClientSecret}`).toString("base64")}`;
       }
 
       const tokenResp = await fetch(doc.token_endpoint, {
@@ -212,9 +258,32 @@ export function createOidcRedirectProvider(cfg: OidcRedirectProviderConfig): Red
         throw new Error("ID-Token enthaelt keinen sub-Claim.");
       }
 
-      const email = typeof payload["email"] === "string" ? payload["email"] : "";
-      const firstName = typeof payload["given_name"] === "string" ? payload["given_name"] : "";
-      const lastName = typeof payload["family_name"] === "string" ? payload["family_name"] : "";
+      const verifiedEmail = payload["email_verified"] === true;
+      const hostedDomain = typeof payload["hd"] === "string" ? payload["hd"].trim().toLowerCase() : "";
+      const allowedHostedDomains = (cfg.allowedHostedDomains ?? []).map((domain) => domain.trim().toLowerCase()).filter(Boolean);
+      if (isGoogle && allowedHostedDomains.length > 0 && !allowedHostedDomains.includes(hostedDomain)) {
+        throw new Error("Google-Konto gehoert nicht zu einer erlaubten Workspace-Domaene.");
+      }
+
+      let email = typeof payload["email"] === "string" && (!isGoogle || verifiedEmail) ? payload["email"] : "";
+      let firstName = typeof payload["given_name"] === "string" ? payload["given_name"] : "";
+      let lastName = typeof payload["family_name"] === "string" ? payload["family_name"] : "";
+
+      // Apple liefert den Namen nur beim ersten Login als JSON im Ruecksprung.
+      // Der ID-Token bleibt die autoritative Quelle fuer die Identitaet.
+      if (isApple && params["user"]) {
+        try {
+          const appleUser = JSON.parse(params["user"]) as {
+            email?: unknown;
+            name?: { firstName?: unknown; lastName?: unknown };
+          };
+          if (!email && typeof appleUser.email === "string") email = appleUser.email;
+          if (!firstName && typeof appleUser.name?.firstName === "string") firstName = appleUser.name.firstName;
+          if (!lastName && typeof appleUser.name?.lastName === "string") lastName = appleUser.name.lastName;
+        } catch {
+          // Ein unlesbarer Namensrumpf darf die bereits verifizierte Anmeldung nicht brechen.
+        }
+      }
 
       // Anbieter liefern den Anspruch entweder als Liste oder, seltener, als
       // einzelnen Wert. Alles andere zaehlt als keine Gruppe.
@@ -228,6 +297,8 @@ export function createOidcRedirectProvider(cfg: OidcRedirectProviderConfig): Red
       return {
         subject: sub,
         profile: { firstName, lastName, email, phone: "", groups },
+        returnTo: pending.returnTo,
+        handoffChallenge: pending.handoffChallenge,
       };
     },
   };

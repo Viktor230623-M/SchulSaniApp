@@ -100,6 +100,23 @@ const ApiService = {
     }
   },
 
+  async exchangeNativeSession(code: string, verifier: string): Promise<{ user: User; isTealUnlocked: boolean; token: string } | null> {
+    const resp = await fetch(`${API_BASE}/auth/native-session`, {
+      method: "POST",
+      headers: { ...headers(), "Content-Type": "application/json" },
+      body: JSON.stringify({ code, verifier }),
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    if (typeof data.token !== "string") return null;
+    setAuthToken(data.token);
+    return {
+      user: { ...data.user, permissions: data.permissions ?? [] },
+      isTealUnlocked: data.isTealUnlocked,
+      token: data.token,
+    };
+  },
+
   /**
    * Anmeldewege dieser Installation. Oeffentlicher Endpunkt, kein Cookie
    * noetig. Wirft bei Netzfehler oder Zeitlimit -- der Aufrufer entscheidet,
@@ -122,8 +139,12 @@ const ApiService = {
   },
 
   /** URL des Weiterleitungsstarts eines Anmeldewegs (GET /auth/:provider/start). */
-  getProviderStartUrl(providerKey: string): string {
-    return `${API_BASE}/auth/${encodeURIComponent(providerKey)}/start`;
+  getProviderStartUrl(providerKey: string, returnTo?: string, handoffChallenge?: string): string {
+    const url = `${API_BASE}/auth/${encodeURIComponent(providerKey)}/start`;
+    if (!returnTo) return url;
+    const params = new URLSearchParams({ returnTo });
+    if (handoffChallenge) params.set("handoffChallenge", handoffChallenge);
+    return `${url}?${params}`;
   },
 
   async registerLocalAccount(input: { email: string; password: string; firstName?: string; lastName?: string }): Promise<string> {

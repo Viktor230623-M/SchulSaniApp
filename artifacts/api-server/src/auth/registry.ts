@@ -26,6 +26,12 @@ interface RawOidcRedirectProviderConfig {
   scopes?: string[];
   /** Anspruch im ID-Token mit den Gruppen. Ohne Angabe: "groups". */
   groupsClaim?: string;
+  allowedHostedDomains?: string[];
+  clientSecretMode?: "static" | "apple-jwt";
+  appleTeamId?: string;
+  appleKeyId?: string;
+  applePrivateKeyPath?: string;
+  responseMode?: "query" | "form_post";
   /** Gruppe-zu-Rolle-Abbildung dieses Anbieters, siehe ../types.ts (AuthProviderBase). */
   groupToRoleMap?: Record<string, string>;
 }
@@ -70,6 +76,25 @@ function buildProvider(raw: RawProviderConfig): AuthProvider {
         `Anmeldeweg "${raw.key ?? "?"}" ist unvollstaendig konfiguriert (key, displayName, issuerUrl, clientId, redirectUri erforderlich).`,
       );
     }
+    const issuer = raw.issuerUrl.replace(/\/$/, "");
+    const isApple = issuer === "https://appleid.apple.com";
+    if (isApple && raw.clientSecretMode !== "apple-jwt") {
+      throw new Error(`Apple-Anmeldeweg "${raw.key}" braucht clientSecretMode "apple-jwt".`);
+    }
+    if (raw.clientSecretMode === "apple-jwt") {
+      if (!isApple || !raw.appleTeamId || !raw.appleKeyId || !raw.applePrivateKeyPath) {
+        throw new Error(`Apple-JWT-Konfiguration fuer "${raw.key}" ist unvollstaendig.`);
+      }
+      try {
+        fs.accessSync(raw.applePrivateKeyPath, fs.constants.R_OK);
+        const mode = fs.statSync(raw.applePrivateKeyPath).mode & 0o777;
+        if ((mode & 0o077) !== 0) {
+          throw new Error("Dateirechte sind fuer andere Benutzer freigegeben");
+        }
+      } catch {
+        throw new Error(`Apple-Schluesseldatei fuer "${raw.key}" ist nicht lesbar oder nicht privat.`);
+      }
+    }
     return {
       ...createOidcRedirectProvider({
         key: raw.key,
@@ -80,6 +105,12 @@ function buildProvider(raw: RawProviderConfig): AuthProvider {
         redirectUri: raw.redirectUri,
         scopes: raw.scopes,
         groupsClaim: raw.groupsClaim,
+        allowedHostedDomains: raw.allowedHostedDomains,
+        clientSecretMode: raw.clientSecretMode,
+        appleTeamId: raw.appleTeamId,
+        appleKeyId: raw.appleKeyId,
+        applePrivateKeyPath: raw.applePrivateKeyPath,
+        responseMode: raw.responseMode,
       }),
       groupToRoleMap,
     };
@@ -153,5 +184,11 @@ export function loadAuthProviders(): AuthProvider[] {
     );
   }
 
-  return active.map((entry) => buildProvider(entry as RawProviderConfig));
+  const providers = active.map((entry) => buildProvider(entry as RawProviderConfig));
+  const keys = new Set<string>();
+  for (const provider of providers) {
+    if (keys.has(provider.key)) throw new Error(`Anmeldeweg-Schluessel "${provider.key}" ist doppelt.`);
+    keys.add(provider.key);
+  }
+  return providers;
 }

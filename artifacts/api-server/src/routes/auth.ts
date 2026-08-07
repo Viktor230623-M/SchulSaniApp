@@ -1,3 +1,4 @@
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { Router } from "express";
 import jwt from "jsonwebtoken";
 import rateLimit from "express-rate-limit";
@@ -15,6 +16,7 @@ import {
 import { createSession, resolveSession, revokeSession } from "../lib/sessions";
 import { config } from "../config";
 import { loadAuthProviders } from "../auth/registry";
+import type { AuthResult } from "../auth/types";
 import { validateProfileName } from "../lib/profileName";
 import { hashPassword } from "../auth/providers/local";
 import { issueAuthToken, hashAuthToken } from "../lib/authTokens";
@@ -54,6 +56,22 @@ const passwordChangeLimiter = rateLimit({
 
 const SESSION_COOKIE = "sani-session";
 const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+const NATIVE_HANDOFF_TTL_MS = 2 * 60 * 1000;
+const nativeHandoffs = new Map<string, { sessionToken: string; verifierHash: string; expiresAt: number }>();
+
+function createNativeHandoff(sessionToken: string, challenge: string): string {
+  const now = Date.now();
+  for (const [code, handoff] of nativeHandoffs) {
+    if (handoff.expiresAt <= now) nativeHandoffs.delete(code);
+  }
+  const code = randomUUID();
+  nativeHandoffs.set(code, {
+    sessionToken,
+    verifierHash: challenge,
+    expiresAt: now + NATIVE_HANDOFF_TTL_MS,
+  });
+  return code;
+}
 
 function sessionCookieOptions() {
   return {
@@ -615,6 +633,67 @@ router.post("/password/change", passwordChangeLimiter, requireAuthForPasswordCha
   res.json({ ok: true, token });
 });
 
+router.post("/native-session", sessionLimiter, async (req, res) => {
+  const code = typeof req.body?.code === "string" ? req.body.code : "";
+  if (!code || code.length > 100) {
+    res.status(400).json({ error: "Uebergabecode ist ungueltig." });
+    return;
+  }
+
+  const verifier = typeof req.body?.verifier === "string" ? req.body.verifier : "";
+  const handoff = nativeHandoffs.get(code);
+  if (!handoff || !verifier) {
+    res.status(401).json({ error: "Uebergabecode ist abgelaufen." });
+    return;
+  }
+  if (handoff.expiresAt <= Date.now()) {
+    nativeHandoffs.delete(code);
+    res.status(401).json({ error: "Uebergabecode ist abgelaufen." });
+    return;
+  }
+
+  const sessionToken = handoff.sessionToken;
+  const actualVerifierHash = createHash("sha256").update(verifier).digest();
+  const expectedVerifierHash = Buffer.from(handoff.verifierHash, "hex");
+  if (
+    expectedVerifierHash.length !== actualVerifierHash.length ||
+    !timingSafeEqual(actualVerifierHash, expectedVerifierHash)
+  ) {
+    res.status(401).json({ error: "Uebergabecode ist ungueltig." });
+    return;
+  }
+  nativeHandoffs.delete(code);
+
+  const resolved = await resolveSession(sessionToken);
+  if (!resolved) {
+    res.status(401).json({ error: "Sitzung ist abgelaufen." });
+    return;
+  }
+
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, resolved.userId)).limit(1);
+  if (!user || !user.isApproved || (user.authProvider === localProvider?.key && !user.emailVerifiedAt)) {
+    await revokeSession(sessionToken);
+    res.status(401).json({ error: "Sitzung ist abgelaufen." });
+    return;
+  }
+
+  const role = user.role ?? "sanitaeter";
+  const token = jwt.sign({ userId: user.id, role, passwordVersion: user.passwordVersion }, JWT_SECRET, { expiresIn: "2h" });
+  res.json({
+    token,
+    ...(await buildUserResponse({
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      role,
+      schoolId: user.schoolId,
+      profileConfirmedAt: user.profileConfirmedAt,
+      mustChangePassword: user.mustChangePassword,
+    })),
+  });
+});
+
 router.post("/logout", requireAuthForLogout, async (req, res) => {
   const rawToken = req.cookies?.[SESSION_COOKIE];
   if (rawToken) await revokeSession(rawToken);
@@ -758,7 +837,13 @@ router.get("/:provider/start", authLimiter, async (req, res) => {
   }
 
   try {
-    const { redirectUrl } = await provider.beginRedirect();
+    const returnTo = typeof req.query["returnTo"] === "string" ? req.query["returnTo"] : undefined;
+    const handoffChallenge = typeof req.query["handoffChallenge"] === "string" ? req.query["handoffChallenge"] : undefined;
+    if (returnTo && (!isAllowedNativeReturnUrl(returnTo) || !handoffChallenge || !/^[a-f0-9]{64}$/i.test(handoffChallenge))) {
+      res.status(400).json({ error: "Ruecksprungziel ist nicht zulaessig." });
+      return;
+    }
+    const { redirectUrl } = await provider.beginRedirect({ returnTo, handoffChallenge });
     res.redirect(redirectUrl);
   } catch (err) {
     console.error("OIDC-Weiterleitung konnte nicht gestartet werden:", err);
@@ -779,7 +864,24 @@ router.get("/:provider/start", authLimiter, async (req, res) => {
  * Sitzungscookie (`createSession`, unveraendert), das der Client anschliessend
  * ueber GET /auth/session gegen Token und Nutzerprojektion eintauscht.
  */
-router.get("/:provider/callback", authLimiter, async (req, res) => {
+function isAllowedNativeReturnUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    if (url.protocol === "paramedic-app:" && url.hostname === "login" && ["", "/"].includes(url.pathname) && !url.username && !url.password && !url.search && !url.hash) {
+      return true;
+    }
+    if (url.protocol !== "exp:" || !/^\/(--\/)?login\/?$/.test(url.pathname) || url.username || url.password || url.search || url.hash) {
+      return false;
+    }
+    const host = url.hostname.toLowerCase();
+    const privateHost = host === "localhost" || host === "127.0.0.1" || host.startsWith("10.") || host.startsWith("192.168.") || /^172\.(1[6-9]|2\d|3[01])\./.test(host);
+    return privateHost || host.endsWith(".exp.direct") || host.endsWith(".exp.host");
+  } catch {
+    return false;
+  }
+}
+
+async function completeOidcCallback(req: import("express").Request, res: import("express").Response): Promise<void> {
   const provider = authProviders.find((p) => p.key === req.params["provider"]);
   if (!provider || provider.type !== "oidc-redirect") {
     res.status(404).json({ error: "Anmeldeweg nicht gefunden." });
@@ -787,11 +889,12 @@ router.get("/:provider/callback", authLimiter, async (req, res) => {
   }
 
   const query: Record<string, string> = {};
-  for (const [k, v] of Object.entries(req.query)) {
-    if (typeof v === "string") query[k] = v;
+  const callbackValues = req.method === "POST" ? req.body : req.query;
+  for (const [key, value] of Object.entries(callbackValues ?? {})) {
+    if (typeof value === "string") query[key] = value;
   }
 
-  let authResult: { subject: string; profile: { firstName: string; lastName: string; email: string; phone: string; groups?: string[] } };
+  let authResult: AuthResult;
   try {
     authResult = await provider.completeRedirect(query);
   } catch (err) {
@@ -805,7 +908,14 @@ router.get("/:provider/callback", authLimiter, async (req, res) => {
 
   try {
     const existing = await db
-      .select({ id: usersTable.id, role: usersTable.role, isApproved: usersTable.isApproved })
+      .select({
+        id: usersTable.id,
+        role: usersTable.role,
+        isApproved: usersTable.isApproved,
+        firstName: usersTable.firstName,
+        lastName: usersTable.lastName,
+        email: usersTable.email,
+      })
       .from(usersTable)
       .where(
         and(
@@ -817,15 +927,17 @@ router.get("/:provider/callback", authLimiter, async (req, res) => {
       .limit(1);
 
     const userId: string = existing[0]?.id ?? crypto.randomUUID();
-    // Siehe Kommentar im Formular-Login: "sanitaeter" ist hier nur ein
-    // Platzhalter fuer die Spalte, wirkungslos solange isApproved false bleibt.
     const resolvedRole = existing[0]?.role ?? (await getRoleForUser(profile.groups ?? [], provider.key, schoolId));
     const role: UserRole = resolvedRole ?? "sanitaeter";
     const isApproved: boolean = existing[0]?.isApproved ?? false;
 
-    const firstName = profile.firstName || subject;
-    const lastName = profile.lastName || "";
-    const email = profile.email;
+    // Apple liefert den Namen nur beim ersten Login. Vorhandene Profildaten
+    // duerfen bei einem spaeteren Ruecksprung nicht durch leere Claims ersetzt werden.
+    const firstName = profile.firstName || existing[0]?.firstName || subject;
+    const lastName = profile.lastName || existing[0]?.lastName || "";
+    // Unbestaetigte Google-Adressen bleiben leer. Eine bestehende Adresse bleibt
+    // erhalten, wenn ein spaeterer Ruecksprung keinen verifizierten Claim liefert.
+    const email = profile.email || existing[0]?.email || null;
     const phone = profile.phone;
 
     await db
@@ -855,17 +967,28 @@ router.get("/:provider/callback", authLimiter, async (req, res) => {
     }
 
     const sessionToken = await createSession(userId);
-    res.cookie(SESSION_COOKIE, sessionToken, sessionCookieOptions());
+    if (authResult.returnTo) {
+      if (!authResult.handoffChallenge) {
+        res.status(400).json({ error: "Native Weiterleitung ist unvollstaendig." });
+        return;
+      }
+      const handoffCode = createNativeHandoff(sessionToken, authResult.handoffChallenge);
+      const landingUrl = new URL(authResult.returnTo);
+      landingUrl.searchParams.set("code", handoffCode);
+      res.redirect(landingUrl.toString());
+      return;
+    }
 
-    // Kein eigener Anmeldebildschirm fuer OIDC in dieser Version (Schritt 7).
-    // Der Client liest die Sitzung nach der Weiterleitung ueber GET /auth/session
-    // aus dem gerade gesetzten Cookie -- derselbe Mechanismus wie beim Reload.
-    const landingUrl = config.allowedOrigins[0] ?? "/";
-    res.redirect(landingUrl);
+    res.cookie(SESSION_COOKIE, sessionToken, sessionCookieOptions());
+    res.redirect(config.allowedOrigins[0] ?? "/");
   } catch (err) {
     console.error("OIDC-Anmeldung: Kontoabgleich fehlgeschlagen:", err);
     res.status(500).json({ error: "Anmeldung fehlgeschlagen." });
   }
-});
+}
+
+router.get("/:provider/callback", authLimiter, completeOidcCallback);
+router.post("/:provider/callback", authLimiter, completeOidcCallback);
+
 
 export default router;
