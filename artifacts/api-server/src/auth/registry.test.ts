@@ -42,6 +42,15 @@ describe("Auth-Provider-Registry", () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
+  it("ignoriert alte Formular- und deaktivierte Eintraege", async () => {
+    process.env["AUTH_PROVIDERS_PATH"] = await configFile([
+      { key: "iserv-form", displayName: "IServ", type: "iserv-form" },
+      { ...appleConfig(), enabled: false },
+    ]);
+
+    expect(loadAuthProviders()).toEqual([]);
+  });
+
   it("verlangt fuer Apple das dynamische JWT-Secret", async () => {
     process.env["AUTH_PROVIDERS_PATH"] = await configFile([appleConfig({ clientSecret: "statischer-wert" })]);
 

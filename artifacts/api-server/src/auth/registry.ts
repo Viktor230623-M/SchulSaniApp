@@ -99,20 +99,12 @@ export function loadAuthProviders(): AuthProvider[] {
     );
   }
 
-  const active = raw.filter((entry) => (entry as { enabled?: boolean }).enabled !== false);
-  if (active.length === 0) {
-    throw new Error(
-      `Alle Anmeldewege in "${providersPath}" sind auf "enabled": false gesetzt. Mindestens einer muss aktiv sein.`,
-    );
-  }
-
-  const providers = active.map((entry) => {
-    const typed = entry as Partial<RawOidcRedirectProviderConfig>;
-    if (typed.type !== "oidc-redirect") {
-      throw new Error(`Anmeldeweg "${typed.key ?? "?"}" muss den Typ "oidc-redirect" haben.`);
-    }
-    return buildProvider(typed as RawOidcRedirectProviderConfig);
+  const active = raw.filter((entry) => {
+    const typed = entry as { enabled?: boolean; type?: string };
+    return typed.enabled !== false && typed.type === "oidc-redirect";
   });
+
+  const providers = active.map((entry) => buildProvider(entry as RawOidcRedirectProviderConfig));
   const keys = new Set<string>();
   for (const provider of providers) {
     if (keys.has(provider.key)) throw new Error(`Anmeldeweg-Schluessel "${provider.key}" ist doppelt.`);
