@@ -108,17 +108,6 @@ port_valid() {
   [[ "$1" =~ ^[0-9]+$ ]] && (( $1 >= 1 && $1 <= 65535 ))
 }
 
-for p in "$HTTP_PORT" "$HTTPS_PORT" "$BACKEND_PORT"; do
-  if ! port_valid "$p"; then
-    echo "Ungueltiger Port: $p (1-65535)." >&2
-    exit 1
-  fi
-done
-if [[ "$HTTP_PORT" == "$HTTPS_PORT" ]]; then
-  echo "HTTP- und HTTPS-Port duerfen nicht gleich sein." >&2
-  exit 1
-fi
-
 usage() {
   cat <<'EOF'
 Verwendung: install.sh [--dry-run] [--update] [--http-port N] [--https-port N] [--backend-port N]
@@ -178,6 +167,19 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+# Ports erst nach der Argument-Auswertung pruefen — --http-port und Co.
+# koennen die Werte aus der Umgebung ueberschrieben haben.
+for p in "$HTTP_PORT" "$HTTPS_PORT" "$BACKEND_PORT"; do
+  if ! port_valid "$p"; then
+    echo "Ungueltiger Port: $p (1-65535)." >&2
+    exit 1
+  fi
+done
+if [[ "$HTTP_PORT" == "$HTTPS_PORT" ]]; then
+  echo "HTTP- und HTTPS-Port duerfen nicht gleich sein." >&2
+  exit 1
+fi
 
 # --- Rechte, Protokoll, Betriebssystemerkennung --------------------------
 
@@ -736,34 +738,16 @@ step_setup_tls() {
   if [[ "$domain" == *:* ]]; then
     https_port="${domain##*:}"
   fi
-
-  site_file="/etc/nginx/sites-available/schulsani"
-  if [[ "$https_port" == "443" ]]; then
-    # Standardpfad: ein Block auf dem HTTP-Port, certbot --nginx ergaenzt TLS.
-    sed -e "s#<DOMAIN>#${host}#g" -e "s#<HTTP_PORT>#${HTTP_PORT}#g" \
-      "${script_dir}/nginx.conf.template" >"$site_file"
-  else
-    # Benutzerdefinierter HTTPS-Port: der HTTP-Block leitet nur um, der
-    # TLS-Block wird nach dem Zertifikat angehaengt (gleiche Locations-Datei).
-    cat >"$site_file" <<EOF
-server {
-    listen ${HTTP_PORT};
-    listen [::]:${HTTP_PORT};
-    server_name ${host};
-    return 301 https://\$host:${https_port}\$request_uri;
-}
-EOF
+  if [[ "$https_port" == "$HTTP_PORT" ]]; then
+    fail_with "HTTPS-Port ${https_port} entspricht dem HTTP-Port ${HTTP_PORT}." \
+      "Domain-Port und --http-port muessen verschieden sein."
+  fi
+  if [[ "$domain" != *:* ]] && [[ "$HTTPS_PORT" != "443" ]]; then
+    printf '  %sHinweis:%s Domain ohne Port, aber HTTPS-Port %s konfiguriert: die App ruft https://%s (443) auf.\n  Im Assistenten die Domain mit :%s eintragen.\n' \
+      "$COLOR_YELLOW" "$COLOR_RESET" "$HTTPS_PORT" "$host" "$HTTPS_PORT"
   fi
 
-  # Gemeinsame Locations fuer HTTP- und TLS-Block rendern und ablegen.
-  sed -e "s#<DIST_PATH>#${dist_path}#g" -e "s#<BACKEND_PORT>#${BACKEND_PORT}#g" \
-    "${script_dir}/nginx-locations.conf" >"/etc/nginx/schulsani/locations.conf"
-  log_line "BEFEHL: nginx-Site fuer ${host} nach ${site_file} gerendert (http ${HTTP_PORT}, https ${https_port})."
-  run ln -sf "$site_file" "/etc/nginx/sites-enabled/schulsani"
-  run nginx -t
-  run systemctl reload nginx
-  step_ok "nginx-Site fuer ${host} aktiviert."
-
+  # DNS frueh pruefen, bevor irgendetwas aktiviert wird.
   resolved_ip="$(getent hosts "$host" 2>/dev/null | awk '{print $1}' | head -1)"
   server_ip="$(server_ip_hint)"
   if [[ -z "$resolved_ip" ]]; then
@@ -775,7 +759,21 @@ EOF
       "$COLOR_YELLOW" "$COLOR_RESET" "$host" "$resolved_ip" "$server_ip"
   fi
 
+  # Gemeinsame Locations fuer HTTP- und TLS-Block rendern und ablegen.
+  sed -e "s#<DIST_PATH>#${dist_path}#g" -e "s#<BACKEND_PORT>#${BACKEND_PORT}#g" \
+    "${script_dir}/nginx-locations.conf" >"/etc/nginx/schulsani/locations.conf"
+
+  site_file="/etc/nginx/sites-available/schulsani"
   if [[ "$https_port" == "443" ]]; then
+    # Standardpfad: ein Block auf dem HTTP-Port, certbot --nginx ergaenzt TLS.
+    sed -e "s#<DOMAIN>#${host}#g" -e "s#<HTTP_PORT>#${HTTP_PORT}#g" \
+      "${script_dir}/nginx.conf.template" >"$site_file"
+    log_line "BEFEHL: nginx-Site fuer ${host} nach ${site_file} gerendert (http ${HTTP_PORT})."
+    run ln -sf "$site_file" "/etc/nginx/sites-enabled/schulsani"
+    run nginx -t
+    run systemctl reload nginx
+    step_ok "nginx-Site fuer ${host} aktiviert."
+
     set +e
     certbot --nginx -d "$host" --non-interactive --agree-tos -m "admin@${host#*.}" --redirect
     local rc=$?
@@ -786,18 +784,35 @@ EOF
     fi
     step_ok "TLS-Zertifikat fuer ${host} bezogen."
   else
-    # eigener HTTPS-Port: Zertifikat zuerst holen. certbot --standalone nutzt
-    # dafuer kurz den (freien) HTTP-Port; nginx muss ihn nicht freigeben.
+    # eigener HTTPS-Port: Zertifikat zuerst holen, solange nginx den HTTP-Port
+    # noch nicht haelt (certbot --standalone bindet ihn selbst kurz).
     set +e
     certbot certonly --standalone --http-01-port "$HTTP_PORT" --non-interactive --agree-tos -m "admin@${host#*.}" -d "$host"
     local rc=$?
     set -e
     if [[ "$rc" -ne 0 ]]; then
-      step_fail "certbot --standalone fehlgeschlagen (Code ${rc}). Die Seite bleibt vorerst ueber http://${host}:${HTTP_PORT} erreichbar."
+      # Fallback ohne TLS, damit die Instanz trotzdem nutzbar ist.
+      sed -e "s#<DOMAIN>#${host}#g" -e "s#<HTTP_PORT>#${HTTP_PORT}#g" \
+        "${script_dir}/nginx.conf.template" >"$site_file"
+      log_line "BEFEHL: nginx-Site fuer ${host} ohne TLS gerendert (http ${HTTP_PORT})."
+      run ln -sf "$site_file" "/etc/nginx/sites-enabled/schulsani"
+      run nginx -t
+      run systemctl reload nginx
+      step_fail "certbot --standalone fehlgeschlagen (Code ${rc}). Die Seite laeuft vorerst ohne TLS ueber http://${host}:${HTTP_PORT}."
       printf '  Von Hand nachholen: certbot certonly --standalone --http-01-port %s -d %s,\n  dann den TLS-Block an %s anhaengen (Vorlage: ops/install/nginx.conf.template).\n' \
         "$HTTP_PORT" "$host" "$site_file"
       return 0
     fi
+
+    # HTTP-Block leitet auf den HTTPS-Port um, TLS-Block bedient die Seite.
+    cat >"$site_file" <<EOF
+server {
+    listen ${HTTP_PORT};
+    listen [::]:${HTTP_PORT};
+    server_name ${host};
+    return 301 https://\$host:${https_port}\$request_uri;
+}
+EOF
     cat >>"$site_file" <<EOF
 
 server {
@@ -810,6 +825,8 @@ server {
     include /etc/nginx/schulsani/locations.conf;
 }
 EOF
+    log_line "BEFEHL: nginx-Site fuer ${host} gerendert (http ${HTTP_PORT} -> https ${https_port})."
+    run ln -sf "$site_file" "/etc/nginx/sites-enabled/schulsani"
     run nginx -t
     run systemctl reload nginx
     step_ok "TLS-Block fuer ${host}:${https_port} aktiviert."
