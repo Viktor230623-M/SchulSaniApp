@@ -470,7 +470,6 @@ step_install_nginx_template() {
 
 STATE_DIR="/var/lib/schulsani-install"
 STATE_FILE="${STATE_DIR}/state.json"
-ROLE_MAP_PATH="/etc/schulsani/role-map.json"
 
 server_ip_hint() {
   local ip
@@ -525,7 +524,6 @@ step_start_assistant() {
   SCHULSANI_LOG_FILE="$LOG_FILE" \
   SCHULSANI_APP_ROOT="$app_root" \
   SCHULSANI_DATABASE_URL="postgres://${DB_ROLE}:${DB_PASSWORD}@localhost:5432/${DB_NAME}" \
-  SCHULSANI_ROLE_MAP_PATH="$ROLE_MAP_PATH" \
   "$node_bin" "$assistant_script"
   rc=$?
   set -e

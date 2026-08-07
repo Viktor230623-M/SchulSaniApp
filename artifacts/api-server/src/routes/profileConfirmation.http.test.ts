@@ -1,7 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import request from "supertest";
 import { randomUUID } from "node:crypto";
-import bcrypt from "bcryptjs";
 
 interface FakeUserRow {
   id: string;
@@ -9,10 +8,6 @@ interface FakeUserRow {
   isApproved: boolean;
   schoolId: string | null;
   profileConfirmedAt: Date | null;
-  mustChangePassword: boolean;
-  passwordHash: string;
-  oneTimePasswordExpiresAt: Date | null;
-  passwordVersion: number;
   authProvider: string;
   emailVerifiedAt: Date | null;
   firstName: string | null;
@@ -43,22 +38,17 @@ vi.mock("@workspace/db", async () => {
     isApproved: text("is_approved"),
     schoolId: text("school_id"),
     profileConfirmedAt: text("profile_confirmed_at"),
-    mustChangePassword: text("must_change_password"),
-    oneTimePasswordExpiresAt: text("one_time_password_expires_at"),
     firstName: text("first_name"),
     lastName: text("last_name"),
     email: text("email"),
     emailVerifiedAt: text("email_verified_at"),
     username: text("username"),
-    passwordVersion: text("password_version"),
-    passwordHash: text("password_hash"),
   });
 
   function createMockTable(name: string) {
     return { [Symbol.toStringTag]: name } as any;
   }
   const profileChangeLogTableMock = createMockTable("profile_change_log");
-  const authTokensTableMock = createMockTable("auth_tokens");
 
   function makeSelectChain(): any {
     let isUsers = false;
@@ -82,25 +72,10 @@ vi.mock("@workspace/db", async () => {
 
   function makeUpdateChain(isUsers: boolean): any {
     let whereId: string | undefined;
-    let patch: Record<string, unknown> = {};
     const chain: any = {
-      set: (p: Record<string, unknown>) => { patch = p; return chain; },
+      set: () => chain,
       where: (cond: any) => { whereId = extractEqId(cond); return chain; },
-      returning: () => {
-        if (isUsers && whereId && fakeUsers[whereId]) {
-          let updated = { ...fakeUsers[whereId], ...patch } as FakeUserRow;
-          if ("passwordVersion" in patch) {
-            const versionPatch = patch.passwordVersion as { queryChunks?: unknown[] } | undefined;
-            if (!versionPatch || !Array.isArray(versionPatch.queryChunks)) {
-              throw new Error("Test-Mock erwartet passwordVersion als Drizzle-Ausdruck");
-            }
-            updated = { ...updated, passwordVersion: fakeUsers[whereId].passwordVersion + 1 };
-          }
-          fakeUsers[whereId] = updated;
-          return Promise.resolve([updated]);
-        }
-        return Promise.resolve([]);
-      },
+      returning: () => isUsers && whereId && fakeUsers[whereId] ? Promise.resolve([fakeUsers[whereId]]) : Promise.resolve([]),
     };
     return chain;
   }
@@ -125,7 +100,6 @@ vi.mock("@workspace/db", async () => {
     pool: { query: () => Promise.resolve({ rows: [] }) },
     usersTable: usersTableMock,
     userIdentitiesTable: createMockTable("user_identities"),
-    authTokensTable: authTokensTableMock,
     newsTable: createMockTable("news"),
     loaTable: createMockTable("loa"),
     missionsTable: createMockTable("missions"),
@@ -169,12 +143,8 @@ function makeUser(overrides: Partial<FakeUserRow> = {}): FakeUserRow {
     isApproved: true,
     schoolId: null,
     profileConfirmedAt: null,
-    mustChangePassword: false,
-    oneTimePasswordExpiresAt: null,
-    passwordVersion: 0,
-    authProvider: "local",
+    authProvider: "oidc-beispiel",
     emailVerifiedAt: new Date(),
-    passwordHash: bcrypt.hashSync("Einmalpasswort", 4),
     firstName: "Vorschlag",
     lastName: "Nachname",
     email: `${id}@vitest.beispiel.invalid`,
@@ -202,13 +172,6 @@ describe("Namensbestaetigung -- Sperre, Endpunkt, Verwalter-Korrektur", () => {
     return { status: res.status, body: res.body };
   }
 
-  async function changePassword(user: FakeUserRow, body: Record<string, unknown>) {
-    return request(app)
-      .post("/api/auth/password/change")
-      .set("authorization", `Bearer ${tokenFor(user)}`)
-      .send(body);
-  }
-
   async function callWithSessionCookie(userId: string) {
     const res = await request(app).get("/api/auth/session").set("Cookie", `sani-session=gueltig:${userId}`);
     return { status: res.status, body: res.body };
@@ -224,14 +187,13 @@ describe("Namensbestaetigung -- Sperre, Endpunkt, Verwalter-Korrektur", () => {
     expect(result.body.code).toBe("PROFILE_NOT_CONFIRMED");
   });
 
-  it("sperrt erzwungene Passwortwechsel vor jeder anderen geschuetzten Route", async () => {
-    const user = makeUser({ mustChangePassword: true });
+  it("laesst ein bestaetigtes OIDC-Konto geschuetzte Routen zu", async () => {
+    const user = makeUser({ profileConfirmedAt: new Date() });
     fakeUsers[user.id] = user;
 
     const result = await call("GET", `/api/users/${user.id}`, tokenFor(user));
 
-    expect(result.status).toBe(403);
-    expect(result.body.code).toBe("PASSWORD_CHANGE_REQUIRED");
+    expect(result.status).toBe(200);
   });
 
   it("laesst PATCH /auth/profile trotz Sperre zu", async () => {
@@ -285,38 +247,22 @@ describe("Namensbestaetigung -- Sperre, Endpunkt, Verwalter-Korrektur", () => {
     expect(result.status).toBe(400);
   });
 
-  it("laesst nur erzwungenen Konten den Passwortwechsel zu", async () => {
-    const user = makeUser({ mustChangePassword: true });
-    fakeUsers[user.id] = user;
+  it("bietet keinen Passwortwechsel-Endpunkt mehr an", async () => {
+    const result = await request(app).post("/api/auth/password/change").send({ currentPassword: "alt", newPassword: "neu" });
 
-    const result = await changePassword(user, { currentPassword: "Einmalpasswort", newPassword: "Ein-neues-sicheres-Passwort" });
-
-    expect(result.status).toBe(200);
-    expect(result.body.token).toBeTruthy();
-    expect(fakeUsers[user.id]!.mustChangePassword).toBe(false);
-    expect(fakeUsers[user.id]!.passwordVersion).toBe(1);
-    expect(fakeUsers[user.id]!.oneTimePasswordExpiresAt).toBeNull();
+    expect(result.status).toBe(404);
   });
 
-  it("weist ein falsches aktuelles Passwort ab", async () => {
-    const user = makeUser({ mustChangePassword: true });
-    fakeUsers[user.id] = user;
+  it("weist einen Passwortwechsel ohne Authentifizierung ab", async () => {
+    const result = await request(app).post("/api/auth/password/change").send({ currentPassword: "alt", newPassword: "neu" });
 
-    const result = await changePassword(user, { currentPassword: "falsch", newPassword: "Ein-neues-sicheres-Passwort" });
-
-    expect(result.status).toBe(401);
-    expect(fakeUsers[user.id]!.mustChangePassword).toBe(true);
+    expect(result.status).toBe(404);
   });
 
-  it("laesst normale Konten das Passwort ebenfalls wechseln", async () => {
-    const user = makeUser();
-    fakeUsers[user.id] = user;
+  it("bietet keine zweite Passwortaenderung an", async () => {
+    const result = await request(app).post("/api/auth/password/change").send({ currentPassword: "alt", newPassword: "neu" });
 
-    const result = await changePassword(user, { currentPassword: "Einmalpasswort", newPassword: "Ein-neues-sicheres-Passwort" });
-
-    expect(result.status).toBe(200);
-    expect(result.body.token).toBeTruthy();
-    expect(fakeUsers[user.id]!.passwordVersion).toBe(1);
+    expect(result.status).toBe(404);
   });
 
   it("weist einen zweiten Aufruf bei bereits bestaetigtem Konto mit 409 ab", async () => {

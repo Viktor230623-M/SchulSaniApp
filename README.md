@@ -13,8 +13,8 @@ Nutzerverwaltung mit rollenbasierten Zugriffsrechten.
 - **Backend**: Express 5 (TypeScript), REST-API unter `/api`.
 - **Datenbank**: PostgreSQL, Zugriff über Drizzle ORM, Migrationen über
   Drizzle Kit.
-- **Anmeldung**: Konfigurierbare IServ-, OIDC- und lokale Anmeldewege,
-  serverseitige Sitzungen per httpOnly-Cookie.
+- **Anmeldung**: OIDC-Anmeldewege mit serverseitigen Sitzungen per
+  httpOnly-Cookie.
 - **Benachrichtigungen**: Web-Push über VAPID sowie Expo-Push für native Apps.
 - **API-Vertrag**: OpenAPI-Spezifikation (`lib/api-spec`), daraus generiert:
   Zod-Schemas (`lib/api-zod`) und ein typisierter React-Client
@@ -54,16 +54,7 @@ Backend (`artifacts/api-server/.env`):
 | `PORT`               | Port, auf dem der Server lauscht                                     |
 | `ALLOWED_ORIGINS`    | Kommagetrennte Liste erlaubter CORS-Origins                            |
 | `AUTH_PROVIDERS_PATH` | Pfad zur Konfigurationsdatei der aktiven Anmeldewege                   |
-| `ISERV_BASE_URL`     | veralteter Einzelwert; neue Installationen konfigurieren `iserv-form` in `AUTH_PROVIDERS_PATH` |
-| `EMAIL_DOMAIN`       | Fallback-Domain für den IServ-Formularweg                              |
 | `SCHOOL_ID`          | Kennung der Schule, wird neu angelegten Nutzern zugewiesen             |
-| `SMTP_HOST`          | SMTP-Server; bei aktivem lokalem Anmeldeweg erforderlich                |
-| `SMTP_PORT`          | SMTP-Port, standardmäßig 587                                            |
-| `SMTP_USER` / `SMTP_PASSWORD` | Optionaler SMTP-Zugang                                                  |
-| `SMTP_SECURE`        | `true` für SMTPS auf Port 465, sonst STARTTLS                           |
-| `MAIL_FROM`          | Absenderadresse für Bestätigungs- und Passwortmails                   |
-| `MAIL_FROM_NAME`     | Optionaler Anzeigename des Absenders                                   |
-| `APP_BASE_URL`       | Öffentliche Basis-URL für Links in Auth-Mails                          |
 | `ROLE_MAP_PATH`      | Optional: Pfad zu einer Bootstrap-Rollenzuordnung für die Ersteinrichtung |
 | `OWNER_USER_ID`      | Nutzer-ID mit Zugriff auf die administrative SQL-Konsole               |
 | `VAPID_PUBLIC_KEY`   | Öffentlicher VAPID-Schlüssel für Web-Push                              |
@@ -122,17 +113,12 @@ nach 12 Monaten.
 
 ## Anmeldewege
 
-Eine Installation kann mehrere Anmeldewege gleichzeitig anbieten:
-`iserv-form` (Formularanmeldung gegen eine bestehende IServ-Instanz),
-`oidc-redirect` (Authorization Code mit PKCE gegen einen beliebigen
-OIDC-Anbieter) und `local` (Passwort-Hash in der eigenen Datenbank, als
-Rückfallebene für Schulen ohne nutzbaren Identitätsdienst). Welche Wege
-aktiv sind, legt `AUTH_PROVIDERS_PATH` fest. Ein Beispiel mit lokalen,
-Google-, Microsoft- und Apple-Einträgen liegt unter
+Eine Installation kann mehrere OIDC-Anmeldewege gleichzeitig anbieten.
+`AUTH_PROVIDERS_PATH` legt fest, welche Einträge aktiv sind. Ein Beispiel mit
+Google-, Microsoft-, Apple- und IServ-OIDC-Einträgen liegt unter
 `ops/install/auth-providers.example.json`; die Vorlage enthält keine
 Zugangsdaten und die Beispiele sind deaktiviert. Ohne Konfigurationsdatei
-ist kein Anmeldeweg aktiv. Ein lokaler Weg benötigt zusätzlich SMTP und
-`APP_BASE_URL` für Bestätigungs- und Passwort-Links. Native OIDC-Anmeldung
+startet kein Anmeldeweg. Native OIDC-Anmeldung
 übergibt die Sitzung über einen einmaligen Code; dafür nutzt die App die
 Web-Crypto-Implementierung der unterstützten Expo-Laufzeit. Fehlt sie, wird die
 Weiterleitung abgebrochen statt eine Sitzung ohne Nachweis auszustellen. Der

@@ -33,8 +33,7 @@ function RootLayoutNav() {
   const setToken = useAppStore((s) => s.setToken);
   const theme = getTheme(useAppStore((s) => s.theme));
   const profileConfirmedAt = useAppStore((s) => s.user?.profileConfirmedAt);
-  const mustChangePassword = useAppStore((s) => s.user?.mustChangePassword === true);
-  const needsProfileConfirmation = authStatus === "authed" && profileConfirmedAt === null && !mustChangePassword;
+  const needsProfileConfirmation = authStatus === "authed" && profileConfirmedAt === null;
 
   useEffect(() => {
     if (token) setAuthToken(token);
@@ -90,12 +89,7 @@ function RootLayoutNav() {
         contentStyle: { backgroundColor: theme.background },
       }}
     >
-      <Stack.Screen name="email-bestaetigen" options={{ headerShown: false }} />
-      <Stack.Screen name="passwort-zuruecksetzen" options={{ headerShown: false }} />
-      <Stack.Screen name="passwort-vergessen" options={{ headerShown: false }} />
-      <Stack.Screen name="registrieren" options={{ headerShown: false }} />
-      <Stack.Screen name="freischaltung-warten" options={{ headerShown: false }} />
-      <Stack.Protected guard={authStatus === "authed" && !needsProfileConfirmation && !mustChangePassword}>
+      <Stack.Protected guard={authStatus === "authed" && !needsProfileConfirmation}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="report/index" options={{ headerShown: false }} />
         <Stack.Screen name="report/[id]" options={{ headerShown: false }} />
@@ -103,9 +97,6 @@ function RootLayoutNav() {
         <Stack.Screen name="admin/sani-activity" options={{ headerShown: false }} />
         <Stack.Screen name="admin/roles" options={{ headerShown: false }} />
         <Stack.Screen name="activity-log" />
-      </Stack.Protected>
-      <Stack.Protected guard={authStatus === "authed" && mustChangePassword}>
-        <Stack.Screen name="passwort-wechseln" options={{ headerShown: false }} />
       </Stack.Protected>
       <Stack.Protected guard={needsProfileConfirmation}>
         <Stack.Screen name="name-bestaetigen" options={{ headerShown: false }} />

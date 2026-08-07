@@ -8,12 +8,9 @@ export type UserRole =
 
 export interface User {
   id: string;
-  iservUsername?: string;
   firstName: string;
   lastName: string;
   email: string;
-  /** Optionale lokale Anmeldekennung; IServ/OIDC-Konten lassen sie leer. */
-  username?: string | null;
   phone: string;
   role: UserRole;
   schoolId: string;
@@ -24,8 +21,6 @@ export interface User {
   permissions?: string[];
   /** `null`: Name noch nicht bestaetigt, Sperre aktiv. Zeitstempel: bestaetigt. */
   profileConfirmedAt: string | null;
-  /** Ein lokales Einmal-Passwort muss vor der ersten Nutzung ersetzt werden. */
-  mustChangePassword?: boolean;
   avatarUri?: string;
   createdAt: string;
   updatedAt: string;

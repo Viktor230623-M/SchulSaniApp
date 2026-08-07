@@ -8,16 +8,10 @@ const hier = dirname(fileURLToPath(import.meta.url));
 // gesetzte Werte bleiben unangetastet.
 const testUmgebung: Record<string, string> = {
   ALLOWED_ORIGINS: "https://vitest.beispiel.invalid",
-  ISERV_BASE_URL: "https://iserv.vitest.beispiel.invalid",
-  EMAIL_DOMAIN: "vitest.beispiel.invalid",
   APP_NAME: "SchulSaniApp (Testlauf)",
   JWT_SECRET: "vitest-testschluessel-nicht-fuer-den-echten-betrieb-geeignet",
   DATABASE_URL: "postgres://vitest:vitest@127.0.0.1:1/vitest_nicht_erreichbar",
-  AUTH_PROVIDERS_PATH: resolve(hier, "../../ops/install/auth-providers.example.json"),
-  SMTP_HOST: "smtp.vitest.beispiel.invalid",
-  SMTP_PORT: "2525",
-  MAIL_FROM: "noreply@vitest.beispiel.invalid",
-  APP_BASE_URL: "https://vitest.beispiel.invalid",
+  AUTH_PROVIDERS_PATH: resolve(hier, "src/routes/fixtures/auth-providers.oidc-only.json"),
 };
 
 for (const [name, wert] of Object.entries(testUmgebung)) {

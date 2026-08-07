@@ -23,7 +23,6 @@ const STATE_FILE = process.env.SCHULSANI_STATE_FILE || "";
 const LOG_FILE = process.env.SCHULSANI_LOG_FILE || "";
 const APP_ROOT = process.env.SCHULSANI_APP_ROOT || "";
 const DATABASE_URL = process.env.SCHULSANI_DATABASE_URL || "";
-const ROLE_MAP_PATH = process.env.SCHULSANI_ROLE_MAP_PATH || "/etc/schulsani/role-map.json";
 
 const IDLE_TIMEOUT_MS = 60 * 60 * 1000; // 60 Minuten
 const SESSION_TTL_MS = 60 * 60 * 1000;
@@ -80,6 +79,15 @@ function saveState(state) {
 }
 
 let state = loadState();
+let pendingProviderClientSecret = "";
+if (state.config && !state.config.ownerAccountId) {
+  state.config.ownerAccountId = crypto.randomUUID();
+}
+if (typeof state.config?.providerClientSecret === "string") {
+  pendingProviderClientSecret = state.config.providerClientSecret;
+  delete state.config.providerClientSecret;
+  saveState(state);
+}
 
 // --- Hilfsfunktionen: Validierung (spiegelt config.ts / app.config.ts) --
 
@@ -93,13 +101,17 @@ function trimOrEmpty(v) {
   return typeof v === "string" ? v.trim() : "";
 }
 
+function hasControlCharacter(value) {
+  return /[\u0000-\u001f\u007f]/.test(value);
+}
+
 function validateConfig(body) {
   const errors = {};
   const out = {};
 
   out.schoolName = trimOrEmpty(body.schoolName);
-  if (!out.schoolName || out.schoolName.length > 120) {
-    errors.schoolName = "Bitte einen Namen zwischen 1 und 120 Zeichen angeben.";
+  if (!out.schoolName || out.schoolName.length > 120 || hasControlCharacter(out.schoolName)) {
+    errors.schoolName = "Bitte einen Namen zwischen 1 und 120 Zeichen ohne Steuerzeichen angeben.";
   }
 
   out.domain = trimOrEmpty(body.domain).toLowerCase();
@@ -107,19 +119,37 @@ function validateConfig(body) {
     errors.domain = 'Das ist keine gueltige Domain (Beispiel: sani.beispielschule.de), ohne "https://".';
   }
 
-  out.iservDomain = trimOrEmpty(body.iservDomain).toLowerCase();
-  if (!DOMAIN_RE.test(out.iservDomain)) {
-    errors.iservDomain = 'Das ist keine gueltige Domain (Beispiel: beispielschule.de), ohne "https://".';
+  out.providerKey = trimOrEmpty(body.providerKey).toLowerCase();
+  if (!IDENTIFIER_RE.test(out.providerKey)) {
+    errors.providerKey = "Nur eine kurze Kennung aus Buchstaben, Ziffern, Punkt, Bindestrich und Unterstrich.";
   }
 
-  out.emailDomain = trimOrEmpty(body.emailDomain).toLowerCase();
-  if (!DOMAIN_RE.test(out.emailDomain)) {
-    errors.emailDomain = "Das ist keine gueltige Mail-Domain (Beispiel: beispielschule.de).";
+  out.providerDisplayName = trimOrEmpty(body.providerDisplayName);
+  if (!out.providerDisplayName || out.providerDisplayName.length > 80 || hasControlCharacter(out.providerDisplayName)) {
+    errors.providerDisplayName = "Bitte einen Anzeigenamen zwischen 1 und 80 Zeichen ohne Steuerzeichen angeben.";
+  }
+
+  out.providerIssuerUrl = trimOrEmpty(body.providerIssuerUrl).replace(/\/$/, "");
+  try {
+    const issuer = new URL(out.providerIssuerUrl);
+    if (issuer.protocol !== "https:" || issuer.username || issuer.password || issuer.search || issuer.hash) throw new Error();
+  } catch {
+    errors.providerIssuerUrl = "Bitte eine gueltige HTTPS-Issuer-URL ohne Zugangsdaten angeben.";
+  }
+
+  out.providerClientId = trimOrEmpty(body.providerClientId);
+  if (!out.providerClientId || out.providerClientId.length > 300 || hasControlCharacter(out.providerClientId)) {
+    errors.providerClientId = "Bitte eine Client-ID ohne Steuerzeichen angeben.";
+  }
+
+  out.providerClientSecret = trimOrEmpty(body.providerClientSecret);
+  if (out.providerClientSecret.length > 1000) {
+    errors.providerClientSecret = "Client-Secret ist zu lang.";
   }
 
   out.appName = trimOrEmpty(body.appName);
-  if (!out.appName || out.appName.length > 60) {
-    errors.appName = "Bitte einen Anwendungsnamen zwischen 1 und 60 Zeichen angeben.";
+  if (!out.appName || out.appName.length > 60 || hasControlCharacter(out.appName)) {
+    errors.appName = "Bitte einen Anwendungsnamen zwischen 1 und 60 Zeichen ohne Steuerzeichen angeben.";
   }
 
   out.themeColor = trimOrEmpty(body.themeColor) || "#22C55E";
@@ -132,14 +162,14 @@ function validateConfig(body) {
     errors.bundleId = "Das ist keine gueltige Kennung (Beispiel: com.beispielschule.sani).";
   }
 
-  out.schoolId = trimOrEmpty(body.schoolId);
-  if (out.schoolId && !SCHOOL_ID_RE.test(out.schoolId)) {
+  out.schoolId = trimOrEmpty(body.schoolId) || "school";
+  if (!SCHOOL_ID_RE.test(out.schoolId)) {
     errors.schoolId = "Nur Kleinbuchstaben, Ziffern, Bindestrich und Unterstrich, maximal 40 Zeichen.";
   }
 
   out.ownerUserId = trimOrEmpty(body.ownerUserId);
   if (out.ownerUserId && !IDENTIFIER_RE.test(out.ownerUserId)) {
-    errors.ownerUserId = "Das sieht nicht wie eine IServ-Benutzerkennung aus.";
+    errors.ownerUserId = "Bitte eine gueltige Konto-ID angeben.";
   }
 
   out.vapidSubject = trimOrEmpty(body.vapidSubject);
@@ -147,8 +177,9 @@ function validateConfig(body) {
     errors.vapidSubject = 'Bitte im Format "mailto:name@domain.de" angeben, oder freilassen.';
   }
   if (!out.vapidSubject) {
-    out.vapidSubject = `mailto:admin@${out.emailDomain || "beispielschule.de"}`;
+    out.vapidSubject = `mailto:admin@${out.domain || "beispielschule.de"}`;
   }
+  out.ownerAccountId = out.ownerUserId || crypto.randomUUID();
 
   return { out, errors };
 }
@@ -156,9 +187,9 @@ function validateConfig(body) {
 function validateAdmin(body) {
   const errors = {};
   const out = {};
-  out.iservUsername = trimOrEmpty(body.iservUsername).toLowerCase();
-  if (!IDENTIFIER_RE.test(out.iservUsername)) {
-    errors.iservUsername = "Das sieht nicht wie eine gueltige IServ-Benutzerkennung aus (Beispiel: vorname.nachname).";
+  out.externalSubject = trimOrEmpty(body.externalSubject);
+  if (!out.externalSubject || out.externalSubject.length > 300) {
+    errors.externalSubject = "Bitte den stabilen sub-Wert des OIDC-Anbieters angeben.";
   }
   return { out, errors };
 }
@@ -213,7 +244,6 @@ function writeSecretFile(filePath, content) {
 
 function buildBackendEnv(cfg, secrets) {
   const allowedOrigins = `https://${cfg.domain}`;
-  const iservBaseUrl = `https://${cfg.iservDomain}`;
   return [
     "# Automatisch vom Einrichtungsassistenten erzeugt.",
     `DATABASE_URL=${DATABASE_URL}`,
@@ -221,12 +251,10 @@ function buildBackendEnv(cfg, secrets) {
     `JWT_SECRET=${secrets.jwtSecret}`,
     "NODE_ENV=production",
     `ALLOWED_ORIGINS=${allowedOrigins}`,
-    `ISERV_BASE_URL=${iservBaseUrl}`,
-    `EMAIL_DOMAIN=${cfg.emailDomain}`,
+    `AUTH_PROVIDERS_PATH=/etc/schulsani/auth-providers.json`,
     `APP_NAME=${cfg.appName}`,
-    `SCHOOL_ID=${cfg.schoolId || ""}`,
+    `SCHOOL_ID=${cfg.schoolId || "school"}`,
     `OWNER_USER_ID=${cfg.ownerUserId || ""}`,
-    `ROLE_MAP_PATH=${ROLE_MAP_PATH}`,
     `VAPID_PUBLIC_KEY=${secrets.vapidPublicKey}`,
     `VAPID_PRIVATE_KEY=${secrets.vapidPrivateKey}`,
     `VAPID_SUBJECT=${cfg.vapidSubject}`,
@@ -240,7 +268,6 @@ function buildAppEnv(cfg, secrets) {
   return [
     "# Automatisch vom Einrichtungsassistenten erzeugt.",
     `EXPO_PUBLIC_DOMAIN=${cfg.domain}`,
-    `EXPO_PUBLIC_ISERV_DOMAIN=${cfg.iservDomain}`,
     `EXPO_PUBLIC_SCHOOL_NAME=${cfg.schoolName}`,
     `EXPO_PUBLIC_APP_NAME=${cfg.appName}`,
     `EXPO_PUBLIC_THEME_COLOR=${cfg.themeColor}`,
@@ -272,25 +299,65 @@ function usersTableExists() {
 // Rolle "owner" ist die schulische Hoechstrolle (vormals "cto", siehe R5
 // Schritt 1 — der Enum-Wert "cto" bleibt in der Datenbank bestehen, wird
 // hier aber nicht mehr vergeben).
-function upsertOwner(iservUsername, schoolId) {
-  const id = crypto.randomUUID();
-  const schoolIdSql = schoolId ? sqlQuote(schoolId) : "NULL";
-  const sql =
-    `INSERT INTO users (id, iserv_username, role, school_id, is_approved, approved_by, created_at, updated_at) ` +
-    `VALUES (${sqlQuote(id)}, ${sqlQuote(iservUsername)}, 'owner', ${schoolIdSql}, true, 'installer', now(), now()) ` +
-    `ON CONFLICT (iserv_username) DO UPDATE SET role = 'owner', is_approved = true, approved_by = 'installer', updated_at = now();`;
-  execFileSync("psql", [DATABASE_URL, "-c", sql], { encoding: "utf-8", timeout: 15000 });
+function upsertOwner(externalSubject, cfg) {
+  const id = cfg.ownerAccountId;
+  const providerKey = cfg.providerKey;
+  const schoolIdSql = sqlQuote(cfg.schoolId || "school");
+  const ownerIdSql = sqlQuote(id);
+  const subjectSql = sqlQuote(externalSubject);
+  const providerSql = sqlQuote(providerKey);
+  const identityIdSql = sqlQuote(`primary-${id}`);
+
+  const existingOwner = psql(
+    `SELECT coalesce(auth_provider, '') || E'\\t' || coalesce(external_subject, '') FROM users WHERE id = ${ownerIdSql}`,
+  );
+  if (existingOwner && existingOwner !== `${providerKey}\t${externalSubject}`) {
+    throw new Error("Die konfigurierte Eigentuemer-ID gehoert bereits zu einer anderen Identitaet.");
+  }
+
+  const existingIdentity = psql(
+    `SELECT user_id FROM user_identities WHERE school_id IS NOT DISTINCT FROM ${schoolIdSql} AND auth_provider = ${providerSql} AND external_subject = ${subjectSql}`,
+  );
+  if (existingIdentity && existingIdentity !== id) {
+    throw new Error("Das OIDC-Subjekt ist bereits einem anderen Konto zugeordnet.");
+  }
+
+  const userSql =
+    `INSERT INTO users (id, auth_provider, external_subject, first_name, last_name, role, school_id, is_approved, profile_confirmed_at, created_at, updated_at) ` +
+    `VALUES (${ownerIdSql}, ${providerSql}, ${subjectSql}, 'Eigentuemer', 'Konto', 'owner', ${schoolIdSql}, true, NULL, now(), now()) ` +
+    `ON CONFLICT (id) DO UPDATE SET role = 'owner', is_approved = true, updated_at = now();`;
+  execFileSync("psql", [DATABASE_URL, "-c", userSql], { encoding: "utf-8", timeout: 15000 });
+  const identitySql =
+    `INSERT INTO user_identities (id, user_id, school_id, auth_provider, external_subject, last_used_at) ` +
+    `VALUES (${identityIdSql}, ${ownerIdSql}, ${schoolIdSql}, ${providerSql}, ${subjectSql}, now()) ` +
+    `ON CONFLICT (school_id, auth_provider, external_subject) DO UPDATE SET last_used_at = now();`;
+  execFileSync("psql", [DATABASE_URL, "-c", identitySql], { encoding: "utf-8", timeout: 15000 });
 }
 
-function writeRoleMapEntry(iservUsername) {
-  let map = {};
+function existingProviderClientSecret(providerKey) {
   try {
-    map = JSON.parse(fs.readFileSync(ROLE_MAP_PATH, "utf-8"));
+    const raw = JSON.parse(fs.readFileSync("/etc/schulsani/auth-providers.json", "utf-8"));
+    const existing = Array.isArray(raw) ? raw.find((entry) => entry?.key === providerKey) : null;
+    return typeof existing?.clientSecret === "string" ? existing.clientSecret : "";
   } catch {
-    map = {};
+    return "";
   }
-  map[iservUsername] = "owner";
-  writeSecretFile(ROLE_MAP_PATH, JSON.stringify(map, null, 2) + "\n");
+}
+
+function writeAuthProvidersFile(cfg, clientSecret) {
+  const provider = {
+    enabled: true,
+    key: cfg.providerKey,
+    displayName: cfg.providerDisplayName,
+    type: "oidc-redirect",
+    issuerUrl: cfg.providerIssuerUrl,
+    clientId: cfg.providerClientId,
+    redirectUri: `https://${cfg.domain}/api/auth/${cfg.providerKey}/callback`,
+    scopes: ["openid", "email", "profile"],
+  };
+  const secret = clientSecret || existingProviderClientSecret(cfg.providerKey);
+  if (secret) provider.clientSecret = secret;
+  writeSecretFile("/etc/schulsani/auth-providers.json", JSON.stringify([provider], null, 2) + "\\n");
 }
 
 // --- HTTP-Server -----------------------------------------------------------
@@ -408,8 +475,10 @@ function publicState() {
       ? {
           schoolName: state.config.schoolName,
           domain: state.config.domain,
-          iservDomain: state.config.iservDomain,
-          emailDomain: state.config.emailDomain,
+          providerKey: state.config.providerKey,
+          providerDisplayName: state.config.providerDisplayName,
+          providerIssuerUrl: state.config.providerIssuerUrl,
+          providerClientId: state.config.providerClientId,
           appName: state.config.appName,
           themeColor: state.config.themeColor,
           bundleId: state.config.bundleId,
@@ -453,7 +522,10 @@ async function handleApi(req, res, pathname) {
     if (Object.keys(errors).length > 0) {
       return sendJson(res, 422, { ok: false, errors });
     }
-    state.config = out;
+    const { providerClientSecret, ...config } = out;
+    config.ownerAccountId = state.config?.ownerAccountId || config.ownerAccountId || crypto.randomUUID();
+    state.config = config;
+    pendingProviderClientSecret = providerClientSecret;
     saveState(state);
     logLine("Konfiguration gespeichert.");
     return sendJson(res, 200, { ok: true });
@@ -481,6 +553,7 @@ async function handleApi(req, res, pathname) {
       const secrets = { jwtSecret, vapidPublicKey, vapidPrivateKey };
       writeSecretFile(BACKEND_ENV_PATH, buildBackendEnv(state.config, secrets));
       writeSecretFile(APP_ENV_PATH, buildAppEnv(state.config, secrets));
+      writeAuthProvidersFile(state.config, pendingProviderClientSecret);
 
       state.secrets = { jwtGenerated: true, vapidGenerated: true };
       saveState(state);
@@ -515,9 +588,8 @@ async function handleApi(req, res, pathname) {
             "Migrationen zuerst nachholen, dann diese Seite erneut aufrufen.",
         });
       }
-      upsertOwner(out.iservUsername, state.config.schoolId);
-      writeRoleMapEntry(out.iservUsername);
-      state.admin = { created: true, username: out.iservUsername };
+      upsertOwner(out.externalSubject, state.config);
+      state.admin = { created: true, username: out.externalSubject };
       saveState(state);
       logLine(`Eigentuemer-Konto angelegt/aktualisiert (Kennung im Protokoll nicht ausgeschrieben).`);
       return sendJson(res, 200, { ok: true });
@@ -566,7 +638,7 @@ server = http.createServer(async (req, res) => {
 
   if (pathname.startsWith("/setup/") && req.method === "GET") {
     const candidate = pathname.slice("/setup/".length);
-    if (tokenMatches(candidate)) {
+    if (tokenMatches(candidate) && !tokenConsumed) {
       const sid = createSession();
       tokenConsumed = true;
       res.writeHead(302, {

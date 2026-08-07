@@ -112,6 +112,8 @@
   .field .optional { color: var(--text-tertiary); font-weight: 400; }
   .field input[type="text"],
   .field input[type="email"],
+  .field input[type="url"],
+  .field input[type="password"],
   .field input[type="color"] {
     width: 100%;
     font-size: 15px;
@@ -243,16 +245,36 @@
         <div class="error"><span>—</span></div>
       </div>
 
-      <div class="field" data-field="iservDomain">
-        <label for="iservDomain">Domain der IServ-Instanz</label>
-        <input type="text" id="iservDomain" name="iservDomain" autocomplete="off" placeholder="beispielschule.de" inputmode="url">
-        <div class="helper">Dort meldet sich die App zur Anmeldung an.</div>
+      <div class="field" data-field="providerKey">
+        <label for="providerKey">Anbieter-Kennung</label>
+        <input type="text" id="providerKey" name="providerKey" autocomplete="off" placeholder="iserv" spellcheck="false">
+        <div class="helper">Kurze interne Kennung, etwa „iserv“ oder „microsoft“.</div>
         <div class="error"><span>—</span></div>
       </div>
 
-      <div class="field" data-field="emailDomain">
-        <label for="emailDomain">Mail-Domain der Schule</label>
-        <input type="text" id="emailDomain" name="emailDomain" autocomplete="off" placeholder="beispielschule.de" inputmode="url">
+      <div class="field" data-field="providerDisplayName">
+        <label for="providerDisplayName">Anzeigename des Anbieters</label>
+        <input type="text" id="providerDisplayName" name="providerDisplayName" autocomplete="off" placeholder="Schul-Login">
+        <div class="error"><span>—</span></div>
+      </div>
+
+      <div class="field" data-field="providerIssuerUrl">
+        <label for="providerIssuerUrl">OIDC-Issuer-URL</label>
+        <input type="url" id="providerIssuerUrl" name="providerIssuerUrl" autocomplete="off" placeholder="https://login.beispiel.de" spellcheck="false">
+        <div class="helper">HTTPS-URL des OIDC-Anbieters, ohne Zugangsdaten.</div>
+        <div class="error"><span>—</span></div>
+      </div>
+
+      <div class="field" data-field="providerClientId">
+        <label for="providerClientId">Client-ID</label>
+        <input type="text" id="providerClientId" name="providerClientId" autocomplete="off" spellcheck="false">
+        <div class="error"><span>—</span></div>
+      </div>
+
+      <div class="field" data-field="providerClientSecret">
+        <label for="providerClientSecret">Client-Secret <span class="optional">(optional)</span></label>
+        <input type="password" id="providerClientSecret" name="providerClientSecret" autocomplete="new-password" spellcheck="false">
+        <div class="helper">Wird zugriffsgeschuetzt gespeichert und nie protokolliert.</div>
         <div class="error"><span>—</span></div>
       </div>
 
@@ -306,7 +328,7 @@
       <div class="field" data-field="ownerUserId">
         <label for="ownerUserId">Eigentuemer-Kennung fuer die SQL-Konsole <span class="optional">(optional)</span></label>
         <input type="text" id="ownerUserId" name="ownerUserId" autocomplete="off" placeholder="vorname.nachname">
-        <div class="helper">Ohne Angabe bleibt die Konsole fuer alle gesperrt.</div>
+        <div class="helper">Ohne Angabe bleibt die SQL-Konsole fuer alle gesperrt; das Konto erhaelt trotzdem die Owner-Rolle.</div>
         <div class="error"><span>—</span></div>
       </div>
 
@@ -327,13 +349,15 @@
       <h2>Wer wird Eigentuemer dieser Instanz?</h2>
       <p class="hint">Die Rolle "owner" ist die hoechste Rolle innerhalb der Schule — sie darf alle
         anderen Rollen vergeben und alle Nutzer verwalten. Genau eine Person sollte sie zuerst
-        erhalten. Dieses Konto wird sofort freigegeben, sobald es sich zum ersten Mal ueber IServ
-        anmeldet.</p>
+        erhalten. Dieses Konto wird sofort freigegeben, sobald es sich zum ersten Mal ueber den
+        konfigurierten OIDC-Anbieter anmeldet.</p>
 
-      <div class="field" data-field="iservUsername">
-        <label for="iservUsername">IServ-Benutzerkennung der zukuenftigen Eigentuemerin/des zukuenftigen Eigentuemers</label>
-        <input type="text" id="iservUsername" name="iservUsername" autocomplete="off" placeholder="vorname.nachname">
-        <div class="helper">Erhaelt die Rolle "owner" (frueher: cto).</div>
+      <p class="hint">Der Wert muss exakt dem stabilen <code>sub</code>-Claim des OIDC-Anbieters entsprechen. Er wird nicht als Passwort verwendet.</p>
+
+      <div class="field" data-field="externalSubject">
+        <label for="externalSubject">OIDC-Subjekt des Eigentuemers</label>
+        <input type="text" id="externalSubject" name="externalSubject" autocomplete="off" spellcheck="false">
+        <div class="helper">Der Owner wird fuer genau dieses externe Subjekt freigeschaltet.</div>
         <div class="error"><span>—</span></div>
       </div>
 
@@ -382,15 +406,18 @@
   var fieldMessages = {
     schoolName: "Bitte einen Namen angeben.",
     domain: 'Das ist keine gueltige Domain, ohne "https://".',
-    iservDomain: 'Das ist keine gueltige Domain, ohne "https://".',
-    emailDomain: "Das ist keine gueltige Mail-Domain.",
+    providerKey: "Bitte eine gueltige Anbieter-Kennung angeben.",
+    providerDisplayName: "Bitte einen Anzeigenamen angeben.",
+    providerIssuerUrl: "Bitte eine gueltige HTTPS-Issuer-URL angeben.",
+    providerClientId: "Bitte eine Client-ID angeben.",
+    providerClientSecret: "Client-Secret ist zu lang.",
     appName: "Bitte einen Anwendungsnamen angeben.",
     themeColor: "Das ist keine gueltige Farbe (Beispiel: #22C55E).",
     bundleId: "Das ist keine gueltige Kennung (Beispiel: com.beispielschule.sani).",
     schoolId: "Nur Kleinbuchstaben, Ziffern, Bindestrich, Unterstrich.",
-    ownerUserId: "Das sieht nicht wie eine IServ-Benutzerkennung aus.",
+    ownerUserId: "Bitte eine gueltige Konto-ID angeben.",
     vapidSubject: 'Bitte im Format "mailto:name@domain.de" angeben, oder freilassen.',
-    iservUsername: "Das sieht nicht wie eine gueltige IServ-Benutzerkennung aus."
+    externalSubject: "Bitte den stabilen OIDC-sub-Claim angeben."
   };
 
   var domainRe = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i;
@@ -399,26 +426,31 @@
   var identRe = /^[a-z0-9][a-z0-9._-]{1,63}$/i;
   var schoolIdRe = /^[a-z0-9_-]{1,40}$/i;
   var mailtoRe = /^mailto:[^@\s]+@[^@\s]+\.[^@\s]+$/;
+  var issuerRe = /^https:\/\/[^\s]+$/;
+  var providerKeyRe = /^[a-z0-9][a-z0-9._-]{1,63}$/i;
 
   var requiredValidators = {
     schoolName: function (v) { return v.trim().length > 0 && v.trim().length <= 120; },
     domain: function (v) { return domainRe.test(v.trim()); },
-    iservDomain: function (v) { return domainRe.test(v.trim()); },
-    emailDomain: function (v) { return domainRe.test(v.trim()); },
+    providerKey: function (v) { return providerKeyRe.test(v.trim()); },
+    providerDisplayName: function (v) { return v.trim().length > 0 && v.trim().length <= 80; },
+    providerIssuerUrl: function (v) { return issuerRe.test(v.trim()); },
+    providerClientId: function (v) { return v.trim().length > 0 && v.trim().length <= 300; },
+    providerClientSecret: function (v) { return v.trim().length <= 1000; },
     appName: function (v) { return v.trim().length > 0 && v.trim().length <= 60; },
     themeColor: function (v) { return hexRe.test(v.trim()); },
     bundleId: function (v) { return bundleRe.test(v.trim()); },
     schoolId: function (v) { return v.trim() === "" || schoolIdRe.test(v.trim()); },
     ownerUserId: function (v) { return v.trim() === "" || identRe.test(v.trim()); },
     vapidSubject: function (v) { return v.trim() === "" || mailtoRe.test(v.trim()); },
-    iservUsername: function (v) { return identRe.test(v.trim()); }
+    externalSubject: function (v) { return v.trim().length > 0 && v.trim().length <= 300; }
   };
 
   var pageFields = {
-    1: ["schoolName", "domain", "iservDomain", "emailDomain"],
+    1: ["schoolName", "domain", "providerKey", "providerDisplayName", "providerIssuerUrl", "providerClientId", "providerClientSecret"],
     2: ["appName", "themeColor", "bundleId"],
     3: ["schoolId", "ownerUserId", "vapidSubject"],
-    4: ["iservUsername"]
+    4: ["externalSubject"]
   };
 
   function el(id) { return document.getElementById(id); }
@@ -477,8 +509,11 @@
     return {
       schoolName: el("schoolName").value,
       domain: el("domain").value,
-      iservDomain: el("iservDomain").value,
-      emailDomain: el("emailDomain").value,
+      providerKey: el("providerKey").value,
+      providerDisplayName: el("providerDisplayName").value,
+      providerIssuerUrl: el("providerIssuerUrl").value,
+      providerClientId: el("providerClientId").value,
+      providerClientSecret: el("providerClientSecret").value,
       appName: el("appName").value,
       themeColor: el("themeColor").value,
       bundleId: el("bundleId").value,
@@ -493,14 +528,15 @@
     var rows = [
       ["Schule", cfg.schoolName],
       ["Domain", cfg.domain],
-      ["IServ-Domain", cfg.iservDomain],
-      ["Mail-Domain", cfg.emailDomain],
+      ["Anbieter", cfg.providerDisplayName + " (" + cfg.providerKey + ")"],
+      ["Issuer", cfg.providerIssuerUrl],
+      ["Client-ID", cfg.providerClientId],
       ["Anwendungsname", cfg.appName],
       ["Farbe", cfg.themeColor],
       ["Bundle-Kennung", cfg.bundleId],
       ["Schul-Kennung", cfg.schoolId || "(nicht gesetzt)"],
       ["Eigentuemer-Kennung", cfg.ownerUserId || "(nicht gesetzt)"],
-      ["Eigentuemer", el("iservUsername").value || "(nicht gesetzt)"]
+      ["Eigentuemer-Subjekt", el("externalSubject").value || "(nicht gesetzt)"]
     ];
     var dl = el("summaryList");
     dl.innerHTML = "";
@@ -550,7 +586,7 @@
     btn.disabled = true;
 
     var cfg = collectConfig();
-    var admin = { iservUsername: el("iservUsername").value };
+    var admin = { externalSubject: el("externalSubject").value };
 
     setLogState("config", "pending", "Konfiguration speichern");
     postJson("/api/config", cfg).then(function (r) {
@@ -602,15 +638,17 @@
       var c = data.config;
       if (el("schoolName")) el("schoolName").value = c.schoolName || "";
       if (el("domain")) el("domain").value = c.domain || "";
-      if (el("iservDomain")) el("iservDomain").value = c.iservDomain || "";
-      if (el("emailDomain")) el("emailDomain").value = c.emailDomain || "";
+      if (el("providerKey")) el("providerKey").value = c.providerKey || "";
+      if (el("providerDisplayName")) el("providerDisplayName").value = c.providerDisplayName || "";
+      if (el("providerIssuerUrl")) el("providerIssuerUrl").value = c.providerIssuerUrl || "";
+      if (el("providerClientId")) el("providerClientId").value = c.providerClientId || "";
       if (el("appName")) el("appName").value = c.appName || "";
       if (el("themeColor")) { el("themeColor").value = c.themeColor || "#22C55E"; el("themeColorPicker").value = c.themeColor || "#22C55E"; }
       if (el("bundleId")) el("bundleId").value = c.bundleId || "";
       if (el("schoolId")) el("schoolId").value = c.schoolId || "";
       if (el("ownerUserId")) el("ownerUserId").value = c.ownerUserId || "";
       if (el("vapidSubject")) el("vapidSubject").value = (c.vapidSubject || "").indexOf("mailto:admin@") === 0 ? "" : (c.vapidSubject || "");
-      if (data.admin && data.admin.username && el("iservUsername")) el("iservUsername").value = data.admin.username;
+      if (data.admin && data.admin.username && el("externalSubject")) el("externalSubject").value = data.admin.username;
     }).catch(function () { /* kein Vorzustand — normaler Erststart */ });
   }
 

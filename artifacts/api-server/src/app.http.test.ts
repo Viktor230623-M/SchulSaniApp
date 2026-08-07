@@ -69,7 +69,7 @@ describe("HTTP-Grundgeruest", () => {
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
-      providers: [{ key: "iserv-form", displayName: "IServ", type: "iserv-form" }],
+      providers: [{ key: "oidc-beispiel", displayName: "Schul-Login (OIDC)", type: "oidc-redirect" }],
     });
   });
 

@@ -14,7 +14,6 @@ export interface JwtPayload {
   userId: string;
   role: string;
   iat?: number;
-  passwordVersion?: number;
   permissions?: string[];
   authTime?: number;
 }
@@ -38,9 +37,6 @@ export function verifyToken(token: string): JwtPayload | null {
 interface LiveUser {
   role: string;
   isApproved: boolean;
-  mustChangePassword: boolean;
-  oneTimePasswordExpiresAt: Date | null;
-  passwordVersion: number;
   permissions: string[];
   profileConfirmedAt: Date | null;
   expires: number;
@@ -71,9 +67,6 @@ async function getLiveUser(userId: string): Promise<LiveUser | null> {
     .select({
       role: usersTable.role,
       isApproved: usersTable.isApproved,
-      mustChangePassword: usersTable.mustChangePassword,
-      oneTimePasswordExpiresAt: usersTable.oneTimePasswordExpiresAt,
-      passwordVersion: usersTable.passwordVersion,
       schoolId: usersTable.schoolId,
       profileConfirmedAt: usersTable.profileConfirmedAt,
     })
@@ -89,9 +82,6 @@ async function getLiveUser(userId: string): Promise<LiveUser | null> {
   const entry: LiveUser = {
     role,
     isApproved: row.isApproved,
-    mustChangePassword: row.mustChangePassword,
-    oneTimePasswordExpiresAt: row.oneTimePasswordExpiresAt,
-    passwordVersion: row.passwordVersion,
     permissions: await permissionsForRole(role, row.schoolId),
     profileConfirmedAt: row.profileConfirmedAt,
     expires: Date.now() + USER_CACHE_TTL_MS,
@@ -100,11 +90,7 @@ async function getLiveUser(userId: string): Promise<LiveUser | null> {
   return entry;
 }
 
-async function authenticate(
-  req: AuthRequest,
-  res: Response,
-  allowPasswordChange = false,
-): Promise<LiveUser | null> {
+async function authenticate(req: AuthRequest, res: Response): Promise<LiveUser | null> {
   const header = req.headers.authorization;
   const token = header?.startsWith("Bearer ") ? header.slice(7) : undefined;
 
@@ -128,15 +114,6 @@ async function authenticate(
   }
   if (!live || !live.isApproved) {
     res.status(401).json({ error: "Invalid or expired token" });
-    return null;
-  }
-  if ((live.passwordVersion > 0 && payload.passwordVersion === undefined) ||
-      (payload.passwordVersion !== undefined && payload.passwordVersion !== live.passwordVersion)) {
-    res.status(401).json({ error: "Invalid or expired token" });
-    return null;
-  }
-  if (live.mustChangePassword && !allowPasswordChange) {
-    res.status(403).json({ error: "Passwortwechsel erforderlich", code: "PASSWORD_CHANGE_REQUIRED" });
     return null;
   }
   req.user = {
@@ -166,18 +143,8 @@ export async function requireAuthAllowUnconfirmedProfile(req: AuthRequest, res: 
 }
 
 export async function requireAuthForLogout(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
-  const live = await authenticate(req, res, true);
+  const live = await authenticate(req, res);
   if (!live) return;
-  next();
-}
-
-export async function requireAuthForPasswordChange(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
-  const live = await authenticate(req, res, true);
-  if (!live) return;
-  if (live.mustChangePassword && live.oneTimePasswordExpiresAt && live.oneTimePasswordExpiresAt.getTime() <= Date.now()) {
-    res.status(401).json({ error: "Einmal-Passwort abgelaufen" });
-    return;
-  }
   next();
 }
 
