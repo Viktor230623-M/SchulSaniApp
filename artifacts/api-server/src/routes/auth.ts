@@ -16,7 +16,7 @@ import {
 import { createSession, resolveSession, revokeSession, revokeAllSessionsForUser } from "../lib/sessions";
 import { config } from "../config";
 import { loadAuthProviders } from "../auth/registry";
-import type { AuthResult, PasswordAuthProvider } from "../auth/types";
+import type { AuthProfile, AuthProvider, AuthResult, PasswordAuthProvider, RedirectAuthProvider } from "../auth/types";
 import { hashPassword } from "../auth/providers/local";
 import { issueAuthToken, hashAuthToken } from "../lib/authTokens";
 import { assertMailerConfig, authLink, sendMail, verifyMailer } from "../services/mailer";
@@ -110,6 +110,12 @@ function currentAuthTime(): number {
 }
 const NATIVE_HANDOFF_TTL_MS = 2 * 60 * 1000;
 const nativeHandoffs = new Map<string, { sessionToken: string; verifierHash: string; expiresAt: number }>();
+
+// Nonces fuer den nativen Apple-Login: kurzlebig, einmalig verbrauchbar.
+// Der Client reicht den Nonce an Apple weiter, Apple spiegelt ihn ins
+// Identity-Token; ohne passenden Eintrag wird die Anmeldung nicht akzeptiert.
+const APPLE_NONCE_TTL_MS = 10 * 60 * 1000;
+const appleNativeNonces = new Map<string, { expiresAt: number }>();
 
 function createNativeHandoff(sessionToken: string, challenge: string): string {
   const now = Date.now();
@@ -878,6 +884,95 @@ function isAllowedNativeReturnUrl(value: string): boolean {
   }
 }
 
+/**
+ * Findet oder legt das Konto fuer eine verifizierte externe Identitaet an.
+ *
+ * Wiedererkennung ueber das Tripel (Schule, Anbieter, Subjekt) -- nie ueber
+ * die E-Mail-Adresse. Derselbe Ablauf dient dem OIDC-Rueckweg und dem nativen
+ * Apple-Login; beide liefern eine verifizierte Identitaet, die sich nur im
+ * Weg unterscheidet.
+ */
+async function reconcileAccount(
+  providerKey: string,
+  subject: string,
+  profile: AuthProfile,
+  schoolId: string,
+): Promise<{ userId: string; role: UserRole; isApproved: boolean; firstName: string; lastName: string; email: string | null }> {
+  const [existing] = await db
+    .select({
+      identityId: userIdentitiesTable.id,
+      id: usersTable.id,
+      role: usersTable.role,
+      isApproved: usersTable.isApproved,
+      firstName: usersTable.firstName,
+      lastName: usersTable.lastName,
+      email: usersTable.email,
+    })
+    .from(userIdentitiesTable)
+    .innerJoin(usersTable, eq(usersTable.id, userIdentitiesTable.userId))
+    .where(
+      and(
+        eq(userIdentitiesTable.schoolId, schoolId),
+        eq(userIdentitiesTable.authProvider, providerKey),
+        eq(userIdentitiesTable.externalSubject, subject),
+      ),
+    )
+    .limit(1);
+
+  const userId = existing?.id ?? crypto.randomUUID();
+  const resolvedRole = existing?.role ?? (await getRoleForUser(profile.groups ?? [], providerKey, schoolId));
+  const role: UserRole = resolvedRole ?? "sanitaeter";
+  const isApproved = existing?.isApproved ?? false;
+
+  // Apple liefert den Namen nur beim ersten Login. Vorhandene Profildaten
+  // duerfen bei einem spaeteren Ruecksprung nicht durch leere Claims ersetzt werden.
+  const firstName = profile.firstName || existing?.firstName || subject;
+  const lastName = profile.lastName || existing?.lastName || "";
+  // Unbestaetigte Google-Adressen bleiben leer. Eine bestehende Adresse bleibt
+  // erhalten, wenn ein spaeterer Ruecksprung keinen verifizierten Claim liefert.
+  const email = profile.email || existing?.email || null;
+  const phone = profile.phone;
+
+  await db.transaction(async (tx) => {
+    await tx.insert(usersTable).values({
+      id: userId,
+      authProvider: providerKey,
+      externalSubject: subject,
+      firstName,
+      lastName,
+      email,
+      phone,
+      role,
+      isApproved,
+      schoolId,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: usersTable.id,
+      set: { firstName, lastName, email, updatedAt: new Date() },
+    });
+
+    if (existing?.identityId) {
+      await tx.update(userIdentitiesTable)
+        .set({ lastUsedAt: new Date() })
+        .where(eq(userIdentitiesTable.id, existing.identityId));
+    } else {
+      await tx.insert(userIdentitiesTable).values({
+        id: `primary-${userId}`,
+        userId,
+        schoolId,
+        authProvider: providerKey,
+        externalSubject: subject,
+        emailAtLink: email,
+        lastUsedAt: new Date(),
+      });
+    }
+  });
+
+  return { userId, role, isApproved, firstName, lastName, email };
+}
+
 async function completeOidcCallback(req: import("express").Request, res: import("express").Response): Promise<void> {
   const provider = authProviders.find((p) => p.key === req.params["provider"]);
   if (!provider || provider.type !== "oidc-redirect") {
@@ -906,30 +1001,7 @@ async function completeOidcCallback(req: import("express").Request, res: import(
   if (authResult.returnTo && !authResult.handoffChallenge) {
     res.status(400).json({ error: "Native Weiterleitung ist unvollstaendig." });
     return;
-  }
-
-  try {
-    const existing = await db
-      .select({
-        identityId: userIdentitiesTable.id,
-        id: usersTable.id,
-        role: usersTable.role,
-        isApproved: usersTable.isApproved,
-        firstName: usersTable.firstName,
-        lastName: usersTable.lastName,
-        email: usersTable.email,
-      })
-      .from(userIdentitiesTable)
-      .innerJoin(usersTable, eq(usersTable.id, userIdentitiesTable.userId))
-      .where(
-        and(
-          eq(userIdentitiesTable.schoolId, schoolId),
-          eq(userIdentitiesTable.authProvider, provider.key),
-          eq(userIdentitiesTable.externalSubject, subject),
-        ),
-      )
-      .limit(1);
-
+  }  try {
     if (authResult.linkUserId) {
       const linkResult = await db.transaction(async (tx) => {
         const linkUserId = authResult.linkUserId!;
@@ -995,63 +1067,14 @@ async function completeOidcCallback(req: import("express").Request, res: import(
       return;
     }
 
-    const userId: string = existing[0]?.id ?? crypto.randomUUID();
-    const resolvedRole = existing[0]?.role ?? (await getRoleForUser(profile.groups ?? [], provider.key, schoolId));
-    const role: UserRole = resolvedRole ?? "sanitaeter";
-    const isApproved: boolean = existing[0]?.isApproved ?? false;
+    const account = await reconcileAccount(provider.key, subject, profile, schoolId);
 
-    // Apple liefert den Namen nur beim ersten Login. Vorhandene Profildaten
-    // duerfen bei einem spaeteren Ruecksprung nicht durch leere Claims ersetzt werden.
-    const firstName = profile.firstName || existing[0]?.firstName || subject;
-    const lastName = profile.lastName || existing[0]?.lastName || "";
-    // Unbestaetigte Google-Adressen bleiben leer. Eine bestehende Adresse bleibt
-    // erhalten, wenn ein spaeterer Ruecksprung keinen verifizierten Claim liefert.
-    const email = profile.email || existing[0]?.email || null;
-    const phone = profile.phone;
-
-    await db.transaction(async (tx) => {
-      await tx.insert(usersTable).values({
-        id: userId,
-        authProvider: provider.key,
-        externalSubject: subject,
-        firstName,
-        lastName,
-        email,
-        phone,
-        role,
-        isApproved,
-        schoolId,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .onConflictDoUpdate({
-        target: usersTable.id,
-        set: { firstName, lastName, email, updatedAt: new Date() },
-      });
-
-      if (existing[0]?.identityId) {
-        await tx.update(userIdentitiesTable)
-          .set({ lastUsedAt: new Date() })
-          .where(eq(userIdentitiesTable.id, existing[0].identityId));
-      } else {
-        await tx.insert(userIdentitiesTable).values({
-          id: `primary-${userId}`,
-          userId,
-          schoolId,
-          authProvider: provider.key,
-          externalSubject: subject,
-          emailAtLink: email,
-          lastUsedAt: new Date(),
-        });
-      }
-    });
-
-    if (!isApproved) {
+    if (!account.isApproved) {
       res.status(403).json({ error: "Dein Account wartet auf Freischaltung durch einen Administrator." });
       return;
     }
 
-    const sessionToken = await createSession(userId);
+    const sessionToken = await createSession(account.userId);
     if (authResult.returnTo) {
       const handoffCode = createNativeHandoff(sessionToken, authResult.handoffChallenge!);
       const landingUrl = new URL(authResult.returnTo);
@@ -1070,6 +1093,112 @@ async function completeOidcCallback(req: import("express").Request, res: import(
 
 router.get("/:provider/callback", authLimiter, completeOidcCallback);
 router.post("/:provider/callback", authLimiter, completeOidcCallback);
+
+/**
+ * Nativer Apple-Login: Die App fragt zuerst einen Nonce an, reicht ihn an
+ * Apple weiter und schickt das zurueckkommende Identity-Token hierher.
+ */
+router.post("/apple/native/start", authLimiter, (_req, res) => {
+  const now = Date.now();
+  for (const [nonce, entry] of appleNativeNonces) {
+    if (entry.expiresAt <= now) appleNativeNonces.delete(nonce);
+  }
+  const nonce = randomBytes(24).toString("base64url");
+  appleNativeNonces.set(nonce, { expiresAt: now + APPLE_NONCE_TTL_MS });
+  res.json({ nonce });
+});
+
+router.post("/apple/native/complete", authLimiter, async (req, res) => {
+  const identityToken = typeof req.body?.identityToken === "string" ? req.body.identityToken : "";
+  const nonce = typeof req.body?.nonce === "string" ? req.body.nonce : "";
+  if (!identityToken || identityToken.length > 10_000 || !nonce || nonce.length > 200) {
+    res.status(400).json({ error: "Anmeldung fehlgeschlagen." });
+    return;
+  }
+
+  const entry = appleNativeNonces.get(nonce);
+  // Einmalig verbrauchen -- ein zweiter Versuch mit demselben Nonce darf
+  // nicht greifen, unabhaengig davon, ob die Verifikation gelingt.
+  appleNativeNonces.delete(nonce);
+  if (!entry || entry.expiresAt <= Date.now()) {
+    res.status(401).json({ error: "Anmeldung fehlgeschlagen." });
+    return;
+  }
+
+  const provider = authProviders.find(
+    (candidate): candidate is RedirectAuthProvider =>
+      candidate.type === "oidc-redirect" && Boolean(candidate.verifyNativeToken),
+  );
+  const verifyNativeToken = provider?.verifyNativeToken;
+  if (!provider || !verifyNativeToken) {
+    res.status(404).json({ error: "Anmeldeweg nicht gefunden." });
+    return;
+  }
+
+  const rawFullName = req.body?.fullName;
+  const fullName =
+    rawFullName && typeof rawFullName === "object"
+      ? {
+          givenName: typeof rawFullName["givenName"] === "string" ? rawFullName["givenName"] : undefined,
+          familyName: typeof rawFullName["familyName"] === "string" ? rawFullName["familyName"] : undefined,
+        }
+      : undefined;
+  const email = typeof req.body?.email === "string" ? req.body.email : undefined;
+
+  let authResult: AuthResult;
+  try {
+    authResult = await verifyNativeToken({ identityToken, nonce, fullName, email });
+  } catch (err) {
+    console.error("Apple-Anmeldung abgebrochen:", err);
+    res.status(401).json({ error: "Anmeldung fehlgeschlagen." });
+    return;
+  }
+
+  try {
+    const schoolId = process.env["SCHOOL_ID"]?.trim() || "school";
+    const account = await reconcileAccount(provider.key, authResult.subject, authResult.profile, schoolId);
+    if (!account.isApproved) {
+      res.status(403).json({ error: "Dein Account wartet auf Freischaltung durch einen Administrator." });
+      return;
+    }
+
+    const [user] = await db.select({
+      passwordVersion: usersTable.passwordVersion,
+      profileConfirmedAt: usersTable.profileConfirmedAt,
+      mustChangePassword: usersTable.mustChangePassword,
+    }).from(usersTable).where(eq(usersTable.id, account.userId)).limit(1);
+    if (!user) {
+      res.status(500).json({ error: "Anmeldung fehlgeschlagen." });
+      return;
+    }
+
+    const sessionToken = await createSession(account.userId);
+    res.cookie(SESSION_COOKIE, sessionToken, sessionCookieOptions());
+    const token = jwt.sign({
+      userId: account.userId,
+      role: account.role,
+      passwordVersion: user.passwordVersion,
+      authTime: currentAuthTime(),
+    }, JWT_SECRET, { expiresIn: "2h" });
+    res.json({
+      token,
+      ...(await buildUserResponse({
+        id: account.userId,
+        firstName: account.firstName,
+        lastName: account.lastName,
+        email: account.email,
+        username: null,
+        role: account.role,
+        schoolId,
+        profileConfirmedAt: user.profileConfirmedAt,
+        mustChangePassword: user.mustChangePassword,
+      })),
+    });
+  } catch (err) {
+    console.error("Apple-Anmeldung: Kontoabgleich fehlgeschlagen:", err);
+    res.status(500).json({ error: "Anmeldung fehlgeschlagen." });
+  }
+});
 
 
 export default router;
