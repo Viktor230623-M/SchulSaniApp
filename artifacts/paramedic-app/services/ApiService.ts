@@ -153,6 +153,36 @@ const ApiService = {
     return data.token;
   },
 
+  /** Nativer Apple-Login: fragt einen Einmal-Nonce an, den die App an Apple weitergibt. */
+  async startAppleNative(): Promise<string> {
+    const resp = await fetch(`${API_BASE}/auth/apple/native/start`, {
+      method: "POST",
+      headers: { "ngrok-skip-browser-warning": "true" },
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok || typeof data.nonce !== "string") throw new Error("Anmeldung fehlgeschlagen");
+    return data.nonce;
+  },
+
+  async completeAppleNative(input: {
+    identityToken: string;
+    nonce: string;
+    fullName?: { givenName?: string; familyName?: string };
+    email?: string;
+  }): Promise<{ user: User; isTealUnlocked: boolean; token: string }> {
+    const resp = await fetch(`${API_BASE}/auth/apple/native/complete`, {
+      method: "POST",
+      headers: headers(),
+      credentials: "include",
+      body: JSON.stringify(input),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error ?? "Anmeldung fehlgeschlagen");
+    if (typeof data.token !== "string") throw new Error("Anmeldung fehlgeschlagen");
+    setAuthToken(data.token);
+    return { user: { ...data.user, permissions: data.permissions ?? [] }, isTealUnlocked: data.isTealUnlocked, token: data.token };
+  },
+
   async exchangeNativeSession(code: string, verifier: string): Promise<{ user: User; isTealUnlocked: boolean; token: string } | null> {
     const resp = await fetch(`${API_BASE}/auth/native-session`, {
       method: "POST",
