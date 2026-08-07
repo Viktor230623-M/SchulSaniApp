@@ -36,7 +36,7 @@ let transporter: nodemailer.Transporter | undefined;
 function getTransporter(): nodemailer.Transporter {
   if (transporter) return transporter;
   assertMailerConfig();
-  const from = required("MAIL_FROM", mailFrom);
+  required("MAIL_FROM", mailFrom);
 
   transporter = nodemailer.createTransport({
     host: required("SMTP_HOST", smtpHost),
@@ -57,12 +57,13 @@ export async function verifyMailer(): Promise<void> {
   await getTransporter().verify();
 }
 
-export async function sendMail(input: { to: string; subject: string; text: string }): Promise<void> {
+export async function sendMail(input: { to: string; subject: string; text: string; html: string }): Promise<void> {
   const from = required("MAIL_FROM", mailFrom);
   await getTransporter().sendMail({
     from: mailFromName ? `"${mailFromName}" <${from}>` : from,
     to: input.to,
     subject: input.subject,
     text: input.text,
+    html: input.html,
   });
 }

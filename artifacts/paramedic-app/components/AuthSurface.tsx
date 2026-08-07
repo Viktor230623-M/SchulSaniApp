@@ -73,7 +73,7 @@ export function AuthField({
   visible?: boolean;
   onToggleVisibility?: () => void;
   keyboardType?: "default" | "email-address";
-  autoComplete?: "email" | "password" | "new-password" | "name";
+  autoComplete?: "email" | "password" | "new-password" | "name" | "username";
   onSubmitEditing?: () => void;
 }) {
   return (
