@@ -154,6 +154,18 @@ const ApiService = {
     return Array.isArray(data.identities) ? data.identities : [];
   },
 
+  async startAuthLink(providerKey: string, returnTo: string): Promise<string> {
+    const resp = await apiFetch(`${API_BASE}/auth/link/${encodeURIComponent(providerKey)}/start`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({ returnTo }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error ?? "Anmeldeweg konnte nicht verknuepft werden");
+    if (typeof data.redirectUrl !== "string") throw new Error("Weiterleitungsadresse fehlt");
+    return data.redirectUrl;
+  },
+
   /** URL des Weiterleitungsstarts eines Anmeldewegs (GET /auth/:provider/start). */
   getProviderStartUrl(providerKey: string, returnTo?: string, handoffChallenge?: string): string {
     const url = `${API_BASE}/auth/${encodeURIComponent(providerKey)}/start`;

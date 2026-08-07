@@ -34,6 +34,8 @@ export interface AuthResult {
   returnTo?: string;
   /** Gehashter Nachweis fuer den nativen Sitzungsuebergang. */
   handoffChallenge?: string;
+  /** Nutzerkonto, an das dieser OIDC-Weg gebunden werden soll. */
+  linkUserId?: string;
   /**
    * Nur beim lokalen Anbieter gesetzt: das gerade gepruefte Passwort war ein
    * Einmal-Passwort (Einladung oder Zuruecksetzen durch einen Verwalter).
@@ -74,7 +76,7 @@ export interface PasswordAuthProvider extends AuthProviderBase {
 /** Weiterleitungsbasierter Anmeldeweg mit OIDC Authorization Code und PKCE. */
 export interface RedirectAuthProvider extends AuthProviderBase {
   readonly type: "oidc-redirect";
-  beginRedirect(options?: { returnTo?: string; handoffChallenge?: string }): Promise<{ redirectUrl: string }>;
+  beginRedirect(options?: { returnTo?: string; handoffChallenge?: string; linkUserId?: string }): Promise<{ redirectUrl: string }>;
   completeRedirect(params: Record<string, string>): Promise<AuthResult>;
 }
 

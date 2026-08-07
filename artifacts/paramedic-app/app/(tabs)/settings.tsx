@@ -9,14 +9,17 @@ function formatFullName(firstName?: string, lastName?: string): string {
 
 import { Feather, Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import * as Linking from "expo-linking";
+import * as WebBrowser from "expo-web-browser";
 import * as ImagePicker from "expo-image-picker";
 import Constants from "expo-constants";
 import { ISERV_DOMAIN, SCHOOL_NAME } from "@/constants/appConfig";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Image,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -57,6 +60,7 @@ export default function SettingsScreen() {
   const setAvatarUri = useAppStore((s) => s.setAvatarUri);
   const logout = useAppStore((s) => s.logout);
   const roles = useRoles();
+  const linkParams = useLocalSearchParams<{ link?: string }>();
 
   const avatarUri = user ? (avatarUriMap[user.id] ?? null) : null;
 
@@ -64,7 +68,9 @@ export default function SettingsScreen() {
     "unsupported" | "needs-install" | "denied" | "granted" | "default"
   >("unsupported");
   const [identities, setIdentities] = useState<AuthIdentityInfo[]>([]);
+  const [providers, setProviders] = useState<Awaited<ReturnType<typeof ApiService.getAuthProviders>>>([]);
   const [loadingIdentities, setLoadingIdentities] = useState(false);
+  const [linkingProvider, setLinkingProvider] = useState<string | null>(null);
   const [identityError, setIdentityError] = useState(false);
 
   const [allUsers, setAllUsers] = useState<User[]>([]);
@@ -118,7 +124,47 @@ export default function SettingsScreen() {
 
   useEffect(() => {
     void loadIdentities();
+    ApiService.getAuthProviders().then(setProviders).catch(() => setProviders([]));
   }, [user?.id]);
+
+  useEffect(() => {
+    const result = Array.isArray(linkParams.link) ? linkParams.link[0] : linkParams.link;
+    if (result !== "success" && result !== "collision") return;
+    notify(
+      result === "success" ? t("settings.linkSuccess", lang) : t("settings.linkCollision", lang),
+      result === "success" ? undefined : t("settings.linkFailed", lang),
+    );
+    void loadIdentities();
+    router.replace("/(tabs)/settings");
+  }, [linkParams.link, lang]);
+
+  async function handleLink(providerKey: string) {
+    setLinkingProvider(providerKey);
+    try {
+      const returnUrl = Platform.OS === "web" ? `${window.location.origin}/settings` : Linking.createURL("settings");
+      const redirectUrl = await ApiService.startAuthLink(providerKey, returnUrl);
+      if (Platform.OS === "web") {
+        window.location.href = redirectUrl;
+        return;
+      }
+      const result = await WebBrowser.openAuthSessionAsync(redirectUrl, returnUrl);
+      const callback = result.type === "success" ? Linking.parse(result.url) : null;
+      const linkResult = typeof callback?.queryParams?.link === "string" ? callback.queryParams.link : null;
+      if (linkResult === "success") {
+        notify(t("settings.linkSuccess", lang));
+        await loadIdentities();
+      } else if (linkResult === "collision") {
+        notify(t("settings.linkCollision", lang), t("settings.linkFailed", lang));
+      } else if (result.type !== "cancel" && result.type !== "dismiss") {
+        notify(t("common.error", lang), t("settings.linkFailed", lang));
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : t("settings.linkFailed", lang);
+      notify(t("common.error", lang), message);
+    } finally {
+      setLinkingProvider(null);
+    }
+  }
 
   async function handleEnableWebPush() {
     const result = await enableWebPush();
@@ -441,6 +487,30 @@ export default function SettingsScreen() {
             </View>
           ))
         )}
+        {providers.filter((provider) => provider.type === "oidc-redirect" && !identities.some((identity) => identity.providerKey === provider.key)).map((provider) => {
+          const visual = provider.key === "google"
+            ? { icon: "logo-google" as const, color: "#EA4335" }
+            : provider.key === "microsoft"
+              ? { icon: "logo-microsoft" as const, color: "#00A4EF" }
+              : provider.key === "apple"
+                ? { icon: "logo-apple" as const, color: theme.text }
+                : { icon: "add-circle-outline" as const, color: theme.tint };
+          const busy = linkingProvider === provider.key;
+          return (
+            <Pressable
+              key={provider.key}
+              onPress={() => void handleLink(provider.key)}
+              disabled={linkingProvider !== null}
+              accessibilityRole="button"
+              accessibilityLabel={`${t("settings.addSignInMethod", lang)}: ${provider.displayName}`}
+              style={({ pressed }) => [styles.linkProviderRow, { borderColor: theme.cardBorder, backgroundColor: theme.backgroundTertiary, opacity: pressed || busy ? 0.7 : 1 }]}
+            >
+              <Ionicons name={visual.icon} size={18} color={visual.color} />
+              <Text style={[styles.userName, { color: theme.text, flex: 1 }]}>{provider.displayName}</Text>
+              {busy ? <ActivityIndicator size="small" color={theme.tint} /> : <Text style={[styles.linkProviderText, { color: theme.tint }]}>{t("settings.linkSignInMethod", lang)}</Text>}
+            </Pressable>
+          );
+        })}
       </View>
 
       <View style={[styles.section, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
@@ -1025,6 +1095,8 @@ const styles = StyleSheet.create({
   identityInfo: { flex: 1, marginLeft: 10 },
   identityRetry: { alignSelf: "center", borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 9 },
   identityRetryText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  linkProviderRow: { minHeight: 48, flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1 },
+  linkProviderText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
   activityTitle: { fontSize: 14, fontFamily: "Inter_500Medium" },
   activityDate: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
   statusBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
