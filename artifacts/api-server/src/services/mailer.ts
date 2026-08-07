@@ -8,6 +8,7 @@ const mailFrom = process.env["MAIL_FROM"]?.trim();
 const mailFromName = process.env["MAIL_FROM_NAME"]?.trim() || process.env["APP_NAME"]?.trim();
 const appBaseUrl = process.env["APP_BASE_URL"]?.trim()?.replace(/\/$/, "");
 const smtpSecure = process.env["SMTP_SECURE"] === "true";
+const smtpRequireTls = process.env["SMTP_REQUIRE_TLS"] !== "false";
 
 export const mailerConfig = {
   enabled: Boolean(smtpHost),
@@ -43,6 +44,7 @@ function getTransporter(): nodemailer.Transporter {
     port: smtpPort,
     secure: smtpSecure,
     auth: smtpUser && smtpPassword ? { user: smtpUser, pass: smtpPassword } : undefined,
+    requireTLS: smtpRequireTls,
     tls: { rejectUnauthorized: true },
   });
   return transporter;

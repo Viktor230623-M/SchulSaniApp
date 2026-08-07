@@ -133,6 +133,40 @@ vi.mock("../middlewares/auth", async () => {
       req.user = { userId, role: mockEntry.role };
       next();
     }),
+    requireAuthForPasswordChange: vi.fn(async (req: any, res: any, next: any) => {
+      const header = req.headers?.authorization || req.get?.("authorization") || "";
+      const token = header?.startsWith("Bearer ") ? header.slice(7) : header || "";
+      if (!token) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+      const userId = token.split("-").slice(2, -1).join("-") || "unknown";
+      const role = token.split("-").pop() || "sanitaeter";
+      const mockEntry = mockLiveUsers[userId] || { role: "sanitaeter", isApproved: true };
+      if (!mockEntry.isApproved) {
+        res.status(401).json({ error: "Invalid or expired token" });
+        return;
+      }
+      req.user = { userId, role: mockEntry.role };
+      next();
+    }),
+    requireAuthForLogout: vi.fn(async (req: any, res: any, next: any) => {
+      const header = req.headers?.authorization || req.get?.("authorization") || "";
+      const token = header?.startsWith("Bearer ") ? header.slice(7) : header || "";
+      if (!token) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+      const userId = token.split("-").slice(2, -1).join("-") || "unknown";
+      const role = token.split("-").pop() || "sanitaeter";
+      const mockEntry = mockLiveUsers[userId] || { role: "sanitaeter", isApproved: true };
+      if (!mockEntry.isApproved) {
+        res.status(401).json({ error: "Invalid or expired token" });
+        return;
+      }
+      req.user = { userId, role: mockEntry.role };
+      next();
+    }),
     requirePermission: (...perms: string[]) => {
       return (req: any, res: any, next: any) => {
         if (!req.user) {

@@ -1,5 +1,10 @@
 # Installer SchulSani
 
+Bash-Installer und Browser-Assistent sind zwei Schritte desselben Konfigurationswegs.
+Bash installiert System und Workspace, legt Datenbank und geschuetzte Arbeitsverzeichnisse
+an und startet den Assistenten. Der Assistent schreibt anschliessend Backend-.env,
+App-.env und aktive Anmeldewege. Es gibt keine zweite, abweichende Konfigurationsquelle.
+
 Bringt einen frischen Debian/Ubuntu-Server in eine laufende, per TLS
 erreichbare SchulSaniApp-Instanz. `install.sh` erledigt als `root` den
 Systemteil (Voraussetzungspruefung, Paketbeschaffung, Datenbank, Vorlagen
@@ -60,19 +65,22 @@ sudo ops/install/install.sh --update
 5. Kopiert `ecosystem.config.js` (PM2-Vorlage) nach `/etc/schulsani/` und
    `nginx.conf.template` (nginx-Vorlage) nach `/etc/nginx/schulsani/` —
    beide mit Platzhaltern, noch ohne konkrete Werte.
-6. Startet den Einrichtungsassistenten (`ops/install/assistant/server.js`)
-   auf einem zufaelligen Port (40000–49999), gibt eine Einmal-URL mit Token
-   im Terminal aus und wartet im Vordergrund, bis die Einrichtung im
-   Browser abgeschlossen ist oder 60 Minuten ohne Eingabe vergehen. Der
-   Assistent fragt Domain, Schulname, IServ-Domain, Mail-Domain,
-   Anwendungsname, Themefarbe, Bundle-Kennung und optionale Werte ab,
-   erzeugt `JWT_SECRET` und das VAPID-Schluesselpaar, schreibt
-   `artifacts/api-server/.env` und `artifacts/paramedic-app/.env`
-   (`chmod 600`) und fragt in einem eigenen, klar beschrifteten Schritt
-   ("Wer wird Eigentuemer dieser Instanz?"), welches IServ-Konto die Rolle
-   `owner` erhaelt — mit Vorabfreigabe, damit die erste Anmeldung nicht auf
-   eine nicht existierende zweite Person zum Freigeben wartet.
-7. Spielt Migrationen ein (`pnpm --filter @workspace/db migrate`).
+6. Installiert die Workspace-Abhaengigkeiten und startet den Einrichtungsassistenten
+   (`ops/install/assistant/server.js`) auf einem zufaelligen Port (40000–49999).
+   Die Einmal-URL mit Token erscheint im Terminal; der Assistent wartet im
+   Vordergrund, bis die Einrichtung im Browser abgeschlossen ist oder 60 Minuten
+   ohne Eingabe vergehen. Bash und Browser verwenden denselben Vertrag: Der
+   Assistent fragt Domain, Schulname, Anmeldemodus, SMTP-Mailserver,
+   Anwendungsname, Themefarbe, Bundle-Kennung und optionale Werte ab. Erzeugt
+   `JWT_SECRET` und das VAPID-Schluesselpaar, schreibt
+   `artifacts/api-server/.env`, `artifacts/paramedic-app/.env` und
+   `/etc/schulsani/auth-providers.json` jeweils mit restriktiven Dateirechten.   Lokale E-Mail-Anmeldung und OIDC sind vorgesehen; E-Mail kann zusammen mit
+   bis zu zwei OIDC-Anbietern aktiviert werden. Eine alte Formularanmeldung
+   wird nicht automatisch wieder aktiviert. Im letzten Schritt wird das erste
+   freigegebene Eigentuimerkonto angelegt.
+7. Installiert die Workspace-Abhaengigkeiten, spielt Migrationen mit der
+   bereitgestellten Datenbank-URL ein und startet danach den Browser-Assistenten
+   fuer die Einrichtung und das erste Eigentuimerkonto.
 8. Raeumt `/tmp/metro-cache` auf (dort lagen auf dem Bestandsserver einmal
    Reste eines fremden Laufs, die falsche Instanzwerte in `dist/` getragen
    haben) und baut den Web-Export (`npx expo export --platform web`).
@@ -107,8 +115,8 @@ Klartext protokolliert.
 - `artifacts/api-server/.env` und `artifacts/paramedic-app/.env` enthalten
   die vom Assistenten geschriebenen Werte — stichprobenartig gegen die
   Eingabe pruefen, Dateirechte muessen `600` sein.
-- `/etc/schulsani/role-map.json` enthaelt die IServ-Kennung des
-  Eigentuemer-Kontos mit Rolle `owner`.
+- `/etc/schulsani/auth-providers.json` enthaelt nur die im Assistenten
+  aktivierten lokalen oder OIDC-Anmeldewege.
 - `pm2 status sani-backend` — Prozess laeuft, `pm2 logs sani-backend` bei
   Auffaelligkeiten.
 - `systemctl status postgresql nginx` — beide Dienste laufen.
@@ -116,6 +124,9 @@ Klartext protokolliert.
 
 ## Offene Punkte
 
+- SMTP-Erreichbarkeit wird beim ersten lokalen Registrierungsversuch mit
+  `verifyMailer()` geprueft; der Installer testet absichtlich keinen
+  Mailversand und protokolliert keine Zugangsdaten.
 - Kein automatisches Firewall-Handling (ufw) — falls eine Firewall aktiv
   ist, muessen Ports von Hand freigegeben werden, inklusive des
   zufaelligen Assistent-Ports waehrend der Einrichtung.
