@@ -511,7 +511,10 @@ function buildBackendEnv(cfg, secrets) {
     envLine("JWT_SECRET", secrets.jwtSecret),
     "NODE_ENV=production",
     envLine("ALLOWED_ORIGINS", allowedOrigins),
-    "AUTH_PROVIDERS_PATH=/etc/schulsani/auth-providers.json",
+    // Muss zum Pfad passen, in den writeAuthProvidersFile() schreibt — der
+    // kommt aus SCHULSANI_AUTH_PROVIDERS_PATH und ist auf Mehrinstanz-
+    // Servern nicht immer die Produktionsdatei.
+    envLine("AUTH_PROVIDERS_PATH", AUTH_PROVIDERS_PATH),
     envLine("APP_NAME", cfg.appName),
     envLine("SCHOOL_ID", cfg.schoolId || "school"),
     envLine("OWNER_USER_ID", cfg.ownerUserId || ""),
