@@ -1,6 +1,15 @@
 import * as fs from "node:fs";
+import { createLocalProvider } from "./providers/local";
 import { createOidcRedirectProvider } from "./providers/oidc";
 import type { AuthProvider } from "./types";
+
+interface RawLocalProviderConfig {
+  key: string;
+  displayName: string;
+  type: "local";
+  schoolId?: string;
+  groupToRoleMap?: Record<string, string>;
+}
 
 interface RawOidcRedirectProviderConfig {
   key: string;
@@ -25,7 +34,21 @@ interface RawOidcRedirectProviderConfig {
 
 const EXAMPLE_FILE = "ops/install/auth-providers.example.json";
 
-function buildProvider(raw: RawOidcRedirectProviderConfig): AuthProvider {
+function buildProvider(raw: RawLocalProviderConfig | RawOidcRedirectProviderConfig): AuthProvider {
+  if (raw.type === "local") {
+    if (!raw.key || !raw.displayName) {
+      throw new Error(`Anmeldeweg "${raw.key ?? "?"}" ist unvollstaendig konfiguriert (key und displayName erforderlich).`);
+    }
+    return {
+      ...createLocalProvider({
+        key: raw.key,
+        displayName: raw.displayName,
+        schoolId: raw.schoolId ?? process.env["SCHOOL_ID"]?.trim() ?? "school",
+      }),
+      groupToRoleMap: raw.groupToRoleMap ?? {},
+    };
+  }
+
   if (!raw.key || !raw.displayName || !raw.issuerUrl || !raw.clientId || !raw.redirectUri) {
     throw new Error(
       `Anmeldeweg "${raw.key ?? "?"}" ist unvollstaendig konfiguriert (key, displayName, issuerUrl, clientId, redirectUri erforderlich).`,
@@ -77,7 +100,7 @@ export function loadAuthProviders(): AuthProvider[] {
   if (!providersPath) {
     throw new Error(
       `AUTH_PROVIDERS_PATH ist nicht gesetzt. Diese Installation kennt ohne sie keinen Anmeldeweg. ` +
-        `Setze die Variable auf den Pfad einer JSON-Datei mit OIDC-Eintraegen ` +
+        `Setze die Variable auf den Pfad einer JSON-Datei mit lokalen oder OIDC-Eintraegen ` +
         `(je Eintrag mindestens key, displayName, type, issuerUrl, clientId und redirectUri). ` +
         `Beispielaufbau: ${EXAMPLE_FILE}.`,
     );
@@ -99,12 +122,21 @@ export function loadAuthProviders(): AuthProvider[] {
     );
   }
 
+  // Veraltete Formularanbieter bleiben in alten Dateien harmlos, werden aber
+  // nicht mehr gebaut. Aktiv sind nur lokale Konten und OIDC.
   const active = raw.filter((entry) => {
     const typed = entry as { enabled?: boolean; type?: string };
-    return typed.enabled !== false && typed.type === "oidc-redirect";
+    return typed.enabled !== false && (typed.type === "local" || typed.type === "oidc-redirect");
   });
 
-  const providers = active.map((entry) => buildProvider(entry as RawOidcRedirectProviderConfig));
+  if (active.length === 0) {
+    throw new Error(`Keine lokalen oder OIDC-Anmeldewege in "${providersPath}" aktiviert.`);
+  }
+
+  const providers = active.map((entry) => buildProvider(entry as RawLocalProviderConfig | RawOidcRedirectProviderConfig));
+  if (providers.filter((provider) => provider.type === "local").length > 1) {
+    throw new Error("Es darf nur ein lokaler Anmeldeweg aktiviert sein.");
+  }
   const keys = new Set<string>();
   for (const provider of providers) {
     if (keys.has(provider.key)) throw new Error(`Anmeldeweg-Schluessel "${provider.key}" ist doppelt.`);

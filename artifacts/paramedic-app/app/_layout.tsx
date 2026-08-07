@@ -32,8 +32,10 @@ function RootLayoutNav() {
   const login = useAppStore((s) => s.login);
   const setToken = useAppStore((s) => s.setToken);
   const theme = getTheme(useAppStore((s) => s.theme));
-  const profileConfirmedAt = useAppStore((s) => s.user?.profileConfirmedAt);
+  const user = useAppStore((s) => s.user);
+  const profileConfirmedAt = user?.profileConfirmedAt;
   const needsProfileConfirmation = authStatus === "authed" && profileConfirmedAt === null;
+  const needsPasswordChange = authStatus === "authed" && user?.mustChangePassword === true;
 
   useEffect(() => {
     if (token) setAuthToken(token);
@@ -89,7 +91,7 @@ function RootLayoutNav() {
         contentStyle: { backgroundColor: theme.background },
       }}
     >
-      <Stack.Protected guard={authStatus === "authed" && !needsProfileConfirmation}>
+      <Stack.Protected guard={authStatus === "authed" && !needsPasswordChange && !needsProfileConfirmation}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="report/index" options={{ headerShown: false }} />
         <Stack.Screen name="report/[id]" options={{ headerShown: false }} />
@@ -98,12 +100,19 @@ function RootLayoutNav() {
         <Stack.Screen name="admin/roles" options={{ headerShown: false }} />
         <Stack.Screen name="activity-log" />
       </Stack.Protected>
-      <Stack.Protected guard={needsProfileConfirmation}>
+      <Stack.Protected guard={needsPasswordChange}>
+        <Stack.Screen name="passwort-wechseln" options={{ headerShown: false }} />
+      </Stack.Protected>
+      <Stack.Protected guard={needsProfileConfirmation && !needsPasswordChange}>
         <Stack.Screen name="name-bestaetigen" options={{ headerShown: false }} />
       </Stack.Protected>
       <Stack.Protected guard={authStatus === "anon"}>
         <Stack.Screen name="login" options={{ headerShown: false }} />
-
+        <Stack.Screen name="registrieren" options={{ headerShown: false }} />
+        <Stack.Screen name="email-bestaetigen" options={{ headerShown: false }} />
+        <Stack.Screen name="freischaltung-warten" options={{ headerShown: false }} />
+        <Stack.Screen name="passwort-vergessen" options={{ headerShown: false }} />
+        <Stack.Screen name="passwort-zuruecksetzen" options={{ headerShown: false }} />
       </Stack.Protected>
     </Stack>
   );

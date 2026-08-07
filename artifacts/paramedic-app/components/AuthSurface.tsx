@@ -16,6 +16,8 @@ import { MedicalCross } from "@/components/MedicalCross";
 import { useTopPad } from "@/hooks/useTopPad";
 import { getTheme } from "@/constants/theme";
 import { SCHOOL_NAME } from "@/constants/appConfig";
+import { t } from "@/constants/i18n";
+import { useAppStore } from "@/store/useAppStore";
 
 export type AuthTheme = ReturnType<typeof getTheme>;
 
@@ -76,6 +78,8 @@ export function AuthField({
   autoComplete?: "email" | "password" | "new-password" | "name" | "username";
   onSubmitEditing?: () => void;
 }) {
+  const lang = useAppStore((s) => s.language);
+
   return (
     <View style={styles.field}>
       <Text style={[styles.label, { color: theme.textSecondary }]}>{label}</Text>
@@ -95,7 +99,7 @@ export function AuthField({
           returnKeyType={onSubmitEditing ? "done" : "next"}
         />
         {password && onToggleVisibility && (
-          <Pressable accessibilityRole="button" accessibilityLabel={visible ? "Passwort verbergen" : "Passwort anzeigen"} onPress={onToggleVisibility} style={styles.iconButton}>
+          <Pressable accessibilityRole="button" accessibilityLabel={visible ? t("auth.hidePassword", lang) : t("auth.showPassword", lang)} onPress={onToggleVisibility} style={styles.iconButton}>
             <Ionicons name={visible ? "eye-off-outline" : "eye-outline"} size={20} color={theme.textTertiary} />
           </Pressable>
         )}

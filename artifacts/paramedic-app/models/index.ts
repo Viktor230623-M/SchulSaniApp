@@ -21,6 +21,7 @@ export interface User {
   permissions?: string[];
   /** `null`: Name noch nicht bestaetigt, Sperre aktiv. Zeitstempel: bestaetigt. */
   profileConfirmedAt: string | null;
+  mustChangePassword?: boolean;
   avatarUri?: string;
   createdAt: string;
   updatedAt: string;

@@ -10,6 +10,7 @@ interface FakeUserRow {
   profileConfirmedAt: Date | null;
   authProvider: string;
   emailVerifiedAt: Date | null;
+  passwordVersion: number;
   firstName: string | null;
   lastName: string | null;
   email: string | null;
@@ -42,6 +43,7 @@ vi.mock("@workspace/db", async () => {
     lastName: text("last_name"),
     email: text("email"),
     emailVerifiedAt: text("email_verified_at"),
+    passwordVersion: text("password_version"),
     username: text("username"),
   });
 
@@ -126,7 +128,7 @@ vi.mock("@workspace/db", async () => {
 // Datenbank. Das Cookie "gueltig" loest hier auf die uebergebene Nutzer-ID
 // auf, alles andere gilt als abgelaufen.
 vi.mock("../lib/sessions", () => ({
-  resolveSession: async (raw: string) => (raw.startsWith("gueltig:") ? { userId: raw.slice("gueltig:".length) } : null),
+  resolveSession: async (raw: string) => (raw.startsWith("gueltig:") ? { userId: raw.slice("gueltig:".length), authenticatedAt: new Date("2026-08-01T10:00:00Z") } : null),
   createSession: async () => "irrelevant",
   revokeSession: async () => {},
 }));
@@ -145,6 +147,7 @@ function makeUser(overrides: Partial<FakeUserRow> = {}): FakeUserRow {
     profileConfirmedAt: null,
     authProvider: "oidc-beispiel",
     emailVerifiedAt: new Date(),
+    passwordVersion: 0,
     firstName: "Vorschlag",
     lastName: "Nachname",
     email: `${id}@vitest.beispiel.invalid`,
@@ -153,7 +156,7 @@ function makeUser(overrides: Partial<FakeUserRow> = {}): FakeUserRow {
 }
 
 function tokenFor(user: FakeUserRow): string {
-  return signToken({ userId: user.id, role: user.role });
+  return signToken({ userId: user.id, role: user.role, passwordVersion: user.passwordVersion });
 }
 
 describe("Namensbestaetigung -- Sperre, Endpunkt, Verwalter-Korrektur", () => {
