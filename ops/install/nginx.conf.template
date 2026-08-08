@@ -10,7 +10,8 @@
 # Standard-Ports (80/443 frei): certbot --nginx ergaenzt danach automatisch
 # die TLS-Direktiven direkt in diesem Block. Benutzerdefinierte Ports
 # (--https-port / SCHULSANI_HTTPS_PORT): install.sh holt das Zertifikat mit
-# certbot certonly --standalone und haengt den TLS-Block separat an.
+# certbot certonly --webroot (nginx bedient die Challenge auf Port 80) und
+# haengt den TLS-Block separat an.
 #
 # Manuelle Verwendung (ohne install.sh):
 #   sed -e 's#<DOMAIN>#sani.beispiel-schule.de#g' \

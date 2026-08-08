@@ -127,7 +127,8 @@ Verwendung: install.sh [--dry-run] [--update] [--http-port N] [--https-port N] [
                   Auf einem geteilten Server freie Ports waehlen, z. B. 8080.
   --https-port N  HTTPS-Port der Instanz (Standard: 443, sonst SCHULSANI_HTTPS_PORT).
                   Bei einem benutzerdefinierten Port holt install.sh das
-                  Zertifikat ueber certbot --standalone mit --http-01-port.
+                  Zertifikat ueber certbot --webroot (nginx bedient die
+                  Challenge auf Port 80).
   --backend-port N
                   Interner API-Port (Standard: 3002, sonst SCHULSANI_BACKEND_PORT).
 
@@ -279,7 +280,7 @@ step_check_ports() {
   done
   if [[ "$all_free" -ne 1 ]]; then
     fail_with "Mindestens ein benoetigter Port ist belegt." \
-      "Belegenden Dienst stoppen (ss -tlnp) oder freie Ports waehlen: --http-port / --https-port (bzw. SCHULSANI_HTTP_PORT / SCHULSANI_HTTPS_PORT). Bei benutzerdefinierten Ports holt install.sh das TLS-Zertifikat ueber certbot --standalone."
+      "Belegenden Dienst stoppen (ss -tlnp) oder freie Ports waehlen: --http-port / --https-port (bzw. SCHULSANI_HTTP_PORT / SCHULSANI_HTTPS_PORT). Bei benutzerdefinierten Ports holt install.sh das TLS-Zertifikat ueber certbot --webroot."
   fi
 }
 
@@ -757,7 +758,7 @@ step_setup_tls() {
     return 0
   fi
 
-  local script_dir app_root domain dist_path site_file resolved_ip server_ip
+  local script_dir app_root domain dist_path site_file acme_file resolved_ip server_ip
   script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   app_root="$(cd "${script_dir}/../.." && pwd)"
   domain="$(read_env_value "${app_root}/artifacts/paramedic-app/.env" "EXPO_PUBLIC_DOMAIN")"
@@ -824,27 +825,57 @@ step_setup_tls() {
     fi
     step_ok "TLS-Zertifikat fuer ${host} bezogen."
   else
-    # eigener HTTPS-Port: Zertifikat zuerst holen, solange nginx den HTTP-Port
-    # noch nicht haelt (certbot --standalone bindet ihn selbst kurz).
+    # eigener HTTPS-Port. Let's Encrypt validiert http-01 immer ueber Port 80,
+    # egal auf welchem Port die Instanz lauscht — ein Standalone-certbot auf
+    # einem anderen Port wird nie abgerufen. Deshalb bedient nginx die
+    # Challenge selbst aus dem webroot: ein kleiner Server-Block auf Port 80
+    # fuer genau diesen Hostnamen, der nur /.well-known/acme-challenge/
+    # ausliefert. Auf einem geteilten Server teilt er sich Port 80 mit den
+    # anderen Sites ueber server_name.
+    run mkdir -p /var/www/letsencrypt
+    acme_file="/etc/nginx/sites-available/schulsani-acme"
+    cat >"$acme_file" <<EOF
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${host};
+
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/letsencrypt;
+    }
+    location / {
+        return 404;
+    }
+}
+EOF
+    log_line "BEFEHL: ACME-Block fuer ${host} nach ${acme_file} gerendert (Port 80, webroot)."
+    run ln -sf "$acme_file" "/etc/nginx/sites-enabled/schulsani-acme"
+    run nginx -t
+    run systemctl reload nginx
+    step_ok "ACME-Challenge-Block fuer ${host} auf Port 80 aktiviert."
+
     set +e
-    certbot certonly --standalone --http-01-port "$HTTP_PORT" --non-interactive --agree-tos -m "admin@${host#*.}" -d "$host"
+    certbot certonly --webroot -w /var/www/letsencrypt --non-interactive --agree-tos -m "admin@${host#*.}" -d "$host"
     local rc=$?
     set -e
     if [[ "$rc" -ne 0 ]]; then
-      # Fallback ohne TLS, damit die Instanz trotzdem nutzbar ist.
+      # Fallback ohne TLS, damit die Instanz trotzdem nutzbar ist. Der
+      # ACME-Block bleibt liegen — er schadet nicht und ermoeglicht den
+      # Hand-Nachholweg unten.
       sed -e "s#<DOMAIN>#${host}#g" -e "s#<HTTP_PORT>#${HTTP_PORT}#g" \
         "${script_dir}/nginx.conf.template" >"$site_file"
       log_line "BEFEHL: nginx-Site fuer ${host} ohne TLS gerendert (http ${HTTP_PORT})."
       run ln -sf "$site_file" "/etc/nginx/sites-enabled/schulsani"
       run nginx -t
       run systemctl reload nginx
-      step_fail "certbot --standalone fehlgeschlagen (Code ${rc}). Die Seite laeuft vorerst ohne TLS ueber http://${host}:${HTTP_PORT}."
-      printf '  Von Hand nachholen: certbot certonly --standalone --http-01-port %s -d %s,\n  dann den TLS-Block an %s anhaengen (Vorlage: ops/install/nginx.conf.template).\n' \
-        "$HTTP_PORT" "$host" "$site_file"
+      step_fail "certbot fehlgeschlagen (Code ${rc}). Die Seite laeuft vorerst ohne TLS ueber http://${host}:${HTTP_PORT}."
+      printf '  Von Hand nachholen: certbot certonly --webroot -w /var/www/letsencrypt -d %s,\n  dann den TLS-Block an %s anhaengen (Vorlage: ops/install/nginx.conf.template).\n' \
+        "$host" "$site_file"
       return 0
     fi
 
     # HTTP-Block leitet auf den HTTPS-Port um, TLS-Block bedient die Seite.
+    # Der ACME-Block bleibt aktiv — certbot renew nutzt denselben webroot.
     cat >"$site_file" <<EOF
 server {
     listen ${HTTP_PORT};
