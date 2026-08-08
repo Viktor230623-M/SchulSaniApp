@@ -542,9 +542,12 @@ router.post("/local/password/forgot", resetIpLimiter, resetEmailLimiter, async (
     return;
   }
   await hashPassword(email);
-  const [user] = await db.select({ id: usersTable.id, email: usersTable.email }).from(usersTable).where(and(eq(usersTable.email, email), eq(usersTable.authProvider, getLocalProvider().key))).limit(1);
+  // Reset nur fuer bestaetigte Adressen. Eine unbestaetigte Adresse gehoert
+  // moeglicherweise gar nicht dem Kontoinhaber (Verwalter-Korrektur, noch
+  // nicht bestaetigt); eine Reset-Mail dorthin waere eine Uebernahmekette.
+  const [user] = await db.select({ id: usersTable.id, email: usersTable.email, emailVerifiedAt: usersTable.emailVerifiedAt }).from(usersTable).where(and(eq(usersTable.email, email), eq(usersTable.authProvider, getLocalProvider().key))).limit(1);
   let mail: { to: string; subject: string; text: string; html: string } | undefined;
-  if (user) {
+  if (user && user.emailVerifiedAt) {
     const token = await issueAuthToken(user.id, "password_reset", new Date(Date.now() + 60 * 60 * 1000));
     const text = `Setze dein Passwort innerhalb von 60 Minuten neu:\n\n${authLink("passwort-zuruecksetzen", token)}`;
     mail = { to: email, subject: "Passwort zuruecksetzen", text, html: htmlMailText(text) };

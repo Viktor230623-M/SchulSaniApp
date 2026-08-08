@@ -286,8 +286,12 @@ router.patch("/:id/profile", requireAuth, requirePermission("users.correct_profi
     }
     if (cleanEmail !== undefined && cleanEmail !== locked.email) {
       changes.email = cleanEmail;
-      // Der Verwalter hat die Adresse geprueft -- sie gilt damit als bestaetigt.
-      changes.emailVerifiedAt = new Date();
+      // Eine korrigierte Adresse gilt nicht automatisch als bestaetigt.
+      // Wuerde der Verwalter sie als geprueft markieren, koennte er eine
+      // Adresse unter seiner Kontrolle eintragen und ueber den Passwort-Reset
+      // das Konto uebernehmen; erst die Bestaetigung durch den Kontoinhaber
+      // (Link an die neue Adresse) hebt die Sperre auf.
+      changes.emailVerifiedAt = null;
       // Bei lokalen Konten ist die Adresse zugleich das Anmelde-Subjekt.
       // Bleibt externalSubject alt, akzeptiert der Login die alte Adresse
       // weiter -- deshalb muss die Korrektur sie mitziehen.

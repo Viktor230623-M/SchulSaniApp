@@ -323,6 +323,7 @@ export default function SettingsScreen() {
         t("settings.correctEmailConfirm", lang)
           .replace("{oldEmail}", u.email ?? "—")
           .replace("{email}", email),
+        t("settings.correctEmailVerifyHint", lang),
       );
     }
     const confirmed = await confirmAction({
