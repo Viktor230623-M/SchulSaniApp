@@ -272,6 +272,18 @@ const ApiService = {
     return Array.isArray(data.identities) ? data.identities : [];
   },
 
+  /** Entfernt einen verknuepften Anmeldeweg (DELETE /auth/identities/:id). */
+  async removeAuthIdentity(id: string): Promise<void> {
+    const resp = await apiFetch(`${API_BASE}/auth/identities/${id}`, {
+      method: "DELETE",
+      headers: headers(),
+    });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      throw new Error(data.error ?? "Anmeldeweg konnte nicht entfernt werden");
+    }
+  },
+
   async startAuthLink(providerKey: string, returnTo: string): Promise<string> {
     const resp = await apiFetch(`${API_BASE}/auth/link/${encodeURIComponent(providerKey)}/start`, {
       method: "POST",

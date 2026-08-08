@@ -71,6 +71,7 @@ export default function SettingsScreen() {
   const [providers, setProviders] = useState<Awaited<ReturnType<typeof ApiService.getAuthProviders>>["providers"]>([]);
   const [loadingIdentities, setLoadingIdentities] = useState(false);
   const [linkingProvider, setLinkingProvider] = useState<string | null>(null);
+  const [removingIdentity, setRemovingIdentity] = useState<string | null>(null);
   const [identityError, setIdentityError] = useState(false);
 
   const [allUsers, setAllUsers] = useState<User[]>([]);
@@ -137,6 +138,27 @@ export default function SettingsScreen() {
     void loadIdentities();
     router.replace("/(tabs)/settings");
   }, [linkParams.link, lang]);
+
+  async function handleRemoveIdentity(identity: AuthIdentityInfo) {
+    const confirmed = await confirmAction({
+      title: t("settings.removeIdentityTitle", lang),
+      message: t("settings.removeIdentityConfirm", lang).replace("{name}", identity.displayName),
+      confirmLabel: t("settings.removeIdentityButton", lang),
+      cancelLabel: t("common.cancel", lang),
+      destructive: true,
+    });
+    if (!confirmed) return;
+    setRemovingIdentity(identity.id);
+    try {
+      await ApiService.removeAuthIdentity(identity.id);
+      await loadIdentities();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (err) {
+      await notify(t("common.error", lang), err instanceof Error ? err.message : t("settings.removeIdentityFailed", lang));
+    } finally {
+      setRemovingIdentity(null);
+    }
+  }
 
   async function handleLink(providerKey: string) {
     setLinkingProvider(providerKey);
@@ -494,7 +516,27 @@ export default function SettingsScreen() {
                   {t("settings.linkedOn", lang).replace("{date}", new Date(identity.createdAt).toLocaleDateString(lang === "de" ? "de-DE" : "en-US"))}
                 </Text>
               </View>
-              <Ionicons name="checkmark-circle" size={20} color={theme.success} />
+              {identities.length > 1 ? (
+                <Pressable
+                  onPress={() => void handleRemoveIdentity(identity)}
+                  disabled={removingIdentity === identity.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={t("settings.removeIdentity", lang)}
+                  hitSlop={8}
+                  style={({ pressed }) => [
+                    styles.removeIdentityBtn,
+                    { opacity: pressed || removingIdentity === identity.id ? 0.5 : 1 },
+                  ]}
+                >
+                  {removingIdentity === identity.id ? (
+                    <ActivityIndicator size="small" color={theme.danger} />
+                  ) : (
+                    <Ionicons name="trash-outline" size={18} color={theme.danger} />
+                  )}
+                </Pressable>
+              ) : (
+                <Ionicons name="checkmark-circle" size={20} color={theme.success} />
+              )}
             </View>
           ))
         )}
@@ -1118,6 +1160,7 @@ const styles = StyleSheet.create({
   activityInfo: { flex: 1 },
   identityRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12, borderTopWidth: StyleSheet.hairlineWidth },
   identityIcon: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
+  removeIdentityBtn: { width: 34, height: 34, borderRadius: 9, alignItems: "center", justifyContent: "center" },
   identityInfo: { flex: 1, marginLeft: 10 },
   identityRetry: { alignSelf: "center", borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 9 },
   identityRetryText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },

@@ -292,6 +292,19 @@ export const profileChangeLogTable = pgTable("profile_change_log", {
   createdAt: timestamp("created_at").defaultNow(),
 }, (t) => [index("profile_change_log_created_idx").on(t.createdAt)]);
 
+// Wer hat wann welchen Anmeldeweg hinzugefuegt oder entfernt. Selbstbedienung:
+// der Kontoinhaber ist Handelnder und Betroffener zugleich, deshalb eine
+// userId statt actorId/targetUserId wie bei role_change_log. Aufbewahrung 12
+// Monate wie role_change_log -- eine Kontoverknuepfung steuert den Zugriff auf
+// Gesundheitsdaten.
+export const identityChangeLogTable = pgTable("identity_change_log", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  providerKey: text("provider_key").notNull(),
+  action: text("action").notNull(), // link | unlink
+  createdAt: timestamp("created_at").defaultNow(),
+}, (t) => [index("identity_change_log_created_idx").on(t.createdAt)]);
+
 // Wer hat wann welches Einsatzprotokoll gelesen. Erforderlich fuer den
 // Rechenschaftsnachweis nach Art. 5 Abs. 2 DSGVO. Aufbewahrung 12 Monate.
 export const reportAccessLogTable = pgTable("report_access_log", {
@@ -351,6 +364,8 @@ export type ReportAccessLog = typeof reportAccessLogTable.$inferSelect;
 export type NewReportAccessLog = typeof reportAccessLogTable.$inferInsert;
 export type ProfileChangeLog = typeof profileChangeLogTable.$inferSelect;
 export type NewProfileChangeLog = typeof profileChangeLogTable.$inferInsert;
+export type IdentityChangeLog = typeof identityChangeLogTable.$inferSelect;
+export type NewIdentityChangeLog = typeof identityChangeLogTable.$inferInsert;
 export const rolesTable = pgTable("roles", {
   id: text("id").primaryKey(),
   schoolId: text("school_id"),

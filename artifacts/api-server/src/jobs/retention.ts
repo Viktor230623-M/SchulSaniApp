@@ -2,6 +2,7 @@ import { and, eq, lt, or, sql } from "drizzle-orm";
 import {
   db,
   dbConsoleLogTable,
+  identityChangeLogTable,
   incidentReportsTable,
   loaTable,
   missionActivityLogTable,
@@ -94,6 +95,12 @@ export async function runRetention(now: Date = new Date()): Promise<RetentionRes
     .where(lt(profileChangeLogTable.createdAt, cutoffs.profileChangeLog))
     .returning({ id: profileChangeLogTable.id });
   results.push({ table: "profile_change_log", action: "deleted", count: profileChanges.length });
+
+  const identityChanges = await db
+    .delete(identityChangeLogTable)
+    .where(lt(identityChangeLogTable.createdAt, cutoffs.identityChangeLog))
+    .returning({ id: identityChangeLogTable.id });
+  results.push({ table: "identity_change_log", action: "deleted", count: identityChanges.length });
 
   // Einsatzhistorie wird anonymisiert, nicht geloescht: die Statistik bleibt
   // erhalten, der Personenbezug entfaellt.
