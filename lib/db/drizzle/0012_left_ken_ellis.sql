@@ -1,0 +1,2 @@
+ALTER TABLE "report_access_log" ADD COLUMN "school_id" text;--> statement-breakpoint
+UPDATE "report_access_log" AS r SET "school_id" = u."school_id" FROM "users" AS u WHERE u."id" = r."user_id" AND r."school_id" IS NULL;
