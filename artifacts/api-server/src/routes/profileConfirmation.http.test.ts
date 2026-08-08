@@ -360,7 +360,7 @@ describe("Namensbestaetigung -- Sperre, Endpunkt, Verwalter-Korrektur", () => {
       expect(profileChangeEntries).toHaveLength(0);
     });
 
-    it("korrigiert die E-Mail-Adresse, markiert sie als bestaetigt und protokolliert sie", async () => {
+    it("korrigiert die E-Mail-Adresse, entzieht ihr den Bestaetigt-Status und protokolliert sie", async () => {
       const actor = makeUser({ id: "actor-admin-mail", role: "admin", profileConfirmedAt: new Date() });
       const target = makeUser({ id: "target-mail", email: "alt@vitest.beispiel.invalid", emailVerifiedAt: null });
       fakeUsers[actor.id] = actor;
@@ -374,11 +374,29 @@ describe("Namensbestaetigung -- Sperre, Endpunkt, Verwalter-Korrektur", () => {
 
       expect(result.status).toBe(200);
       expect(fakeUsers[target.id]!.email).toBe("neu@vitest.beispiel.invalid");
-      expect(fakeUsers[target.id]!.emailVerifiedAt).not.toBeNull();
+      // Erst die Bestaetigung durch den Kontoinhaber hebt den Status wieder
+      // an; der Verwalter darf eine Adresse nicht selbst freischalten.
+      expect(fakeUsers[target.id]!.emailVerifiedAt).toBeNull();
       const emailEntry = profileChangeEntries.find((e) => e.field === "email");
       expect(emailEntry).toBeDefined();
       expect(emailEntry!.before).toBe("alt@vitest.beispiel.invalid");
       expect(emailEntry!.after).toBe("neu@vitest.beispiel.invalid");
+    });
+
+    it("entzieht einer zuvor bestaetigten Adresse den Status bei Korrektur", async () => {
+      const actor = makeUser({ id: "actor-admin-mail-2", role: "admin", profileConfirmedAt: new Date() });
+      const target = makeUser({ id: "target-mail-2", email: "alt@vitest.beispiel.invalid", emailVerifiedAt: new Date("2026-07-01T10:00:00Z") });
+      fakeUsers[actor.id] = actor;
+      fakeUsers[target.id] = target;
+
+      const result = await call("PATCH", `/api/users/${target.id}/profile`, tokenFor(actor), {
+        firstName: target.firstName,
+        lastName: target.lastName,
+        email: "neu@vitest.beispiel.invalid",
+      });
+
+      expect(result.status).toBe(200);
+      expect(fakeUsers[target.id]!.emailVerifiedAt).toBeNull();
     });
 
     it("verweigert eine bereits vergebene E-Mail-Adresse mit 409", async () => {
