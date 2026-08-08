@@ -971,6 +971,45 @@
   el("authMode").addEventListener("change", updateAuthFields);
   updateAuthFields();
 
+  // Die Schul-Kennung darf auf diesem Server nur einmal vergeben sein. Der
+  // Server entscheidet beim Speichern endgueltig; hier wird nur fruehzeitig
+  // gewarnt, damit man nicht erst am Ende merkt, dass die Kennung belegt ist.
+  var schoolIdTakenMsg = "Diese Schul-Kennung ist bereits vergeben.";
+  var schoolIdTakenFlag = false;
+  var schoolIdTimer = null;
+  el("schoolId").addEventListener("input", function () {
+    clearTimeout(schoolIdTimer);
+    schoolIdTimer = setTimeout(function () {
+      var v = el("schoolId").value.trim();
+      if (v === "") {
+        schoolIdTakenFlag = false;
+        setFieldError("schoolId", "");
+        return;
+      }
+      fetch("/api/check-school-id?v=" + encodeURIComponent(v), { headers: { "Accept": "application/json" } })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          schoolIdTakenFlag = Boolean(data && data.taken);
+          setFieldError("schoolId", schoolIdTakenFlag ? schoolIdTakenMsg : "");
+        })
+        .catch(function () {
+          // Netzwerkfehler: nur die serverseitige Pruefung beim Speichern entscheidet.
+        });
+    }, 450);
+  });
+
+  // Beim Weiter-Klick bewahrt die Formatpruefung den Taken-Fehler nicht auf —
+  // hier wird er wieder angewendet, bevor der Server ihn zurueckmeldet.
+  var validatePageOriginal = validatePage;
+  validatePage = function (n) {
+    var ok = validatePageOriginal(n);
+    if (schoolIdTakenFlag && el("schoolId").value.trim() !== "") {
+      setFieldError("schoolId", schoolIdTakenMsg);
+      ok = false;
+    }
+    return ok;
+  };
+
   document.getElementById("wizardForm").addEventListener("submit", function (e) { e.preventDefault(); });
 
   showPage(1);
