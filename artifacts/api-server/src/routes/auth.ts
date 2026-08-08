@@ -111,6 +111,28 @@ function currentAuthTime(): number {
 const NATIVE_HANDOFF_TTL_MS = 2 * 60 * 1000;
 const nativeHandoffs = new Map<string, { sessionToken: string; verifierHash: string; expiresAt: number }>();
 
+// Web-Handoff im Relay-Modus: Die OIDC-Callback-Antwort geht durch den Relay
+// an einen Browser, der auf der zentralen Domain steht. Ein dort gesetztes
+// Session-Cookie waere third-party (Domain der Instanz, Top-Level-Domain der
+// zentralen Domain) und wuerde von modernen Browsern verworfen. Stattdessen
+// bekommt der Browser einen einmaligen Code und navigiert damit first-party
+// zur Instanz; /api/auth/handoff setzt die Sitzung dort.
+const WEB_HANDOFF_TTL_MS = 2 * 60 * 1000;
+const webHandoffs = new Map<string, { sessionToken: string; expiresAt: number }>();
+
+function createWebHandoff(sessionToken: string): string {
+  const now = Date.now();
+  for (const [code, handoff] of webHandoffs) {
+    if (handoff.expiresAt <= now) webHandoffs.delete(code);
+  }
+  const code = randomUUID();
+  webHandoffs.set(code, {
+    sessionToken,
+    expiresAt: now + WEB_HANDOFF_TTL_MS,
+  });
+  return code;
+}
+
 // Schul-Zugangscode als Eintrittskarte fuer neue Konten. Ist einer gesetzt,
 // muss jedes frisch angelegte Konto ihn nachweisen — fuer lokale Registrierung
 // direkt im Formular, fuer den OIDC-Erst-Login ueber einen Zwischen-Screen,
@@ -154,7 +176,18 @@ function sessionCookieOptions() {
     sameSite: "lax" as const,
     path: "/",
     maxAge: SESSION_MAX_AGE_MS,
+    // Relay-Modus: der Browser steht waehrend des Ruecksprungs auf der
+    // zentralen Domain. Ohne Domain-Attribut haengt das Cookie dort fest;
+    // mit ihm wird es fuer die Herkunft dieser Instanz gesetzt.
+    ...(config.cookieDomain ? { domain: config.cookieDomain } : {}),
   };
+}
+
+function clearSessionCookie(res: import("express").Response): void {
+  res.clearCookie(SESSION_COOKIE, {
+    path: "/",
+    ...(config.cookieDomain ? { domain: config.cookieDomain } : {}),
+  });
 }
 
 const JWT_SECRET = process.env["JWT_SECRET"];
@@ -165,7 +198,13 @@ if (JWT_SECRET.length < 32) {
   throw new Error("JWT_SECRET must be at least 32 characters long");
 }
 
-const authProviders = loadAuthProviders();
+// Im Relay-Modus tragen die OIDC-Starts die Herkunft dieser Instanz im
+// state-Praefix, damit der zentrale Callback sie zurueckleiten kann. Ohne
+// AUTH_RELAY_BASE_URL bleibt alles beim bisherigen Ablauf.
+const relaySettings = config.authRelayBaseUrl && config.allowedOrigins[0]
+  ? { baseUrl: config.authRelayBaseUrl, instanceOrigin: config.allowedOrigins[0] }
+  : undefined;
+const authProviders = loadAuthProviders(relaySettings);
 const localProvider = authProviders.find((provider): provider is PasswordAuthProvider => provider.type === "local");
 if (localProvider) {
   assertMailerConfig();
@@ -641,10 +680,34 @@ router.post("/native-session", sessionLimiter, async (req, res) => {
   });
 });
 
+router.get("/handoff", sessionLimiter, async (req, res) => {
+  const code = typeof req.query["code"] === "string" ? req.query["code"] : "";
+  if (!code || code.length > 100) {
+    res.status(400).json({ error: "Uebergabecode ist ungueltig." });
+    return;
+  }
+  const handoff = webHandoffs.get(code);
+  if (!handoff || handoff.expiresAt <= Date.now()) {
+    webHandoffs.delete(code);
+    res.status(401).json({ error: "Uebergabecode ist abgelaufen." });
+    return;
+  }
+  webHandoffs.delete(code);
+  const resolved = await resolveSession(handoff.sessionToken);
+  if (!resolved) {
+    res.status(401).json({ error: "Sitzung ist abgelaufen." });
+    return;
+  }
+  // First-party auf der Instanz: der Browser ist jetzt auf der eigenen
+  // Domain, das Cookie landet dort und nicht auf der zentralen.
+  res.cookie(SESSION_COOKIE, handoff.sessionToken, sessionCookieOptions());
+  res.redirect(config.allowedOrigins[0] ?? "/");
+});
+
 router.post("/logout", requireAuthForLogout, async (req, res) => {
   const rawToken = req.cookies?.[SESSION_COOKIE];
   if (rawToken) await revokeSession(rawToken);
-  res.clearCookie(SESSION_COOKIE, { path: "/" });
+  clearSessionCookie(res);
   res.clearCookie("sani-token");
   res.json({ message: "Logged out" });
 });
@@ -721,7 +784,7 @@ router.get("/session", sessionLimiter, async (req, res) => {
 
   const resolved = await resolveSession(rawToken);
   if (!resolved) {
-    res.clearCookie(SESSION_COOKIE, { path: "/" });
+    clearSessionCookie(res);
     res.status(401).json({ error: "Sitzung abgelaufen" });
     return;
   }
@@ -735,7 +798,7 @@ router.get("/session", sessionLimiter, async (req, res) => {
   const user = rows[0];
   if (!user || !user.isApproved) {
     await revokeSession(rawToken);
-    res.clearCookie(SESSION_COOKIE, { path: "/" });
+    clearSessionCookie(res);
     res.status(401).json({ error: "Sitzung abgelaufen" });
     return;
   }
@@ -1158,6 +1221,14 @@ async function completeOidcCallback(req: import("express").Request, res: import(
       const landingUrl = new URL(authResult.returnTo);
       landingUrl.searchParams.set("code", handoffCode);
       res.redirect(landingUrl.toString());
+      return;
+    }
+
+    if (relaySettings) {
+      // Kein Cookie durch den Relay (third-party, wird verworfen): einmaliger
+      // Code, den der Browser first-party bei der Instanz einloest.
+      const handoffCode = createWebHandoff(sessionToken);
+      res.redirect(`${config.allowedOrigins[0]}/api/auth/handoff?code=${handoffCode}`);
       return;
     }
 

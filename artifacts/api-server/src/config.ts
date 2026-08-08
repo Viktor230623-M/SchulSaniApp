@@ -63,12 +63,32 @@ function pflichtOrigins(name: string, hinweis: string): string[] {
   return origins;
 }
 
+const allowedOrigins = pflichtOrigins(
+  "ALLOWED_ORIGINS",
+  "kommagetrennte Liste der Web-Adressen dieser Instanz",
+);
+
+// Zentrale Callback-Domain fuer OIDC-Anmeldewege. Apple, Google und Microsoft
+// akzeptieren nur exakt registrierte Redirect-URIs; statt pro Instanz eine
+// eigene Registrierung zu pflegen, zeigen Instanzen im Relay-Modus auf eine
+// gemeinsame Domain, deren Callback-Pfad den Ruecksprung ueber den state-
+// Parameter zur richtigen Instanz weiterleitet. Ohne Angabe bleibt jede
+// Instanz bei ihren eigenen registrierten URIs.
+const authRelayBaseUrl = lies("AUTH_RELAY_BASE_URL");
+if (authRelayBaseUrl !== undefined) {
+  try {
+    const url = new URL(authRelayBaseUrl);
+    if (url.protocol !== "https:" || url.username || url.password || url.pathname !== "/" || url.search || url.hash) {
+      fehlend.push("AUTH_RELAY_BASE_URL — muss eine HTTPS-URL ohne Pfad sein (z. B. https://auth.schulsani.app)");
+    }
+  } catch {
+    fehlend.push("AUTH_RELAY_BASE_URL — keine gueltige URL (z. B. https://auth.schulsani.app)");
+  }
+}
+
 export const config = {
   /** Herkuenfte, die die API im Browser aufrufen duerfen. */
-  allowedOrigins: pflichtOrigins(
-    "ALLOWED_ORIGINS",
-    "kommagetrennte Liste der Web-Adressen dieser Instanz",
-  ),
+  allowedOrigins,
   /** Anzeigename der Instanz, u. a. Rueckfalltitel fuer Benachrichtigungen. */
   appName: pflicht(
     "APP_NAME",
@@ -86,6 +106,22 @@ export const config = {
    * verhindert, dass sich Fremde auf einer fremden Instanz anmelden.
    */
   joinCode: lies("SCHOOL_JOIN_CODE"),
+  /**
+   * Zentrale Callback-Domain im Relay-Modus. Der Ruecksprung des Anbieters
+   * landet dann nicht hier, sondern auf dieser Domain; der state-Parameter
+   * traegt die Herkunft dieser Instanz, ueber die der Relay zurueckleitet.
+   */
+  authRelayBaseUrl,
+  /**
+   * Host, fuer den die Session-Cookies im Relay-Modus gelten. Der Browser
+   * steht waehrend des Ruecksprungs auf der zentralen Domain; ohne Domain-
+   * Attribut wuerde das Cookie dort haengen bleiben und nie bei der Instanz
+   * ankommen. Abgeleitet aus der ersten erlaubten Herkunft, damit beides nie
+   * auseinanderlaufen kann.
+   */
+  cookieDomain: authRelayBaseUrl && allowedOrigins[0]
+    ? new URL(allowedOrigins[0]).hostname
+    : undefined,
 } as const;
 
 if (fehlend.length > 0) {
