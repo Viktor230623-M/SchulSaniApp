@@ -64,3 +64,6 @@ docs/superpowers/
 .graphify/manifest.json
 .graphify/cache/
 .graphify/.graphify_*
+# graphify - lokale Wissenskarte bleibt ausserhalb von Git
+.graphify/
+graphify-out/
