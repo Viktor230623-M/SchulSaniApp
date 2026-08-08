@@ -378,6 +378,8 @@ function validateConfig(body) {
   out.schoolId = trimOrEmpty(body.schoolId) || "school";
   if (!SCHOOL_ID_RE.test(out.schoolId)) {
     errors.schoolId = "Nur Kleinbuchstaben, Ziffern, Bindestrich und Unterstrich, maximal 40 Zeichen.";
+  } else if (schoolIdTaken(out.schoolId, state.config?.ownerAccountId || out.ownerAccountId, state.config?.schoolId)) {
+    errors.schoolId = "Diese Schul-Kennung ist bereits vergeben.";
   }
 
   out.ownerUserId = trimOrEmpty(body.ownerUserId);
@@ -586,6 +588,28 @@ function psql(sql) {
 function usersTableExists() {
   const result = psql("SELECT to_regclass('public.users')");
   return result !== "" && result.toLowerCase() !== "null" && result.toLowerCase() !== "(null)";
+}
+
+// Auf einem Server mit mehreren Schulen ist die Schul-Kennung die einzige
+// Verbindung zwischen allen Zeilen einer Schule. Sie darf nur einmal
+// vergeben sein. Die eigene Schule faellt heraus: laeuft der Assistent fuer
+// sie erneut (Wiederaufnahme), gehoeren alle ihre Zeilen schon zu dieser
+// Installation und sind kein Konflikt.
+function schoolIdTaken(schoolId, ownerAccountId, configuredSchoolId) {
+  if (schoolId === configuredSchoolId) return false;
+  try {
+    if (!usersTableExists()) return false;
+    const schoolIdSql = sqlQuote(schoolId);
+    const ownerIdSql = sqlQuote(ownerAccountId || "");
+    const result = psql(
+      `SELECT 1 FROM users WHERE school_id = ${schoolIdSql} AND id IS DISTINCT FROM ${ownerIdSql} LIMIT 1`,
+    );
+    return result !== "";
+  } catch {
+    // Datenbank nicht erreichbar: die Pruefung faellt aus, upsertOwner
+    // meldet den Verbindungsfehler spaetestens beim Anlegen.
+    return false;
+  }
 }
 
 // Rolle "owner" ist die schulische Hoechstrolle (vormals "cto", siehe R5
@@ -845,6 +869,13 @@ async function handleApi(req, res, pathname) {
 
   if (pathname === "/api/state" && req.method === "GET") {
     return sendJson(res, 200, publicState());
+  }
+
+  if (pathname === "/api/check-school-id" && req.method === "GET") {
+    const query = new URL(req.url, "http://localhost").searchParams.get("v") || "";
+    const value = trimOrEmpty(query);
+    if (!SCHOOL_ID_RE.test(value)) return sendJson(res, 200, { ok: true, taken: false });
+    return sendJson(res, 200, { ok: true, taken: schoolIdTaken(value, state.config?.ownerAccountId || "", state.config?.schoolId) });
   }
 
   if (pathname === "/api/config" && req.method === "POST") {
