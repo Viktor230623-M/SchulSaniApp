@@ -29,6 +29,7 @@ vi.mock("@workspace/db", async () => {
     pool: { query: () => Promise.resolve({ rows: [] }) },
     usersTable: createMockTable("users"),
     userIdentitiesTable: createMockTable("user_identities"),
+    identityChangeLogTable: createMockTable("identity_change_log"),
     newsTable: createMockTable("news"),
     loaTable: createMockTable("loa"),
     missionsTable: createMockTable("missions"),

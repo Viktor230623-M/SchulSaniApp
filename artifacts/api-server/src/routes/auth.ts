@@ -22,6 +22,7 @@ import { issueAuthToken, hashAuthToken } from "../lib/authTokens";
 import { assertMailerConfig, authLink, sendMail, verifyMailer } from "../services/mailer";
 import { validateProfileName } from "../lib/profileName";
 import { normaliseEmail } from "../lib/email";
+import { logIdentityChangeTx } from "../lib/identityChangeLog";
 
 const router = Router();
 
@@ -442,6 +443,17 @@ router.post("/local/register", localAccountLimiter, async (req, res) => {
         kind: "email_verify",
         tokenHash: hashAuthToken(token),
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      });
+      // Jedes Konto hat eine primaere Identitaet (Spec Schritt 1) -- das
+      // lokale Konto genauso wie die OIDC-Konten aus reconcileAccount. Sonst
+      // zeigte die Anmeldeliste bei frischen lokalen Konten nichts an.
+      await tx.insert(userIdentitiesTable).values({
+        id: `primary-${userId}`,
+        userId,
+        schoolId: registrationSchoolId,
+        authProvider: getLocalProvider().key,
+        externalSubject: registrationEmail,
+        emailAtLink: registrationEmail,
       });
     });
   }
@@ -867,6 +879,64 @@ router.get("/identities", requireAuth, async (req: AuthRequest, res) => {
   });
 });
 
+/**
+ * Entfernt einen verknuepften Anmeldeweg. Nur eigene Identitaeten sind
+ * erreichbar, und die letzte bleibt stehen -- ohne diesen Weg waere das Konto
+ * ohne Zugang, die Aussperrsicherung wie bei den Rollen aus R5. Verknuepfen
+ * und Entfernen stehen deshalb unter derselben Frischeregel wie das
+ * Hinzufuegen: ein unbeaufsichtigtes, angemeldetes Geraet soll nicht
+ * ausreichen, einen Zugang lautlos zu kappen.
+ */
+router.delete("/identities/:id", authLimiter, requireAuth, async (req: AuthRequest, res) => {
+  const authTime = req.user?.authTime ?? req.user?.iat;
+  if (!authTime || Date.now() - authTime * 1000 > LINK_SESSION_FRESHNESS_MS) {
+    res.status(403).json({ error: "Bitte melde dich erneut an, bevor du einen Anmeldeweg entfernst.", code: "LINK_SESSION_STALE" });
+    return;
+  }
+
+  const identityId = req.params["id"] as string;
+  const outcome = await db.transaction(async (tx) => {
+    // Nutzerzeile sperren: zwei gleichzeitige Entfernungen muessen nacheinander
+    // zaehlen, sonst raeumt die zweite die letzte Identitaet weg, die die erste
+    // noch gesehen hat -- Konto ohne Zugang.
+    await tx.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.id, req.user!.userId)).for("update");
+    const [identity] = await tx
+      .select({ id: userIdentitiesTable.id, providerKey: userIdentitiesTable.authProvider })
+      .from(userIdentitiesTable)
+      .where(and(
+        eq(userIdentitiesTable.id, identityId),
+        eq(userIdentitiesTable.userId, req.user!.userId),
+      ))
+      .limit(1);
+    if (!identity) return "not_found" as const;
+
+    const [{ count }] = await tx
+      .select({ count: sql<number>`count(*)::int` })
+      .from(userIdentitiesTable)
+      .where(eq(userIdentitiesTable.userId, req.user!.userId));
+    if (count <= 1) return "last_identity" as const;
+
+    await tx.delete(userIdentitiesTable).where(eq(userIdentitiesTable.id, identityId));
+    await logIdentityChangeTx(tx, {
+      userId: req.user!.userId,
+      providerKey: identity.providerKey,
+      action: "unlink",
+    });
+    return "ok" as const;
+  });
+
+  if (outcome === "not_found") {
+    res.status(404).json({ error: "Anmeldeweg nicht gefunden." });
+    return;
+  }
+  if (outcome === "last_identity") {
+    res.status(409).json({ error: "Der letzte Anmeldeweg kann nicht entfernt werden." });
+    return;
+  }
+  invalidateUserCache(req.user!.userId);
+  res.status(204).send();
+});
+
 router.post("/link/:provider/start", authLimiter, requireAuth, async (req: AuthRequest, res) => {
   const provider = authProviders.find((p) => p.key === req.params["provider"]);
   if (!provider || provider.type !== "oidc-redirect") {
@@ -1152,7 +1222,17 @@ async function completeOidcCallback(req: import("express").Request, res: import(
           emailAtLink: profile.email || null,
           lastUsedAt: new Date(),
         }).onConflictDoNothing().returning({ id: userIdentitiesTable.id });
-        return inserted.length > 0 ? "success" as const : "collision" as const;
+        if (inserted.length > 0) {
+          // Nur der Neu-Eintrag zaehlt: eine bereits verknuepfte Identitaet,
+          // die nur lastUsedAt aktualisiert, ist keine Aenderung.
+          await logIdentityChangeTx(tx, {
+            userId: linkUserId,
+            providerKey: provider.key,
+            action: "link",
+          });
+          return "success" as const;
+        }
+        return "collision" as const;
       });
 
       if (linkResult === "missing-target") {

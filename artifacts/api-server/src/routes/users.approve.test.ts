@@ -88,6 +88,7 @@ vi.mock("@workspace/db", async () => {
     rolePermissionsTable: createMockTable("role_permissions"),
     sessionsTable: createMockTable("sessions"),
     roleChangeLogTable: createMockTable("role_change_log"),
+    identityChangeLogTable: createMockTable("identity_change_log"),
     userRoleEnum: { enumValues: ["owner", "admin", "sanitaeter_leitung_admin", "sanitaeter_leitung", "teacher", "sanitaeter"] },
   };
 });
