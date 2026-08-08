@@ -320,7 +320,7 @@
         <div class="field" data-field="providerClientSecret">
           <label for="providerClientSecret">Client-Secret <span class="optional">(optional bei Apple)</span></label>
           <input type="password" id="providerClientSecret" name="providerClientSecret" autocomplete="new-password" spellcheck="false">
-          <div class="helper">Wird zugriffsgeschuetzt gespeichert und nie protokolliert.</div>
+          <div class="helper">Fuer Google und Microsoft erforderlich. Wird zugriffsgeschuetzt gespeichert und nie protokolliert.</div>
           <div class="error"><span>—</span></div>
         </div>
         <div class="field" data-field="providerScopes">
@@ -384,7 +384,7 @@
           <div class="field" data-field="provider2DisplayName"><label for="provider2DisplayName">Anzeigename</label><input type="text" id="provider2DisplayName" placeholder="Microsoft"><div class="error"><span>—</span></div></div>
           <div class="field" data-field="provider2IssuerUrl"><label for="provider2IssuerUrl">Issuer-URL</label><input type="url" id="provider2IssuerUrl" placeholder="https://login.microsoftonline.com/tenant/v2.0" spellcheck="false"><div class="error"><span>—</span></div></div>
           <div class="field" data-field="provider2ClientId"><label for="provider2ClientId">Client-ID</label><input type="text" id="provider2ClientId" spellcheck="false"><div class="error"><span>—</span></div></div>
-          <div class="field" data-field="provider2ClientSecret"><label for="provider2ClientSecret">Client-Secret <span class="optional">(optional bei Apple)</span></label><input type="password" id="provider2ClientSecret" autocomplete="new-password" spellcheck="false"><div class="error"><span>—</span></div></div>
+          <div class="field" data-field="provider2ClientSecret"><label for="provider2ClientSecret">Client-Secret <span class="optional">(optional bei Apple)</span></label><input type="password" id="provider2ClientSecret" autocomplete="new-password" spellcheck="false"><div class="helper">Fuer Google und Microsoft erforderlich.</div><div class="error"><span>—</span></div></div>
           <div class="field" data-field="provider2Scopes"><label for="provider2Scopes">OIDC-Scopes <span class="optional">(optional)</span></label><input type="text" id="provider2Scopes" placeholder="openid email profile"><div class="error"><span>—</span></div></div>
           <div class="field" data-field="provider2AllowedHostedDomains"><label for="provider2AllowedHostedDomains">Erlaubte Google-Domains <span class="optional">(optional)</span></label><input type="text" id="provider2AllowedHostedDomains" placeholder="beispielschule.de, schueler.beispielschule.de"><div class="error"><span>—</span></div></div>
           <div class="field" data-field="provider2GroupsClaim"><label for="provider2GroupsClaim">Gruppen-Claim <span class="optional">(optional)</span></label><input type="text" id="provider2GroupsClaim" placeholder="groups"><div class="error"><span>—</span></div></div>
@@ -895,7 +895,7 @@
         btn.disabled = false;
         return;
       }
-      showPage(6);
+      showPage(5);
     }).catch(function () {
       // Fehler wurde bereits angezeigt, Ablauf hier beendet.
     });

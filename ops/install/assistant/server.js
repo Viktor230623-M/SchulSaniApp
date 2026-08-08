@@ -190,6 +190,11 @@ function providerFieldName(prefix, name) {
   return prefix ? `provider2${name[0].toUpperCase()}${name.slice(1)}` : `provider${name[0].toUpperCase()}${name.slice(1)}`;
 }
 
+function needsConfidentialClientSecret(issuerUrl) {
+  const issuer = issuerUrl.replace(/\/$/, "");
+  return issuer === "https://accounts.google.com" || issuer.startsWith("https://login.microsoftonline.com/");
+}
+
 function readProviderOptions(body, prefix, errors, issuerUrl) {
   const value = (name) => trimOrEmpty(body[providerFieldName(prefix, name)]);
   const options = {
@@ -322,6 +327,9 @@ function validateConfig(body) {
   if (out.providerClientSecret.length > 1000 || hasControlCharacter(out.providerClientSecret)) {
     errors.providerClientSecret = "Client-Secret ist zu lang oder enthaelt unzulaessige Zeichen.";
   }
+  if (usesOidc && needsConfidentialClientSecret(out.providerIssuerUrl) && !out.providerClientSecret) {
+    errors.providerClientSecret = "Google und Microsoft brauchen fuer den Server-Anmeldeweg ein Client-Secret.";
+  }
   if (!usesOidc) out.providerClientSecret = "";
 
   out.smtpHost = trimOrEmpty(body.smtpHost);
@@ -401,6 +409,9 @@ function validateConfig(body) {
   const secondClientSecret = typeof body.provider2ClientSecret === "string" ? body.provider2ClientSecret : "";
   if (secondClientSecret.length > 1000 || hasControlCharacter(secondClientSecret)) errors.provider2ClientSecret = "Client-Secret des zweiten Anbieters ist zu lang oder enthaelt unzulaessige Zeichen.";
   const secondPresent = secondKey || secondDisplayName || secondIssuerUrl || secondClientId || secondClientSecret;
+  if (secondPresent && needsConfidentialClientSecret(secondIssuerUrl) && !secondClientSecret) {
+    errors.provider2ClientSecret = "Google und Microsoft brauchen fuer den Server-Anmeldeweg ein Client-Secret.";
+  }
   const secondOptions = secondPresent ? readProviderOptions(body, "2", errors, secondIssuerUrl) : null;
   if (secondPresent) {
     let secondValid =

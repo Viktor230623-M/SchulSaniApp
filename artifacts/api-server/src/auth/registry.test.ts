@@ -12,6 +12,7 @@ import { loadAuthProviders } from "./registry";
 
 let tempDir: string;
 const previousPath = process.env["AUTH_PROVIDERS_PATH"];
+const previousSchoolId = process.env["SCHOOL_ID"];
 
 async function configFile(value: unknown): Promise<string> {
   const path = join(tempDir, "auth-providers.json");
@@ -34,11 +35,14 @@ function appleConfig(overrides: Record<string, unknown> = {}) {
 describe("Auth-Provider-Registry", () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), "schulsani-auth-"));
+    process.env["SCHOOL_ID"] = "school-test";
   });
 
   afterEach(async () => {
     if (previousPath === undefined) delete process.env["AUTH_PROVIDERS_PATH"];
     else process.env["AUTH_PROVIDERS_PATH"] = previousPath;
+    if (previousSchoolId === undefined) delete process.env["SCHOOL_ID"];
+    else process.env["SCHOOL_ID"] = previousSchoolId;
     await rm(tempDir, { recursive: true, force: true });
   });
 
