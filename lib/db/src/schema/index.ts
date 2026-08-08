@@ -286,7 +286,7 @@ export const profileChangeLogTable = pgTable("profile_change_log", {
   id: text("id").primaryKey(),
   actorId: text("actor_id").notNull(),
   targetUserId: text("target_user_id").notNull(),
-  field: text("field").notNull(), // first_name | last_name
+  field: text("field").notNull(), // first_name | last_name | email
   before: text("before"),
   after: text("after"),
   createdAt: timestamp("created_at").defaultNow(),
