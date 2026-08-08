@@ -7,6 +7,10 @@ function formatFullName(firstName?: string, lastName?: string): string {
   return `${formatName(firstName)} ${formatName(lastName)}`;
 }
 
+type ActivityFeedItem =
+  | ({ type: "mission" } & Mission)
+  | ({ type: "loa" } & LOARequest);
+
 import { Feather, Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as Linking from "expo-linking";
@@ -30,6 +34,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useTopPad } from "@/hooks/useTopPad";
+import { appleCardStyle } from "@/components/AppleSurface";
 import { useRoles } from "@/hooks/useRoles";
 import { t } from "@/constants/i18n";
 import { getTheme, type ThemeColors } from "@/constants/theme";
@@ -80,7 +85,7 @@ export default function SettingsScreen() {
   const canSeeAllUsers = has("users.read_all");
 
   const [showActivityLog, setShowActivityLog] = useState(false);
-  const [activityLogData, setActivityLogData] = useState<(Mission | LOARequest & { type: string })[]>([]);
+  const [activityLogData, setActivityLogData] = useState<ActivityFeedItem[]>([]);
   const [loadingActivityLog, setLoadingActivityLog] = useState(false);
 
   const [showSaniActivity, setShowSaniActivity] = useState(false);
@@ -217,12 +222,12 @@ export default function SettingsScreen() {
           const loaRequests = loaResult.status === "fulfilled" ? loaResult.value : [];
           if (missionsResult.status === "rejected") console.error("Failed to load missions:", missionsResult.reason);
           if (loaResult.status === "rejected") console.error("Failed to load LOA requests:", loaResult.reason);
-          const activities: (Mission | LOARequest & { type: string })[] = [
+          const activities: ActivityFeedItem[] = [
             ...(Array.isArray(missions) ? missions.map((m) => ({ type: "mission" as const, ...m })) : []),
             ...(Array.isArray(loaRequests) ? loaRequests.map((l) => ({ type: "loa" as const, ...l })) : []),
           ].sort((a, b) => {
-            const dateA = new Date(a.requestedAt || a.createdAt || 0).getTime();
-            const dateB = new Date(b.requestedAt || b.createdAt || 0).getTime();
+            const dateA = new Date(a.type === "mission" ? a.requestedAt : a.createdAt).getTime();
+            const dateB = new Date(b.type === "mission" ? b.requestedAt : b.createdAt).getTime();
             return dateB - dateA;
           }).slice(0, 20);
           setActivityLogData(activities);
@@ -425,7 +430,7 @@ export default function SettingsScreen() {
     >
       <Text style={[styles.heading, { color: theme.text }]}>{t("settings.title", lang)}</Text>
 
-      <View style={[styles.profileCard, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
+      <View style={[styles.profileCard, appleCardStyle(theme)]}>
         <Pressable onPress={handlePickImage} style={styles.avatarWrap}>
           {avatarUri ? (
             <Image source={{ uri: avatarUri }} style={styles.avatar} />
@@ -461,7 +466,7 @@ export default function SettingsScreen() {
       </View>
 
       <View
-        style={[styles.section, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}
+        style={[styles.section, appleCardStyle(theme)]}
         accessibilityRole="summary"
         accessibilityLabel={t("settings.signInMethods", lang)}
       >
@@ -566,7 +571,7 @@ export default function SettingsScreen() {
         })}
       </View>
 
-      <View style={[styles.section, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
+      <View style={[styles.section, appleCardStyle(theme)]}>
         <Pressable onPress={() => {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           setShowActivityLog(!showActivityLog);
@@ -589,7 +594,7 @@ export default function SettingsScreen() {
                 </View>
                 <View style={styles.activityInfo}>
                   <Text style={[styles.activityTitle, { color: theme.text }]} numberOfLines={1}>
-                    {item.title || item.reason}
+                    {item.type === "mission" ? item.title : item.reason}
                   </Text>
                   <Text style={[styles.activityDate, { color: theme.textTertiary }]}>
                     {item.type === "mission" ? new Date(item.requestedAt).toLocaleDateString("de-DE") : `${new Date(item.fromDate).toLocaleDateString("de-DE")} - ${new Date(item.toDate).toLocaleDateString("de-DE")}`}
@@ -606,7 +611,7 @@ export default function SettingsScreen() {
         )}
       </View>
 
-      <View style={[styles.section, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
+      <View style={[styles.section, appleCardStyle(theme)]}>
         <Text style={[styles.sectionTitle, { color: theme.textTertiary }]}>
           {t("settings.language", lang)}
         </Text>
@@ -632,7 +637,7 @@ export default function SettingsScreen() {
         </View>
       </View>
 
-      <View style={[styles.section, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
+      <View style={[styles.section, appleCardStyle(theme)]}>
         <Text style={[styles.sectionTitle, { color: theme.textTertiary }]}>
           {t("settings.theme", lang)}
         </Text>
@@ -662,7 +667,7 @@ export default function SettingsScreen() {
       </View>
 
       {pushState !== "unsupported" && (
-        <View style={[styles.section, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
+        <View style={[styles.section, appleCardStyle(theme)]}>
           <Text style={[styles.sectionTitle, { color: theme.textTertiary }]}>
             {t("settings.notifications", lang)}
           </Text>
@@ -702,7 +707,7 @@ export default function SettingsScreen() {
       )}
 
       {canSeeAllUsers && (
-        <View style={[styles.section, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
+        <View style={[styles.section, appleCardStyle(theme)]}>
           <Pressable onPress={() => setShowUsers(!showUsers)} style={styles.sectionHeaderRow}>
             <Text style={[styles.sectionTitle, { color: theme.textTertiary }]}>
               {t("settings.allUsers", lang)}
@@ -745,7 +750,7 @@ export default function SettingsScreen() {
       )}
 
       {canSeeAllUsers && (
-        <View style={[styles.section, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
+        <View style={[styles.section, appleCardStyle(theme)]}>
           <Pressable onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             setShowSaniActivity(!showSaniActivity);
@@ -787,7 +792,7 @@ export default function SettingsScreen() {
       )}
 
       {canManageRoles && (
-        <View style={[styles.section, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
+        <View style={[styles.section, appleCardStyle(theme)]}>
           {/* ── Section Header (collapsible) ── */}
           {isOwner && (
             <Pressable
@@ -1081,7 +1086,7 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   heading: { fontSize: 28, fontFamily: "Inter_700Bold" },
-  profileCard: { borderRadius: 16, padding: 16, flexDirection: "row", alignItems: "flex-start", gap: 16, borderWidth: 1 },
+  profileCard: { padding: 16, flexDirection: "row", alignItems: "flex-start", gap: 16 },
   avatarWrap: { position: "relative" },
   avatar: { width: 72, height: 72, borderRadius: 20 },
   avatarPlaceholder: { width: 72, height: 72, borderRadius: 20, alignItems: "center", justifyContent: "center" },
@@ -1093,7 +1098,7 @@ const styles = StyleSheet.create({
   rankLabel: { fontSize: 11, fontFamily: "Inter_600SemiBold", textTransform: "uppercase", letterSpacing: 0.6, marginTop: 6 },
   roleBadgeLarge: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, borderWidth: 1, alignSelf: "flex-start" },
   roleBadgeLargeText: { fontSize: 14, fontFamily: "Inter_700Bold" },
-  section: { borderRadius: 16, padding: 16, gap: 12, borderWidth: 1 },
+  section: { padding: 16, gap: 12 },
   sectionHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   sectionTitle: { fontSize: 12, fontFamily: "Inter_600SemiBold", textTransform: "uppercase", letterSpacing: 0.8 },
   rowRight: { flexDirection: "row", alignItems: "center", gap: 8 },

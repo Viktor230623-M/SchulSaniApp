@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTopPad } from "@/hooks/useTopPad";
 import { useRoles } from "@/hooks/useRoles";
 import { MedicalCross } from "@/components/MedicalCross";
+import { appleCardStyle } from "@/components/AppleSurface";
 import { t } from "@/constants/i18n";
 import { getTheme } from "@/constants/theme";
 import type { User } from "@/models";
@@ -142,7 +143,7 @@ export default function DutyScreen() {
           </Text>
         </View>
 
-        <View style={[styles.section, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
+        <View style={[styles.section, appleCardStyle(theme)]}>
           <Text style={[styles.sectionTitle, { color: theme.textTertiary }]}>
             {t("duty.whoIsOnDuty", lang)}
           </Text>
@@ -174,7 +175,7 @@ export default function DutyScreen() {
           )}
         </View>
 
-        <View style={[styles.section, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
+        <View style={[styles.section, appleCardStyle(theme)]}>
           <Text style={[styles.sectionTitle, { color: theme.textTertiary }]}>{t("duty.notes", lang)}</Text>
           {[t("duty.hint1", lang), t("duty.hint2", lang), t("duty.hint3", lang)].map((hint) => (
             <View key={hint} style={styles.hintRow}>
@@ -199,7 +200,7 @@ const styles = StyleSheet.create({
   toggleBtnHint: { fontSize: 12, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.75)" },
   statusCard: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 20, paddingVertical: 14, borderRadius: 14, width: "100%" },
   statusText: { fontSize: 14, fontFamily: "Inter_500Medium", flex: 1 },
-  section: { width: "100%", borderRadius: 16, padding: 16, gap: 12, borderWidth: 1, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 },
+  section: { width: "100%", padding: 16, gap: 12 },
   sectionTitle: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
   noOne: { fontSize: 14, fontFamily: "Inter_400Regular" },
   userRow: { flexDirection: "row", alignItems: "center", gap: 12 },

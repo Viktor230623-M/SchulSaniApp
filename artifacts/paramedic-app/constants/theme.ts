@@ -26,11 +26,11 @@ export interface ThemeColors {
 }
 
 const lightTheme: ThemeColors = {
-  background: "#FFFFFF",
-  backgroundSecondary: "#F9FAFB",
-  backgroundTertiary: "#F3F4F6",
+  background: "#F7F7F9",
+  backgroundSecondary: "#F1F1F5",
+  backgroundTertiary: "#E8E8ED",
   card: "#FFFFFF",
-  cardBorder: "#E5E7EB",
+  cardBorder: "#D9D9DE",
   text: "#111827",
   textSecondary: "#6B7280",
   textTertiary: "#9CA3AF",
@@ -51,11 +51,11 @@ const lightTheme: ThemeColors = {
 };
 
 const darkTheme: ThemeColors = {
-  background: "#0F0F0F",
-  backgroundSecondary: "#1A1A1A",
-  backgroundTertiary: "#242424",
-  card: "#1A1A1A",
-  cardBorder: "#2E2E2E",
+  background: "#111113",
+  backgroundSecondary: "#1B1B1F",
+  backgroundTertiary: "#29292E",
+  card: "#1B1B1F",
+  cardBorder: "#38383F",
   text: "#F9FAFB",
   textSecondary: "#9CA3AF",
   textTertiary: "#6B7280",
@@ -76,11 +76,11 @@ const darkTheme: ThemeColors = {
 };
 
 const redTheme: ThemeColors = {
-  background: "#FFFFFF",
-  backgroundSecondary: "#FFF5F5",
-  backgroundTertiary: "#FEE2E2",
+  background: "#FFF8F8",
+  backgroundSecondary: "#FFF0F0",
+  backgroundTertiary: "#FFE4E4",
   card: "#FFFFFF",
-  cardBorder: "#FECACA",
+  cardBorder: "#F2C6C6",
   text: "#111827",
   textSecondary: "#6B7280",
   textTertiary: "#9CA3AF",
@@ -101,11 +101,11 @@ const redTheme: ThemeColors = {
 };
 
 const tealTheme: ThemeColors = {
-  background: "#F0FDFA",
-  backgroundSecondary: "#CCFBF1",
-  backgroundTertiary: "#99F6E4",
+  background: "#F2FBFA",
+  backgroundSecondary: "#E2F5F2",
+  backgroundTertiary: "#C7EAE5",
   card: "#FFFFFF",
-  cardBorder: "#99F6E4",
+  cardBorder: "#A7D9D2",
   text: "#0F172A",
   textSecondary: "#475569",
   textTertiary: "#94A3B8",
@@ -126,11 +126,11 @@ const tealTheme: ThemeColors = {
 };
 
 const crimsonTheme: ThemeColors = {
-  background: "#000000",
-  backgroundSecondary: "#0D0D0D",
-  backgroundTertiary: "#1A0000",
-  card: "#0D0D0D",
-  cardBorder: "#3D0000",
+  background: "#08090B",
+  backgroundSecondary: "#121317",
+  backgroundTertiary: "#211014",
+  card: "#121317",
+  cardBorder: "#4A2029",
   text: "#F5F5F5",
   textSecondary: "#A8A8A8",
   textTertiary: "#6B6B6B",
@@ -152,11 +152,11 @@ const crimsonTheme: ThemeColors = {
 
 
 const midnightTheme: ThemeColors = {
-  background: "#050D1A",
-  backgroundSecondary: "#0A1628",
-  backgroundTertiary: "#0F2040",
-  card: "#0A1628",
-  cardBorder: "#1A3055",
+  background: "#07111F",
+  backgroundSecondary: "#0D1B2D",
+  backgroundTertiary: "#142A46",
+  card: "#0D1B2D",
+  cardBorder: "#23446D",
   text: "#E8F0FE",
   textSecondary: "#8AADD4",
   textTertiary: "#4D7098",
@@ -177,11 +177,11 @@ const midnightTheme: ThemeColors = {
 };
 
 const sunsetTheme: ThemeColors = {
-  background: "#FFFBF5",
-  backgroundSecondary: "#FFF3E0",
-  backgroundTertiary: "#FFE8C8",
+  background: "#FFFAF6",
+  backgroundSecondary: "#FFF1E2",
+  backgroundTertiary: "#FFE2BF",
   card: "#FFFFFF",
-  cardBorder: "#FDDBA6",
+  cardBorder: "#F0C994",
   text: "#1C0F00",
   textSecondary: "#7C5C3A",
   textTertiary: "#B08A64",
@@ -202,11 +202,11 @@ const sunsetTheme: ThemeColors = {
 };
 
 const amethystTheme: ThemeColors = {
-  background: "#FAFAFA",
-  backgroundSecondary: "#F5F0FF",
-  backgroundTertiary: "#EDE0FF",
+  background: "#FAF9FC",
+  backgroundSecondary: "#F4F0FB",
+  backgroundTertiary: "#E9DDF8",
   card: "#FFFFFF",
-  cardBorder: "#D8B4FE",
+  cardBorder: "#CFB8EA",
   text: "#1A0533",
   textSecondary: "#6D4C8E",
   textTertiary: "#9C7BB5",

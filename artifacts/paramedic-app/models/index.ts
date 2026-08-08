@@ -11,6 +11,7 @@ export interface User {
   firstName: string;
   lastName: string;
   email: string;
+  iservUsername?: string;
   /** Vom Server mitgeliefert; zeigt an, ob die Adresse bestaetigt ist. */
   phone: string;
   role: UserRole;
@@ -171,16 +172,13 @@ export interface MissionActivityLog {
 }
 
 export interface ActivitySummary {
-  id: string;
   userId: string;
   userName: string;
+  firstName?: string;
+  lastName?: string;
   role: UserRole;
-  missionId: string;
-  missionTitle: string;
-  action: "accepted" | "dismissed" | "unanswered" | "completed";
-  weekKey: string;
-  dayKey: string;
-  createdAt: string;
+  activityCount: number;
+  lastActivity: string | null;
 }
 
 export type AppTheme = "light" | "dark" | "red" | "teal" | "crimson" | "midnight" | "sunset" | "amethyst";

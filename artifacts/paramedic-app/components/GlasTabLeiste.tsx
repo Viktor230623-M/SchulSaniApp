@@ -95,7 +95,7 @@ export function GlasTabLeiste({
       pointerEvents="box-none"
       style={[styles.rahmen, { paddingBottom: Math.max(insets.bottom, 12) }]}
     >
-      <Glasflaeche theme={theme} dunkel={dunkel} radius={HOEHE / 2} intensity={dunkel ? 60 : 50} style={styles.pille}>
+      <Glasflaeche theme={theme} dunkel={dunkel} radius={HOEHE / 2} intensity={dunkel ? 70 : 60} style={styles.pille}>
         {hauptRouten.map((route) => (
           <Feld
             key={route.key}
@@ -113,7 +113,7 @@ export function GlasTabLeiste({
           theme={theme}
           dunkel={dunkel}
           radius={HOEHE / 2}
-          intensity={dunkel ? 45 : 35}
+          intensity={dunkel ? 55 : 45}
           style={[styles.knopf, { marginLeft: ABSTAND_ZUM_KNOPF }]}
         >
           <Feld
@@ -352,9 +352,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     overflow: "hidden",
     shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.28,
-    shadowRadius: 20,
-    elevation: 12,
+    shadowOpacity: 0.22,
+    shadowRadius: 24,
+    elevation: 10,
   },
   pille: {
     flex: 1,

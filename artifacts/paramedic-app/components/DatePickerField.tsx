@@ -28,7 +28,7 @@ const MONTHS = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "A
 
 export function DatePickerField({ value, onChange, label }: Props) {
   const themeKey = useAppStore((s) => s.theme);
-  const lang = useAppStore((s) => s.lang);
+  const lang = useAppStore((s) => s.language);
   const theme = getTheme(themeKey);
   const [open, setOpen] = useState(false);
   const [viewDate, setViewDate] = useState(new Date(value));

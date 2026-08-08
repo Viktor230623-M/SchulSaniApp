@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MedicalCross } from "@/components/MedicalCross";
+import { appleCardStyle } from "@/components/AppleSurface";
 import { useTopPad } from "@/hooks/useTopPad";
 import { getTheme } from "@/constants/theme";
 import { SCHOOL_NAME } from "@/constants/appConfig";
@@ -46,7 +47,7 @@ export function AuthShell({ theme, title, body, children }: AuthShellProps) {
             <Text style={[styles.title, { color: theme.text }]}>{title}</Text>
             <Text style={[styles.body, { color: theme.textSecondary }]}>{body}</Text>
           </View>
-          <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>{children}</View>
+          <View style={[styles.card, appleCardStyle(theme)]}>{children}</View>
         </ScrollView>
       </KeyboardAvoidingView>
     </View>
@@ -146,7 +147,7 @@ const styles = StyleSheet.create({
   brand: { fontSize: 14, fontFamily: "Inter_600SemiBold", marginTop: 2 },
   title: { fontSize: 24, lineHeight: 30, fontFamily: "Inter_700Bold", textAlign: "center", marginTop: 12 },
   body: { maxWidth: 350, fontSize: 14, lineHeight: 21, fontFamily: "Inter_400Regular", textAlign: "center" },
-  card: { width: "100%", maxWidth: 400, borderRadius: 22, borderWidth: 1, padding: 22, gap: 16, shadowColor: "#000", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.1, shadowRadius: 20, elevation: 5 },
+  card: { width: "100%", maxWidth: 400, padding: 22, gap: 16 },
   field: { gap: 7 },
   label: { fontSize: 13, lineHeight: 18, fontFamily: "Inter_600SemiBold" },
   inputWrap: { minHeight: 50, flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 13, borderWidth: 1, paddingHorizontal: 13 },

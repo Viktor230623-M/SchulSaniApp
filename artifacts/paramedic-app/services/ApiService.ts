@@ -618,7 +618,7 @@ const ApiService = {
     return resp.json();
   },
 
-  async getMyActivity(): Promise<ActivityLog[]> {
+  async getMyActivity(): Promise<MissionActivityLog[]> {
     const resp = await apiFetch(`${API_BASE}/activity/my`, { headers: headers() });
     if (!resp.ok) {
       const data = await resp.json().catch(() => ({}));
@@ -627,7 +627,7 @@ const ApiService = {
     return resp.json();
   },
 
-  async getUserActivity(userId: string): Promise<ActivityLog[]> {
+  async getUserActivity(userId: string): Promise<MissionActivityLog[]> {
     const resp = await apiFetch(`${API_BASE}/activity/user/${userId}`, { headers: headers() });
     if (!resp.ok) {
       const data = await resp.json().catch(() => ({}));

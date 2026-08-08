@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useTopPad } from "@/hooks/useTopPad";
 import { GlassLoader } from "@/components/GlassLoader";
+import { appleCardStyle } from "@/components/AppleSurface";
 import { t } from "@/constants/i18n";
 import { getTheme, type ThemeColors, istDunklesThema } from "@/constants/theme";
 import type { AppLanguage, Mission, MissionPriority, MissionStatus } from "@/models";
@@ -98,7 +99,7 @@ function MissionCard({ mission, onAccept, onReject, theme, lang, currentUserId, 
   }
 
   return (
-    <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
+    <View style={[styles.card, appleCardStyle(theme)]}>
       <View style={styles.cardHeader}>
         <View style={styles.badges}>
           <PriorityBadge priority={mission.priority} lang={lang} />
@@ -500,7 +501,7 @@ const styles = StyleSheet.create({
   countBadge: { borderRadius: 12, minWidth: 24, height: 24, alignItems: "center", justifyContent: "center", paddingHorizontal: 6 },
   countText: { color: "#fff", fontSize: 12, fontFamily: "Inter_700Bold" },
   iconBtn: { width: 44, height: 44, borderRadius: 12, alignItems: "center", justifyContent: "center" },
-  card: { borderRadius: 16, padding: 16, borderWidth: 1, gap: 8, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 },
+  card: { padding: 16, gap: 8 },
   cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
   badges: { flexDirection: "row", gap: 6, flexWrap: "wrap", flex: 1 },
   timeText: { fontSize: 13, fontFamily: "Inter_600SemiBold", textAlign: "right" },

@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useTopPad } from "@/hooks/useTopPad";
 import { GlassLoader } from "@/components/GlassLoader";
+import { appleCardStyle } from "@/components/AppleSurface";
 import { t } from "@/constants/i18n";
 import { getTheme, type ThemeColors, istDunklesThema } from "@/constants/theme";
 import type { AppLanguage, NewsItem, NewsStatus } from "@/models";
@@ -57,7 +58,7 @@ interface NewsCardProps {
   onApprove: (id: string) => void;
   onReject: (id: string) => void;
   onDelete: (id: string) => void;
-  onEdit: (id: string, data: { title: string; summary: string; content: string }) => void;
+  onEdit: (item: NewsItem) => void;
   theme: ThemeColors;
   lang: AppLanguage;
 }
@@ -87,8 +88,8 @@ function NewsCard({
       onPress={() => setExpanded(!expanded)}
       style={({ pressed }) => [
         styles.card,
+        appleCardStyle(theme),
         {
-          backgroundColor: theme.card,
           borderColor: item.isRead ? theme.cardBorder : theme.tint + "55",
           opacity: pressed ? 0.96 : 1,
         },
@@ -542,7 +543,7 @@ const styles = StyleSheet.create({
   filterScroll: { marginBottom: 8 },
   filterPill: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, marginRight: 8 },
   filterPillText: { fontSize: 13, fontFamily: "Inter_500Medium" },
-  card: { borderRadius: 16, padding: 14, borderWidth: 1, gap: 8, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
+  card: { padding: 14, gap: 8 },
   cardRow: { flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" },
   catBadge: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
   catText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },

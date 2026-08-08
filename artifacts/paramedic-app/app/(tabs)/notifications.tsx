@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useTopPad } from "@/hooks/useTopPad";
 import { GlassLoader } from "@/components/GlassLoader";
+import { appleCardStyle } from "@/components/AppleSurface";
 import { t } from "@/constants/i18n";
 import { getTheme, type ThemeColors, istDunklesThema } from "@/constants/theme";
 import type { AppLanguage, NotificationItem, NotificationType } from "@/models";
@@ -71,7 +72,7 @@ function HighPriorityBanner({ items, theme, lang }: { items: NotificationItem[];
 function NotifCard({ item, theme, lang }: { item: NotificationItem; theme: ThemeColors; lang: AppLanguage }) {
   const conf = notifConfig(item.type);
   return (
-    <View style={[styles.card, { backgroundColor: theme.card, borderColor: !item.isRead ? theme.tint + "44" : theme.cardBorder }]}>
+    <View style={[styles.card, appleCardStyle(theme), { borderColor: !item.isRead ? theme.tint + "44" : theme.cardBorder }]}>
       <View style={[styles.iconWrap, { backgroundColor: conf.bg }]}>
         <Ionicons name={conf.icon as any} size={20} color={conf.color} />
       </View>
@@ -215,7 +216,7 @@ const styles = StyleSheet.create({
   hpDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#EF4444", marginTop: 5, flexShrink: 0 },
   hpCardTitle: { fontSize: 13, fontFamily: "Inter_700Bold", color: "#991B1B" },
   hpCardBody: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#DC2626", lineHeight: 16, marginTop: 2 },
-  card: { flexDirection: "row", borderRadius: 14, padding: 14, borderWidth: 1, gap: 12, alignItems: "center", shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 },
+  card: { flexDirection: "row", padding: 14, gap: 12, alignItems: "center" },
   iconWrap: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center", flexShrink: 0 },
   cardContent: { flex: 1, gap: 4 },
   cardTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 8 },

@@ -17,6 +17,7 @@ import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing } from "
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTopPad } from "@/hooks/useTopPad";
 import { GlassLoader } from "@/components/GlassLoader";
+import { appleCardStyle } from "@/components/AppleSurface";
 import { t } from "@/constants/i18n";
 import { getTheme, istDunklesThema } from "@/constants/theme";
 import { DatePickerField } from "@/components/DatePickerField";
@@ -245,7 +246,7 @@ export default function LOAScreen() {
         }
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.tint} />}
         renderItem={({ item }) => (
-          <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
+          <View style={[styles.card, appleCardStyle(theme)]}>
             <View style={styles.cardRow}>
               <Text style={[styles.name, { color: theme.text }]}>{item.userName}</Text>
               <StatusBadge status={item.status} lang={lang} />
@@ -393,7 +394,7 @@ const styles = StyleSheet.create({
   heading: { fontSize: 28, fontFamily: "Inter_700Bold" },
   headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
   iconBtn: { width: 44, height: 44, borderRadius: 12, alignItems: "center", justifyContent: "center" },
-  card: { borderRadius: 16, padding: 14, borderWidth: 1, gap: 8, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 },
+  card: { padding: 14, gap: 8 },
   cardRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   name: { fontSize: 16, fontFamily: "Inter_600SemiBold" },
   dates: { fontSize: 13, fontFamily: "Inter_400Regular" },

@@ -18,7 +18,7 @@ import { useRoles } from "@/hooks/useRoles";
 import { GlassLoader } from "@/components/GlassLoader";
 import { t } from "@/constants/i18n";
 import { getTheme, istDunklesThema } from "@/constants/theme";
-import type { ActivitySummary, User } from "@/models";
+import type { ActivitySummary, MissionActivityLog, User } from "@/models";
 
 type ActivitySummaryItem = ActivitySummary;
 import ApiService from "@/services/ApiService";
@@ -29,7 +29,7 @@ interface ActivityUser {
   userName: string;
   role: User["role"];
   totalLogs: number;
-  lastActivityAt: string;
+  lastActivityAt: string | null;
 }
 
 const ACTION_CONFIG: Record<string, { icon: string; color: string }> = {
@@ -50,7 +50,7 @@ export default function SaniActivityScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
-  const [userActivities, setUserActivities] = useState<ActivitySummary[]>([]);
+  const [userActivities, setUserActivities] = useState<MissionActivityLog[]>([]);
   const [loadingActivities, setLoadingActivities] = useState(false);
 
   const canView = has("activity.view");
