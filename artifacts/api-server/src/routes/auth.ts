@@ -21,6 +21,7 @@ import { hashPassword } from "../auth/providers/local";
 import { issueAuthToken, hashAuthToken } from "../lib/authTokens";
 import { assertMailerConfig, authLink, sendMail, verifyMailer } from "../services/mailer";
 import { validateProfileName } from "../lib/profileName";
+import { normaliseEmail } from "../lib/email";
 
 const router = Router();
 
@@ -79,12 +80,6 @@ const AUTH_RESPONSE_FLOOR_MS = 400;
 const SESSION_COOKIE = "sani-session";
 const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const LINK_SESSION_FRESHNESS_MS = 15 * 60 * 1000;
-
-function normaliseEmail(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const email = value.trim().toLowerCase();
-  return email.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : null;
-}
 
 function validPassword(value: unknown): value is string {
   return typeof value === "string" && value.length >= 10 && value.length <= 200;
@@ -210,7 +205,7 @@ if (localProvider) {
   assertMailerConfig();
 }
 
-function getLocalProvider(): PasswordAuthProvider {
+export function getLocalProvider(): PasswordAuthProvider {
   if (!localProvider) throw new Error("Lokale Konten sind in dieser Installation nicht aktiviert.");
   return localProvider;
 }

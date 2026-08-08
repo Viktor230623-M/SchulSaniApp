@@ -1,11 +1,13 @@
 import { Router } from "express";
-import { and, eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import { db, usersTable, type UserRole } from "@workspace/db";
 import { requireAuth, requirePermission, invalidateUserCache, type AuthRequest } from "../middlewares/auth";
 import { assertAdminReachable, LockoutError } from "../lib/rolePermissions";
 import { logRoleChangeTx } from "../lib/roleChangeLog";
 import { logProfileChangeTx } from "../lib/profileChangeLog";
 import { validateProfileName } from "../lib/profileName";
+import { normaliseEmail } from "../lib/email";
+import { getLocalProvider } from "./auth";
 
 // Quelle der Rollen ist der Aufzaehlungstyp user_role (siehe
 // lib/db/src/schema/index.ts).
@@ -199,10 +201,13 @@ router.patch("/:id/role", requireAuth, requirePermission("users.assign_role"), a
   res.json(safeUser(updated));
 });
 
-// Korrigiert einen falsch eingegebenen Namen. Anders als PATCH /auth/profile
-// (einmalig, ohne Berechtigungspruefung, Ziel aus der Sitzung) hier ein Ziel
-// im Pfad plus Berechtigung -- der Weg fuer einen Verwalter, wenn der Nutzer
-// seinen eigenen Namen bereits verbraucht hat.
+// Korrigiert einen falsch eingegebenen Namen oder eine falsche E-Mail-Adresse.
+// Anders als PATCH /auth/profile (einmalig, ohne Berechtigungspruefung, Ziel
+// aus der Sitzung) hier ein Ziel im Pfad plus Berechtigung -- der Weg fuer
+// einen Verwalter, wenn der Nutzer seinen Namen bereits verbraucht hat oder
+// eine falsche Adresse eingegeben wurde. Jede Aenderung landet im Profil-
+// Protokoll; eine korrigierte Adresse gilt als vom Verwalter geprueft und wird
+// deshalb sofort als bestaetigt markiert.
 router.patch("/:id/profile", requireAuth, requirePermission("users.correct_profile"), async (req: AuthRequest, res) => {
   const { id } = req.params as { id: string };
 
@@ -214,16 +219,28 @@ router.patch("/:id/profile", requireAuth, requirePermission("users.correct_profi
     return;
   }
 
-  const { firstName, lastName } = req.body as { firstName?: unknown; lastName?: unknown };
+  const { firstName, lastName, email } = req.body as { firstName?: unknown; lastName?: unknown; email?: unknown };
   const cleanFirstName = validateProfileName(firstName);
   const cleanLastName = validateProfileName(lastName);
   if (!cleanFirstName || !cleanLastName) {
     res.status(400).json({ error: "Vor- und Nachname erforderlich, bis zu 100 Zeichen, ohne Steuerzeichen oder reine Ziffern." });
     return;
   }
+  // Fehlt die Adresse im Rumpf, bleibt sie unveraendert -- die Korrektur ist
+  // auf den Namen beschraenkt. Ist sie da, muss sie als Adresse brauchbar
+  // sein; leeren oder kaputten Wert liefert normaliseEmail als null zurueck.
+  let cleanEmail: string | undefined;
+  if (email !== undefined) {
+    const normalised = normaliseEmail(email);
+    if (normalised === null) {
+      res.status(400).json({ error: "E-Mail ist ungueltig." });
+      return;
+    }
+    cleanEmail = normalised;
+  }
 
   let existing: typeof usersTable.$inferSelect | undefined;
-  let correctionError: "not_found" | "forbidden" | undefined;
+  let correctionError: "not_found" | "forbidden" | "email_taken" | undefined;
   let updated: typeof usersTable.$inferSelect | undefined;
   await db.transaction(async (tx) => {
     const [locked] = await tx
@@ -241,9 +258,53 @@ router.patch("/:id/profile", requireAuth, requirePermission("users.correct_profi
       return;
     }
 
+    // Eindeutigkeit in derselben Transaktion wie die Aenderung, damit zwei
+    // gleichzeitige Korrekturen nicht dieselbe Adresse vergeben. Die eigene
+    // Zeile ist ausgenommen: eine unveraenderte Adresse ist kein Konflikt.
+    if (cleanEmail !== undefined && cleanEmail !== locked.email) {
+      const [collision] = await tx
+        .select({ id: usersTable.id })
+        .from(usersTable)
+        .where(and(eq(usersTable.email, cleanEmail), ne(usersTable.id, id)))
+        .limit(1);
+      if (collision) {
+        correctionError = "email_taken";
+        return;
+      }
+    }
+
+    const changes: Partial<typeof usersTable.$inferInsert> = {
+      firstName: cleanFirstName,
+      lastName: cleanLastName,
+      updatedAt: new Date(),
+    };
+    // Nur ein noch unbestaetigtes Konto wird durch die Korrektur bestaetigt.
+    // Ein bereits bestaetigter Name darf seinen Zeitstempel nicht verlieren,
+    // wenn nur die Adresse korrigiert wird.
+    if (!locked.profileConfirmedAt) {
+      changes.profileConfirmedAt = new Date();
+    }
+    if (cleanEmail !== undefined && cleanEmail !== locked.email) {
+      changes.email = cleanEmail;
+      // Der Verwalter hat die Adresse geprueft -- sie gilt damit als bestaetigt.
+      changes.emailVerifiedAt = new Date();
+      // Bei lokalen Konten ist die Adresse zugleich das Anmelde-Subjekt.
+      // Bleibt externalSubject alt, akzeptiert der Login die alte Adresse
+      // weiter -- deshalb muss die Korrektur sie mitziehen.
+      let localKey: string | undefined;
+      try {
+        localKey = getLocalProvider().key;
+      } catch {
+        // Keine lokalen Konten in dieser Installation -- nichts zu ziehen.
+      }
+      if (localKey && locked.authProvider === localKey) {
+        changes.externalSubject = cleanEmail;
+      }
+    }
+
     const rows = await tx
       .update(usersTable)
-      .set({ firstName: cleanFirstName, lastName: cleanLastName, profileConfirmedAt: new Date(), updatedAt: new Date() })
+      .set(changes)
       .where(eq(usersTable.id, id))
       .returning();
     updated = rows[0];
@@ -253,6 +314,9 @@ router.patch("/:id/profile", requireAuth, requirePermission("users.correct_profi
     if (locked.lastName !== cleanLastName) {
       await logProfileChangeTx(tx, { actorId: req.user!.userId, targetUserId: id, field: "last_name", before: locked.lastName, after: cleanLastName });
     }
+    if (cleanEmail !== undefined && cleanEmail !== locked.email) {
+      await logProfileChangeTx(tx, { actorId: req.user!.userId, targetUserId: id, field: "email", before: locked.email, after: cleanEmail });
+    }
   });
   if (correctionError === "not_found") {
     res.status(404).json({ error: "User not found" });
@@ -260,6 +324,10 @@ router.patch("/:id/profile", requireAuth, requirePermission("users.correct_profi
   }
   if (correctionError === "forbidden") {
     res.status(403).json({ error: "Insufficient permissions to correct this user" });
+    return;
+  }
+  if (correctionError === "email_taken") {
+    res.status(409).json({ error: "Diese E-Mail-Adresse ist bereits vergeben." });
     return;
   }
   invalidateUserCache(id);

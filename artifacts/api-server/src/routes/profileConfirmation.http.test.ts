@@ -26,6 +26,20 @@ function extractEqId(cond: any): string | undefined {
   return param?.value;
 }
 
+function extractParams(cond: any): unknown[] {
+  const out: unknown[] = [];
+  const collect = (c: any) => {
+    if (c?.constructor?.name === "Param") {
+      out.push(c.value);
+      return;
+    }
+    const chunks = c?.queryChunks;
+    if (Array.isArray(chunks)) chunks.forEach(collect);
+  };
+  collect(cond);
+  return out;
+}
+
 vi.mock("@workspace/db", async () => {
   // usersTable braucht echte Drizzle-Spalten, sonst liefert eq(usersTable.id,
   // ...) im Routencode kein auswertbares SQL-Objekt (usersTable.id waere
@@ -55,15 +69,28 @@ vi.mock("@workspace/db", async () => {
   function makeSelectChain(): any {
     let isUsers = false;
     let whereId: string | undefined;
+    let emailWhere: string | undefined;
     const resolve = () => {
       if (!isUsers) return Promise.resolve([]);
+      // Eindeutigkeitsabfrage der E-Mail-Korrektur: sucht ueber die Adresse und
+      // schliesst das Ziel aus (and(eq(email, ...), ne(id, ...))).
+      if (emailWhere !== undefined) {
+        return Promise.resolve(Object.values(fakeUsers).filter((u) => u.email === emailWhere && u.id !== whereId));
+      }
       if (whereId !== undefined) return Promise.resolve(fakeUsers[whereId] ? [fakeUsers[whereId]] : []);
       return Promise.resolve(Object.values(fakeUsers));
     };
     const chain: any = {
       from: (t: any) => { isUsers = t === usersTableMock; return chain; },
       innerJoin: () => chain,
-      where: (cond: any) => { whereId = extractEqId(cond); return chain; },
+      where: (cond: any) => {
+        const params = extractParams(cond);
+        const idParam = params.find((p) => typeof p === "string" && !p.includes("@") && fakeUsers[p]);
+        const mailParam = params.find((p) => typeof p === "string" && p.includes("@"));
+        if (idParam !== undefined) whereId = idParam;
+        if (mailParam !== undefined) emailWhere = mailParam;
+        return chain;
+      },
       limit: () => chain,
       for: () => chain,
       then: (onFulfilled: any, onRejected?: any) => resolve().then(onFulfilled, onRejected),
@@ -330,6 +357,79 @@ describe("Namensbestaetigung -- Sperre, Endpunkt, Verwalter-Korrektur", () => {
       const result = await call("PATCH", `/api/users/${actor.id}/profile`, tokenFor(actor), { firstName: "Neu", lastName: "Selbst" });
 
       expect(result.status).toBe(403);
+      expect(profileChangeEntries).toHaveLength(0);
+    });
+
+    it("korrigiert die E-Mail-Adresse, markiert sie als bestaetigt und protokolliert sie", async () => {
+      const actor = makeUser({ id: "actor-admin-mail", role: "admin", profileConfirmedAt: new Date() });
+      const target = makeUser({ id: "target-mail", email: "alt@vitest.beispiel.invalid", emailVerifiedAt: null });
+      fakeUsers[actor.id] = actor;
+      fakeUsers[target.id] = target;
+
+      const result = await call("PATCH", `/api/users/${target.id}/profile`, tokenFor(actor), {
+        firstName: target.firstName,
+        lastName: target.lastName,
+        email: "Neu@Vitest.Beispiel.Invalid",
+      });
+
+      expect(result.status).toBe(200);
+      expect(fakeUsers[target.id]!.email).toBe("neu@vitest.beispiel.invalid");
+      expect(fakeUsers[target.id]!.emailVerifiedAt).not.toBeNull();
+      const emailEntry = profileChangeEntries.find((e) => e.field === "email");
+      expect(emailEntry).toBeDefined();
+      expect(emailEntry!.before).toBe("alt@vitest.beispiel.invalid");
+      expect(emailEntry!.after).toBe("neu@vitest.beispiel.invalid");
+    });
+
+    it("verweigert eine bereits vergebene E-Mail-Adresse mit 409", async () => {
+      const actor = makeUser({ id: "actor-admin-taken", role: "admin", profileConfirmedAt: new Date() });
+      const target = makeUser({ id: "target-taken", email: "a@vitest.beispiel.invalid" });
+      const other = makeUser({ id: "other-taken", email: "b@vitest.beispiel.invalid" });
+      fakeUsers[actor.id] = actor;
+      fakeUsers[target.id] = target;
+      fakeUsers[other.id] = other;
+
+      const result = await call("PATCH", `/api/users/${target.id}/profile`, tokenFor(actor), {
+        firstName: target.firstName,
+        lastName: target.lastName,
+        email: "b@vitest.beispiel.invalid",
+      });
+
+      expect(result.status).toBe(409);
+      expect(fakeUsers[target.id]!.email).toBe("a@vitest.beispiel.invalid");
+      expect(profileChangeEntries.some((e) => e.field === "email")).toBe(false);
+    });
+
+    it("laesst den Zeitstempel eines bestaetigten Namens bei reiner E-Mail-Korrektur stehen", async () => {
+      const confirmedAt = new Date("2026-07-01T10:00:00Z");
+      const actor = makeUser({ id: "actor-admin-ts", role: "admin", profileConfirmedAt: new Date() });
+      const target = makeUser({ id: "target-ts", profileConfirmedAt: confirmedAt, email: "alt@vitest.beispiel.invalid" });
+      fakeUsers[actor.id] = actor;
+      fakeUsers[target.id] = target;
+
+      const result = await call("PATCH", `/api/users/${target.id}/profile`, tokenFor(actor), {
+        firstName: target.firstName,
+        lastName: target.lastName,
+        email: "neu@vitest.beispiel.invalid",
+      });
+
+      expect(result.status).toBe(200);
+      expect(fakeUsers[target.id]!.profileConfirmedAt).toBe(confirmedAt);
+    });
+
+    it("weist eine ungueltige E-Mail-Adresse mit 400 ab", async () => {
+      const actor = makeUser({ id: "actor-admin-bad", role: "admin", profileConfirmedAt: new Date() });
+      const target = makeUser({ id: "target-bad-mail", email: "a@vitest.beispiel.invalid" });
+      fakeUsers[actor.id] = actor;
+      fakeUsers[target.id] = target;
+
+      const result = await call("PATCH", `/api/users/${target.id}/profile`, tokenFor(actor), {
+        firstName: target.firstName,
+        lastName: target.lastName,
+        email: "keine-adresse",
+      });
+
+      expect(result.status).toBe(400);
       expect(profileChangeEntries).toHaveLength(0);
     });
   });
