@@ -1,8 +1,8 @@
 import { randomUUID } from "crypto";
 import { Router } from "express";
-import { desc, eq, inArray, lt, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, lt, sql } from "drizzle-orm";
 import { db, missionsTable, missionActivityLogTable, usersTable } from "@workspace/db";
-import { requireAuth, requirePermission, type AuthRequest } from "../middlewares/auth";
+import { requireAuth, requirePermission, schoolIdOf, type AuthRequest } from "../middlewares/auth";
 import { addDismissal, getDismissedFor, removeDismissal } from "../data/dismissals";
 import { notifyOnDutyUsers, notifyUser } from "../services/notifications";
 import { translateToLanguages } from "../services/translator";
@@ -12,13 +12,14 @@ async function logMissionAction(
   userId: string,
   missionId: string,
   missionTitle: string,
-  action: "accepted" | "dismissed" | "completed" | "unanswered"
+  action: "accepted" | "dismissed" | "completed" | "unanswered",
+  schoolId: string
 ): Promise<void> {
   const now = new Date();
   const [user] = await db
     .select({ firstName: usersTable.firstName, lastName: usersTable.lastName })
     .from(usersTable)
-    .where(eq(usersTable.id, userId));
+    .where(and(eq(usersTable.id, userId), eq(usersTable.schoolId, schoolId)));
   const userName = user ? `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() : userId;
   const dayKey = now.toISOString().split("T")[0]!;
   const d = new Date(now);
@@ -27,13 +28,14 @@ async function logMissionAction(
   const wn = 1 + Math.round(((d.getTime() - w1.getTime()) / 86400000 - 3 + ((w1.getDay() + 6) % 7)) / 7);
   const weekKey = `${d.getFullYear()}-W${String(wn).padStart(2, "0")}`;
   await db.insert(missionActivityLogTable).values({
-    id: randomUUID(), userId, userName, missionId, missionTitle, action, weekKey, dayKey, createdAt: now,
+    id: randomUUID(), schoolId, userId, userName, missionId, missionTitle, action, weekKey, dayKey, createdAt: now,
   }).onConflictDoNothing();
 }
 
 const router = Router();
 
 router.get("/", requireAuth, async (req: AuthRequest, res) => {
+  const schoolId = schoolIdOf(req);
   const _canSeePatient = (req.user!.permissions ?? []).includes("reports.see_patient_info");
 
   // Auto-archive pending/accepted missions from previous calendar days
@@ -42,18 +44,19 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
   await db.update(missionsTable)
     .set({ status: "archived" })
     .where(
-      sql`${missionsTable.status} IN ('pending', 'accepted') AND ${missionsTable.requestedAt} < ${todayStart}`
+      sql`${missionsTable.schoolId} = ${schoolId} AND ${missionsTable.status} IN ('pending', 'accepted') AND ${missionsTable.requestedAt} < ${todayStart}`
     );
 
-  const all = await db.select().from(missionsTable).orderBy(desc(missionsTable.requestedAt));
-  const dismissed = await getDismissedFor(req.user!.userId);
+  const all = await db.select().from(missionsTable).where(eq(missionsTable.schoolId, schoolId)).orderBy(desc(missionsTable.requestedAt));
+  const dismissed = await getDismissedFor(req.user!.userId, schoolId);
   const visible = all
     .filter((m) => m.status !== "rejected" && m.status !== "archived" && !dismissed.has(m.id))
     .map((m) => _canSeePatient ? m : { ...m, patientInfo: undefined });
   res.json(visible);
 });
 
-router.post("/", requireAuth, requirePermission("missions.create"), async (req, res) => {
+router.post("/", requireAuth, requirePermission("missions.create"), async (req: AuthRequest, res) => {
+  const schoolId = schoolIdOf(req);
   const { title, description, location, priority, scheduledFor, patientInfo } = req.body;
   if (!title || !location) {
     res.status(400).json({ error: "title and location required" });
@@ -71,7 +74,7 @@ router.post("/", requireAuth, requirePermission("missions.create"), async (req, 
       return;
     }
   }
-  const m = {
+  const m: typeof missionsTable.$inferInsert = {
     id: randomUUID(),
     title,
     description: description ?? "",
@@ -80,6 +83,7 @@ router.post("/", requireAuth, requirePermission("missions.create"), async (req, 
     status: "pending" as const,
     requestedAt: new Date(),
     requestedBy: req.user!.userId,
+    schoolId,
     scheduledFor: parsedScheduledFor ?? new Date(Date.now() + 30 * 60000),
     patientInfo: patientInfo ?? null,
     assignedParamedicId: null,
@@ -89,11 +93,12 @@ router.post("/", requireAuth, requirePermission("missions.create"), async (req, 
 
   const t = await translateToLanguages({ title, description: description ?? "", location }, "de").catch(() => ({}));
   if (Object.keys(t).length > 0) {
-    await db.update(missionsTable).set({ translationsJson: JSON.stringify(t) }).where(eq(missionsTable.id, m.id));
+    await db.update(missionsTable).set({ translationsJson: JSON.stringify(t) }).where(and(eq(missionsTable.id, m.id), eq(missionsTable.schoolId, schoolId)));
     m.translationsJson = JSON.stringify(t);
   }
 
   notifyOnDutyUsers({
+    schoolId,
     type: "mission_created",
     title: "Neue Mission",
     body: `${title} - ${location}`,
@@ -105,39 +110,48 @@ router.post("/", requireAuth, requirePermission("missions.create"), async (req, 
 });
 
 router.post("/:id/accept", requireAuth, async (req: AuthRequest, res) => {
-  const [existing] = await db.select().from(missionsTable).where(eq(missionsTable.id, req.params.id as string));
+  const schoolId = schoolIdOf(req);
+  const [existing] = await db.select().from(missionsTable).where(and(eq(missionsTable.id, req.params.id as string), eq(missionsTable.schoolId, schoolId)));
   if (!existing) { res.status(404).json({ error: "Not found" }); return; }
   if (existing.status !== "pending") { res.status(400).json({ error: "Mission is not pending" }); return; }
-  const [m] = await db.update(missionsTable).set({ status: "accepted", assignedParamedicId: req.user!.userId }).where(eq(missionsTable.id, req.params.id as string)).returning();
+  const [m] = await db.update(missionsTable).set({ status: "accepted", assignedParamedicId: req.user!.userId }).where(and(eq(missionsTable.id, req.params.id as string), eq(missionsTable.schoolId, schoolId))).returning();
   
   notifyUser(existing.requestedBy ?? "unknown", {
+    schoolId,
     type: "mission_assigned",
     title: "Mission angenommen",
     body: `Deine Mission "${m.title}" wurde angenommen`,
     relatedId: m.id,
   }).catch(console.error);
 
-  logMissionAction(req.user!.userId, m.id, m.title, "accepted").catch(console.error);
+  logMissionAction(req.user!.userId, m.id, m.title, "accepted", schoolId).catch(console.error);
 
   res.json(m);
 });
 
 router.post("/:id/dismiss", requireAuth, async (req: AuthRequest, res) => {
   const missionId = req.params.id as string;
-  await addDismissal(req.user!.userId, missionId);
-  const [mission] = await db.select({ title: missionsTable.title }).from(missionsTable).where(eq(missionsTable.id, missionId));
-  if (mission) logMissionAction(req.user!.userId, missionId, mission.title, "dismissed").catch(console.error);
+  const schoolId = schoolIdOf(req);
+  const [existing] = await db.select({ id: missionsTable.id }).from(missionsTable).where(and(eq(missionsTable.id, missionId), eq(missionsTable.schoolId, schoolId)));
+  if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+  await addDismissal(req.user!.userId, missionId, schoolId);
+  const [mission] = await db.select({ title: missionsTable.title }).from(missionsTable).where(and(eq(missionsTable.id, missionId), eq(missionsTable.schoolId, schoolId)));
+  if (mission) logMissionAction(req.user!.userId, missionId, mission.title, "dismissed", schoolId).catch(console.error);
   res.json({ success: true, missionId });
 });
 
 router.post("/:id/undismiss", requireAuth, async (req: AuthRequest, res) => {
   const missionId = req.params.id as string;
-  await removeDismissal(req.user!.userId, missionId);
+  const schoolId = schoolIdOf(req);
+  const [existing] = await db.select({ id: missionsTable.id }).from(missionsTable).where(and(eq(missionsTable.id, missionId), eq(missionsTable.schoolId, schoolId)));
+  if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+  await removeDismissal(req.user!.userId, missionId, schoolId);
   res.json({ success: true, missionId });
 });
 
 router.post("/:id/reject", requireAuth, requirePermission("missions.moderate"), async (req, res) => {
-  const [m] = await db.update(missionsTable).set({ status: "rejected" }).where(eq(missionsTable.id, req.params.id as string)).returning();
+  const schoolId = schoolIdOf(req);
+  const [m] = await db.update(missionsTable).set({ status: "rejected" }).where(and(eq(missionsTable.id, req.params.id as string), eq(missionsTable.schoolId, schoolId))).returning();
   if (!m) { res.status(404).json({ error: "Not found" }); return; }
   res.json(m);
 });
@@ -148,7 +162,8 @@ router.post("/:id/complete", requireAuth, async (req: AuthRequest, res) => {
     res.status(400).json({ error: "notes max 2000 characters" });
     return;
   }
-  const [existing] = await db.select().from(missionsTable).where(eq(missionsTable.id, req.params.id as string));
+  const schoolId = schoolIdOf(req);
+  const [existing] = await db.select().from(missionsTable).where(and(eq(missionsTable.id, req.params.id as string), eq(missionsTable.schoolId, schoolId)));
   if (!existing) { res.status(404).json({ error: "Not found" }); return; }
 
   const userId = req.user!.userId;
@@ -159,10 +174,11 @@ router.post("/:id/complete", requireAuth, async (req: AuthRequest, res) => {
     return;
   }
 
-  const [m] = await db.update(missionsTable).set({ status: "completed", notes }).where(eq(missionsTable.id, req.params.id as string)).returning();
+  const [m] = await db.update(missionsTable).set({ status: "completed", notes }).where(and(eq(missionsTable.id, req.params.id as string), eq(missionsTable.schoolId, schoolId))).returning();
   if (!m) { res.status(404).json({ error: "Not found" }); return; }
   
   notifyUser(m.assignedParamedicId ?? "unknown", {
+    schoolId,
     type: "mission_completed",
     title: "Mission abgeschlossen",
     body: `Die Mission "${m.title}" wurde abgeschlossen`,
@@ -170,7 +186,7 @@ router.post("/:id/complete", requireAuth, async (req: AuthRequest, res) => {
   }).catch(console.error);
 
   if (m.assignedParamedicId) {
-    logMissionAction(m.assignedParamedicId, m.id, m.title, "completed").catch(console.error);
+    logMissionAction(m.assignedParamedicId, m.id, m.title, "completed", schoolId).catch(console.error);
   }
 
   res.json(m);

@@ -1,15 +1,15 @@
 import { Router } from "express";
-import { eq, desc, sql } from "drizzle-orm";
+import { and, eq, desc, sql } from "drizzle-orm";
 import { db, usersTable, missionActivityLogTable } from "@workspace/db";
-import { requireAuth, requirePermission, type AuthRequest } from "../middlewares/auth";
+import { requireAuth, requirePermission, schoolIdOf, type AuthRequest } from "../middlewares/auth";
 
 const router = Router();
 
 // GET /activity/users - returns all users with their activity count and last activity
-router.get("/users", requireAuth, requirePermission("activity.view"), async (_req, res) => {
+router.get("/users", requireAuth, requirePermission("activity.view"), async (req: AuthRequest, res) => {
   try {
-    // Get all users
-    const users = await db.select().from(usersTable);
+    const schoolId = schoolIdOf(req);
+    const users = await db.select().from(usersTable).where(eq(usersTable.schoolId, schoolId));
 
     // Get activity counts and last activity for each user
     const activityCounts = await db
@@ -19,6 +19,7 @@ router.get("/users", requireAuth, requirePermission("activity.view"), async (_re
         lastActivity: sql<string>`max(${missionActivityLogTable.createdAt})`,
       })
       .from(missionActivityLogTable)
+      .where(eq(missionActivityLogTable.schoolId, schoolId))
       .groupBy(missionActivityLogTable.userId);
 
     const activityMap = new Map(activityCounts.map(a => [a.userId, a]));
@@ -54,11 +55,12 @@ router.get("/users", requireAuth, requirePermission("activity.view"), async (_re
 router.get("/my", requireAuth, async (req: AuthRequest, res) => {
   try {
     const userId = req.user!.userId;
+    const schoolId = schoolIdOf(req);
 
     const activities = await db
       .select()
       .from(missionActivityLogTable)
-      .where(eq(missionActivityLogTable.userId, userId))
+      .where(and(eq(missionActivityLogTable.userId, userId), eq(missionActivityLogTable.schoolId, schoolId)))
       .orderBy(desc(missionActivityLogTable.createdAt));
 
     res.json(activities);
@@ -72,8 +74,9 @@ router.get("/my", requireAuth, async (req: AuthRequest, res) => {
 router.get("/user/:userId", requireAuth, requirePermission("activity.view"), async (req: AuthRequest, res) => {
   try {
     const userId = req.params.userId as string;
+    const schoolId = schoolIdOf(req);
 
-    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+    const [user] = await db.select().from(usersTable).where(and(eq(usersTable.id, userId), eq(usersTable.schoolId, schoolId)));
     if (!user) {
       res.status(404).json({ error: "User not found" });
       return;
@@ -82,7 +85,7 @@ router.get("/user/:userId", requireAuth, requirePermission("activity.view"), asy
     const activities = await db
       .select()
       .from(missionActivityLogTable)
-      .where(eq(missionActivityLogTable.userId, userId))
+      .where(and(eq(missionActivityLogTable.userId, userId), eq(missionActivityLogTable.schoolId, schoolId)))
       .orderBy(desc(missionActivityLogTable.createdAt));
 
     res.json(activities);

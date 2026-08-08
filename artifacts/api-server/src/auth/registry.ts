@@ -42,6 +42,12 @@ interface RawOidcRedirectProviderConfig {
 
 const EXAMPLE_FILE = "ops/install/auth-providers.example.json";
 
+function requiredSchoolId(): string {
+  const schoolId = process.env["SCHOOL_ID"]?.trim();
+  if (!schoolId) throw new Error("SCHOOL_ID ist nicht gesetzt.");
+  return schoolId;
+}
+
 function buildProvider(raw: RawLocalProviderConfig | RawOidcRedirectProviderConfig, relay?: AuthRelaySettings): AuthProvider {
   if (raw.type === "local") {
     if (!raw.key || !raw.displayName) {
@@ -51,7 +57,7 @@ function buildProvider(raw: RawLocalProviderConfig | RawOidcRedirectProviderConf
       ...createLocalProvider({
         key: raw.key,
         displayName: raw.displayName,
-        schoolId: raw.schoolId ?? process.env["SCHOOL_ID"]?.trim() ?? "school",
+        schoolId: raw.schoolId ?? requiredSchoolId(),
       }),
       groupToRoleMap: raw.groupToRoleMap ?? {},
     };

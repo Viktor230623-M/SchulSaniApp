@@ -10,6 +10,7 @@ export type ReportAccessAction = "list" | "detail" | "pdf";
  * Lesevorgang nicht scheitern lassen. Fehler landen im Serverlog.
  */
 export function logReportAccess(input: {
+  schoolId: string;
   userId: string;
   userName?: string | null;
   reportId?: string | null;
@@ -21,6 +22,7 @@ export function logReportAccess(input: {
     .insert(reportAccessLogTable)
     .values({
       id: randomUUID(),
+      schoolId: input.schoolId,
       userId: input.userId,
       userName: input.userName ?? null,
       reportId: input.reportId ?? null,

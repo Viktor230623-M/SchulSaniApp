@@ -5,6 +5,7 @@ import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import router from "./routes";
 import { config } from "./config";
+import { MissingSchoolContextError } from "./middlewares/auth";
 
 const app: Express = express();
 app.disable("x-powered-by");
@@ -45,6 +46,10 @@ app.use("/api", router);
 
 // Error handler must be registered AFTER routes so it catches errors thrown within them.
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  if (err instanceof MissingSchoolContextError || err.name === "MissingSchoolContextError") {
+    res.status(403).json({ error: "Schulkontext fehlt" });
+    return;
+  }
   if (err.message === "Invalid JSON") {
     res.status(400).json({ error: "Invalid JSON in request body" });
     return;

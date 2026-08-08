@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { and, eq } from "drizzle-orm";
 import { db, usersTable, type UserRole } from "@workspace/db";
-import { requireAuth, requirePermission, invalidateUserCache, type AuthRequest } from "../middlewares/auth";
+import { requireAuth, requirePermission, schoolIdOf, invalidateUserCache, type AuthRequest } from "../middlewares/auth";
 import { assertAdminReachable, LockoutError } from "../lib/rolePermissions";
 import { logRoleChangeTx } from "../lib/roleChangeLog";
 import { logProfileChangeTx } from "../lib/profileChangeLog";
@@ -37,18 +37,21 @@ function canModifyTarget(requester: string, existingRole: string): boolean {
   return false;
 }
 
-router.get("/", requireAuth, requirePermission("users.read_all"), async (_req, res) => {
-  const users = await db.select().from(usersTable);
+router.get("/", requireAuth, requirePermission("users.read_all"), async (req: AuthRequest, res) => {
+  const schoolId = schoolIdOf(req);
+  const users = await db.select().from(usersTable).where(eq(usersTable.schoolId, schoolId));
   res.json(users.map(safeUser));
 });
 
-router.get("/pending", requireAuth, requirePermission("users.read_pending"), async (_req, res) => {
-  const users = await db.select().from(usersTable).where(eq(usersTable.isApproved, false));
+router.get("/pending", requireAuth, requirePermission("users.read_pending"), async (req: AuthRequest, res) => {
+  const schoolId = schoolIdOf(req);
+  const users = await db.select().from(usersTable).where(and(eq(usersTable.isApproved, false), eq(usersTable.schoolId, schoolId)));
   res.json(users.map(safeUser));
 });
 
 router.get("/:id", requireAuth, async (req: AuthRequest, res) => {
   const requestingUser = req.user!;
+  const schoolId = schoolIdOf(req);
   const requestedId = req.params["id"]!;
   
   // Fremde Profile nur mit users.read_all, eigene immer. Die feste Rollenliste
@@ -63,7 +66,7 @@ router.get("/:id", requireAuth, async (req: AuthRequest, res) => {
     return;
   }
   
-  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, requestedId as string));
+  const [user] = await db.select().from(usersTable).where(and(eq(usersTable.id, requestedId as string), eq(usersTable.schoolId, schoolId)));
   if (!user) {
     res.status(404).json({ error: "Not found" });
     return;
@@ -73,6 +76,7 @@ router.get("/:id", requireAuth, async (req: AuthRequest, res) => {
 
 router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
   const requestingUser = req.user!;
+  const schoolId = schoolIdOf(req);
   const requestedId = req.params["id"]!;
   
   // Users can only update their own profile
@@ -81,7 +85,7 @@ router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
     return;
   }
   
-  const [existingUser] = await db.select().from(usersTable).where(eq(usersTable.id, requestedId));
+  const [existingUser] = await db.select().from(usersTable).where(and(eq(usersTable.id, requestedId), eq(usersTable.schoolId, schoolId)));
   if (!existingUser) {
     res.status(404).json({ error: "User not found" });
     return;
@@ -104,7 +108,8 @@ router.patch("/:id/approve", requireAuth, requirePermission("users.approve"), as
     res.status(403).json({ error: "Cannot approve your own account" }); return;
   }
 
-  const [existing] = await db.select().from(usersTable).where(eq(usersTable.id, id));
+  const schoolId = schoolIdOf(req);
+  const [existing] = await db.select().from(usersTable).where(and(eq(usersTable.id, id), eq(usersTable.schoolId, schoolId)));
   if (!existing) { res.status(404).json({ error: "User not found" }); return; }
   // Same gate as /role and DELETE: approving carries an optional role change, so
   // without this an admin could "approve" an owner account and demote it on the way.
@@ -136,14 +141,14 @@ router.patch("/:id/approve", requireAuth, requirePermission("users.approve"), as
       const rows = await tx
         .update(usersTable)
         .set({ isApproved: true, approvedBy: req.user!.userId, role: newRole, updatedAt: new Date() })
-        .where(eq(usersTable.id, id))
+        .where(and(eq(usersTable.id, id), eq(usersTable.schoolId, schoolId)))
         .returning();
       updated = rows[0];
       await logRoleChangeTx(tx, {
         actorId: req.user!.userId, targetUserId: id, action: "approve",
         before: existing.role, after: newRole,
       });
-      await assertAdminReachable(tx, null);
+      await assertAdminReachable(tx, schoolId);
     });
   } catch (err) {
     if (err instanceof LockoutError) { res.status(409).json({ error: err.message }); return; }
@@ -165,7 +170,8 @@ router.patch("/:id/role", requireAuth, requirePermission("users.assign_role"), a
     res.status(403).json({ error: "Cannot change your own role" }); return;
   }
 
-  const [existing] = await db.select().from(usersTable).where(eq(usersTable.id, id));
+  const schoolId = schoolIdOf(req);
+  const [existing] = await db.select().from(usersTable).where(and(eq(usersTable.id, id), eq(usersTable.schoolId, schoolId)));
   if (!existing) { res.status(404).json({ error: "User not found" }); return; }
 
   // Requester must be allowed to modify this target AND allowed to assign the new role.
@@ -179,7 +185,7 @@ router.patch("/:id/role", requireAuth, requirePermission("users.assign_role"), a
       const rows = await tx
         .update(usersTable)
         .set({ role, updatedAt: new Date() })
-        .where(eq(usersTable.id, id))
+        .where(and(eq(usersTable.id, id), eq(usersTable.schoolId, schoolId)))
         .returning();
       updated = rows[0];
       await logRoleChangeTx(tx, {
@@ -188,7 +194,7 @@ router.patch("/:id/role", requireAuth, requirePermission("users.assign_role"), a
       });
       // In derselben Transaktion, damit zwei gleichzeitige Herabstufungen
       // nicht gemeinsam den letzten Verwalter entfernen.
-      await assertAdminReachable(tx, null);
+      await assertAdminReachable(tx, schoolId);
     });
   } catch (err) {
     if (err instanceof LockoutError) { res.status(409).json({ error: err.message }); return; }
@@ -204,6 +210,7 @@ router.patch("/:id/role", requireAuth, requirePermission("users.assign_role"), a
 // Ziel im Pfad plus Berechtigung vor. Jede Aenderung landet im Profilprotokoll.
 router.patch("/:id/profile", requireAuth, requirePermission("users.correct_profile"), async (req: AuthRequest, res) => {
   const { id } = req.params as { id: string };
+  const schoolId = schoolIdOf(req);
 
   // Sonst liesse sich der Einmal-Charakter aus PATCH /auth/profile ueber
   // diesen Weg umgehen: wer die Berechtigung traegt, koennte sein eigenes,
@@ -231,7 +238,7 @@ router.patch("/:id/profile", requireAuth, requirePermission("users.correct_profi
     const [locked] = await tx
       .select()
       .from(usersTable)
-      .where(eq(usersTable.id, id))
+      .where(and(eq(usersTable.id, id), eq(usersTable.schoolId, schoolId)))
       .for("update");
     if (!locked) {
       correctionError = "not_found";
@@ -256,7 +263,7 @@ router.patch("/:id/profile", requireAuth, requirePermission("users.correct_profi
     const rows = await tx
       .update(usersTable)
       .set(changes)
-      .where(eq(usersTable.id, id))
+      .where(and(eq(usersTable.id, id), eq(usersTable.schoolId, schoolId)))
       .returning();
     updated = rows[0];
     if (locked.firstName !== cleanFirstName) {
@@ -281,7 +288,8 @@ router.patch("/:id/profile", requireAuth, requirePermission("users.correct_profi
 router.delete("/:id", requireAuth, requirePermission("users.delete"), async (req: AuthRequest, res) => {
   const { id } = req.params as { id: string };
   if (req.user!.userId === id) { res.status(403).json({ error: "Cannot delete your own account" }); return; }
-  const [target] = await db.select({ role: usersTable.role }).from(usersTable).where(eq(usersTable.id, id));
+  const schoolId = schoolIdOf(req);
+  const [target] = await db.select({ role: usersTable.role }).from(usersTable).where(and(eq(usersTable.id, id), eq(usersTable.schoolId, schoolId)));
   if (!target) { res.status(404).json({ error: "User not found" }); return; }
   if (!canModifyTarget(req.user!.role, target.role ?? "sanitaeter")) {
     res.status(403).json({ error: "Insufficient permissions to delete this user" }); return;
@@ -289,14 +297,14 @@ router.delete("/:id", requireAuth, requirePermission("users.delete"), async (req
   let geloescht = 0;
   try {
     await db.transaction(async (tx) => {
-      const result = await tx.delete(usersTable).where(eq(usersTable.id, id)).returning();
+      const result = await tx.delete(usersTable).where(and(eq(usersTable.id, id), eq(usersTable.schoolId, schoolId))).returning();
       geloescht = result.length;
       if (geloescht > 0) {
         await logRoleChangeTx(tx, {
           actorId: req.user!.userId, targetUserId: id, action: "delete_user",
           before: target.role, after: null,
         });
-        await assertAdminReachable(tx, null);
+        await assertAdminReachable(tx, schoolId);
       }
     });
   } catch (err) {

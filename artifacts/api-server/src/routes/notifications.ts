@@ -1,23 +1,25 @@
 import { Router } from "express";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { db, notificationsTable } from "@workspace/db";
-import { requireAuth, type AuthRequest } from "../middlewares/auth";
+import { requireAuth, schoolIdOf, type AuthRequest } from "../middlewares/auth";
 import { saveDeviceToken, removeDeviceToken } from "../services/notifications";
 
 const router = Router();
 
 router.get("/", requireAuth, async (req: AuthRequest, res) => {
   const { userId } = req.user!;
+  const schoolId = schoolIdOf(req);
   const canSeeAll = (req.user!.permissions ?? []).includes("notifications.view_all");
   const items = canSeeAll
-    ? await db.select().from(notificationsTable).orderBy(desc(notificationsTable.createdAt))
-    : await db.select().from(notificationsTable).where(eq(notificationsTable.userId, userId)).orderBy(desc(notificationsTable.createdAt));
+    ? await db.select().from(notificationsTable).where(eq(notificationsTable.schoolId, schoolId)).orderBy(desc(notificationsTable.createdAt))
+    : await db.select().from(notificationsTable).where(and(eq(notificationsTable.userId, userId), eq(notificationsTable.schoolId, schoolId))).orderBy(desc(notificationsTable.createdAt));
   res.json(items);
 });
 
 router.post("/read-all", requireAuth, async (req: AuthRequest, res) => {
   const { userId } = req.user!;
-  await db.update(notificationsTable).set({ isRead: true }).where(eq(notificationsTable.userId, userId));
+  const schoolId = schoolIdOf(req);
+  await db.update(notificationsTable).set({ isRead: true }).where(and(eq(notificationsTable.userId, userId), eq(notificationsTable.schoolId, schoolId)));
   res.json({ ok: true });
 });
 
@@ -36,7 +38,7 @@ router.post("/register-device", requireAuth, async (req: AuthRequest, res) => {
   }
   
   try {
-    await saveDeviceToken(userId, token, platform, deviceId);
+    await saveDeviceToken(userId, schoolIdOf(req), token, platform, deviceId);
     res.json({ ok: true });
   } catch (err) {
     console.error("Failed to register device token:", err);
@@ -45,6 +47,7 @@ router.post("/register-device", requireAuth, async (req: AuthRequest, res) => {
 });
 
 router.post("/unregister-device", requireAuth, async (req: AuthRequest, res) => {
+  const schoolId = schoolIdOf(req);
   const { token } = req.body as { token: string };
   
   if (!token) {
@@ -53,7 +56,7 @@ router.post("/unregister-device", requireAuth, async (req: AuthRequest, res) => 
   }
   
   try {
-    await removeDeviceToken(token);
+    await removeDeviceToken(token, schoolId);
     res.json({ ok: true });
   } catch (err) {
     console.error("Failed to unregister device token:", err);

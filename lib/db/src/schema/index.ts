@@ -98,6 +98,7 @@ export const authTokensTable = pgTable("auth_tokens", {
 // News table
 export const newsTable = pgTable("news", {
   id: text("id").primaryKey(),
+  schoolId: text("school_id").notNull(),
   title: text("title").notNull(),
   summary: text("summary").notNull(),
   content: text("content").notNull(),
@@ -114,6 +115,7 @@ export const newsTable = pgTable("news", {
 // Missions table
 export const missionsTable = pgTable("missions", {
   id: text("id").primaryKey(),
+  schoolId: text("school_id").notNull(),
   title: text("title").notNull(),
   description: text("description").notNull(),
   location: text("location").notNull(),
@@ -131,6 +133,7 @@ export const missionsTable = pgTable("missions", {
 // Notifications table
 export const notificationsTable = pgTable("notifications", {
   id: text("id").primaryKey(),
+  schoolId: text("school_id").notNull(),
   userId: text("user_id").notNull(),
   type: notificationTypeEnum("type").notNull(),
   title: text("title").notNull(),
@@ -143,6 +146,7 @@ export const notificationsTable = pgTable("notifications", {
 
 // Duty status table
 export const dutyTable = pgTable("duty", {
+  schoolId: text("school_id").notNull(),
   userId: text("user_id").notNull().primaryKey(),
   status: dutyStatusEnum("status").notNull().default("off_duty"),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -151,6 +155,7 @@ export const dutyTable = pgTable("duty", {
 // Leave of absence table
 export const loaTable = pgTable("loa", {
   id: text("id").primaryKey(),
+  schoolId: text("school_id").notNull(),
   userId: text("user_id").notNull(),
   userName: text("user_name").notNull(),
   fromDate: text("from_date").notNull(),
@@ -168,6 +173,7 @@ export const loaTable = pgTable("loa", {
 // Mission activity log table (from BLOCK 2)
 export const missionActivityLogTable = pgTable("mission_activity_log", {
   id: text("id").primaryKey(),
+  schoolId: text("school_id").notNull(),
   userId: text("user_id").notNull(),
   userName: text("user_name"),
   missionId: text("mission_id"),
@@ -185,6 +191,7 @@ export const missionActivityLogTable = pgTable("mission_activity_log", {
 // Mission dismissals (replaces dismissed-missions.json)
 export const missionDismissalsTable = pgTable("mission_dismissals", {
   id: text("id").primaryKey(),
+  schoolId: text("school_id").notNull(),
   userId: text("user_id").notNull(),
   missionId: text("mission_id").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -193,7 +200,7 @@ export const missionDismissalsTable = pgTable("mission_dismissals", {
 // Incident reports (Einsatzprotokoll)
 export const incidentReportsTable = pgTable("incident_reports", {
   id: text("id").primaryKey(),
-  schoolId: text("school_id"),
+  schoolId: text("school_id").notNull(),
   missionId: text("mission_id"), // null = walk-in
   authorId: text("author_id").notNull(),
   status: text("status").notNull().default("draft"), // draft | submitted
@@ -239,6 +246,7 @@ export const incidentReportsTable = pgTable("incident_reports", {
 // Device tokens for push notifications
 export const deviceTokensTable = pgTable("device_tokens", {
   id: text("id").primaryKey(),
+  schoolId: text("school_id").notNull(),
   userId: text("user_id").notNull(),
   token: text("token").notNull(),
   platform: text("platform").notNull(), // 'ios' | 'android' | 'web'
@@ -309,6 +317,7 @@ export const identityChangeLogTable = pgTable("identity_change_log", {
 // Rechenschaftsnachweis nach Art. 5 Abs. 2 DSGVO. Aufbewahrung 12 Monate.
 export const reportAccessLogTable = pgTable("report_access_log", {
   id: text("id").primaryKey(),
+  schoolId: text("school_id").notNull(),
   userId: text("user_id").notNull(),
   userName: text("user_name"),
   reportId: text("report_id"),

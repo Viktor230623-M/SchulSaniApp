@@ -86,6 +86,9 @@ const post = async (pathname, payload) => {
   if (!response.ok) throw new Error(`${pathname} antwortet mit ${response.status}`);
 };
 (async () => {
+  const missingSecrets = { ...body, providerClientSecret: "", provider2ClientSecret: "" };
+  const rejected = await fetch(`http://127.0.0.1:${port}/api/config`, { method: "POST", headers, body: JSON.stringify(missingSecrets) });
+  if (rejected.status !== 422) throw new Error(`Konfiguration ohne Google-/Microsoft-Secret wurde mit ${rejected.status} akzeptiert.`);
   await post("/api/config", body);
   await post("/api/secrets", {});
 })().catch((error) => { console.error(error.message); process.exit(1); });

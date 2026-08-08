@@ -1,5 +1,7 @@
 # SchulSaniApp
 
+Deutsch · [English](README.en.md)
+
 Verwaltungs- und Einsatzsoftware für einen Schulsanitätsdienst. Die Anwendung
 bildet den laufenden Betrieb einer Schulsanitätsgruppe ab: Dienstplan und
 Bereitschaftsstatus, Einsatzannahme, Einsatzdokumentation (Einsatzprotokolle
@@ -55,7 +57,7 @@ Backend (`artifacts/api-server/.env`):
 | `PORT`               | Port, auf dem der Server lauscht                                     |
 | `ALLOWED_ORIGINS`    | Kommagetrennte Liste erlaubter CORS-Origins                            |
 | `AUTH_PROVIDERS_PATH` | Pfad zur Konfigurationsdatei der aktiven Anmeldewege                   |
-| `SCHOOL_ID`          | Kennung der Schule, wird neu angelegten Nutzern zugewiesen             |
+| `SCHOOL_ID`          | Amtliche Schulnummer der Schule (z. B. `4321`); neu angelegte Konten bekommen diese Kennung zugewiesen |
 | `ROLE_MAP_PATH`      | Optional: Pfad zu einer Bootstrap-Rollenzuordnung für die Ersteinrichtung |
 | `OWNER_USER_ID`      | Nutzer-ID mit Zugriff auf die administrative SQL-Konsole               |
 | `VAPID_PUBLIC_KEY`   | Öffentlicher VAPID-Schlüssel für Web-Push                              |

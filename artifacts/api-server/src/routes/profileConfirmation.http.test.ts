@@ -19,10 +19,7 @@ let fakeUsers: Record<string, FakeUserRow> = {};
 let profileChangeEntries: Array<{ actorId: string; targetUserId: string; field: string; before: unknown; after: unknown }> = [];
 
 function extractEqId(cond: any): string | undefined {
-  const chunks = cond?.queryChunks;
-  if (!Array.isArray(chunks)) return undefined;
-  const param = chunks.find((c: any) => c?.constructor?.name === "Param");
-  return typeof param?.value === "string" ? param.value : undefined;
+  return extractParams(cond).find((value) => typeof value === "string" && Boolean(fakeUsers[value])) as string | undefined;
 }
 
 function extractParams(cond: any): unknown[] {
@@ -67,10 +64,13 @@ vi.mock("@workspace/db", async () => {
   function makeSelectChain(): any {
     let isUsers = false;
     let whereId: string | undefined;
+    let whereSchool: string | undefined;
     const resolve = () => {
       if (!isUsers) return Promise.resolve([]);
-      if (whereId !== undefined) return Promise.resolve(fakeUsers[whereId] ? [fakeUsers[whereId]] : []);
-      return Promise.resolve(Object.values(fakeUsers));
+      const row = whereId !== undefined ? fakeUsers[whereId] : undefined;
+      if (row && whereSchool !== undefined && row.schoolId !== whereSchool) return Promise.resolve([]);
+      if (whereId !== undefined) return Promise.resolve(row ? [row] : []);
+      return Promise.resolve(Object.values(fakeUsers).filter((user) => whereSchool === undefined || user.schoolId === whereSchool));
     };
     const chain: any = {
       from: (t: any) => { isUsers = t === usersTableMock; return chain; },
@@ -79,6 +79,8 @@ vi.mock("@workspace/db", async () => {
         const params = extractParams(cond);
         const idParam = params.find((p) => typeof p === "string" && !p.includes("@") && fakeUsers[p]);
         if (typeof idParam === "string") whereId = idParam;
+        const schoolParam = params.find((p) => typeof p === "string" && Object.values(fakeUsers).some((user) => user.schoolId === p));
+        if (typeof schoolParam === "string") whereSchool = schoolParam;
         return chain;
       },
       limit: () => chain,
@@ -168,7 +170,7 @@ function makeUser(overrides: Partial<FakeUserRow> = {}): FakeUserRow {
     id,
     role: "sanitaeter",
     isApproved: true,
-    schoolId: null,
+    schoolId: "school",
     profileConfirmedAt: null,
     authProvider: "oidc-beispiel",
     passwordVersion: 0,
@@ -338,6 +340,19 @@ describe("Namensbestaetigung -- Sperre, Endpunkt, Verwalter-Korrektur", () => {
       expect(profileChangeEntries.map((e) => e.field).sort()).toEqual(["first_name", "last_name"]);
       expect(profileChangeEntries[0]!.actorId).toBe(actor.id);
       expect(profileChangeEntries.every((e) => e.targetUserId === target.id)).toBe(true);
+    });
+
+    it("verweigert die Korrektur eines Kontos aus einer anderen Schule", async () => {
+      const actor = makeUser({ id: "actor-school-a", role: "admin", profileConfirmedAt: new Date(), schoolId: "school-a" });
+      const target = makeUser({ id: "target-school-b", schoolId: "school-b", profileConfirmedAt: null });
+      fakeUsers[actor.id] = actor;
+      fakeUsers[target.id] = target;
+
+      const result = await call("PATCH", `/api/users/${target.id}/profile`, tokenFor(actor), { firstName: "Neu", lastName: "Fremd" });
+
+      expect(result.status).toBe(404);
+      expect(fakeUsers[target.id]!.firstName).toBe("Vorschlag");
+      expect(profileChangeEntries).toHaveLength(0);
     });
 
     it("weist das eigene Konto als Ziel ab", async () => {

@@ -186,6 +186,12 @@ function clearSessionCookie(res: import("express").Response): void {
   });
 }
 
+function requiredSchoolId(): string {
+  const schoolId = process.env["SCHOOL_ID"]?.trim();
+  if (!schoolId) throw new Error("SCHOOL_ID ist nicht gesetzt.");
+  return schoolId;
+}
+
 const JWT_SECRET = process.env["JWT_SECRET"];
 if (!JWT_SECRET) {
   throw new Error("JWT_SECRET environment variable is required");
@@ -284,7 +290,7 @@ router.post("/login", authLimiter, async (req, res) => {
 
   try {
     const result = await provider.authenticate({ username, password });
-    const schoolId = process.env["SCHOOL_ID"]?.trim() || "school";
+    const schoolId = requiredSchoolId();
     const [user] = await db.select().from(usersTable).where(and(
         eq(usersTable.schoolId, schoolId),
         eq(usersTable.authProvider, provider.key),
@@ -368,14 +374,14 @@ router.post("/local/register", localAccountLimiter, async (req, res) => {
     return;
   }
 
-  const schoolId = process.env["SCHOOL_ID"]?.trim() || "school";
+  const schoolId = requiredSchoolId();
   const [account] = await db.select({
     id: usersTable.id,
     email: usersTable.email,
     authProvider: usersTable.authProvider,
     emailVerifiedAt: usersTable.emailVerifiedAt,
     username: usersTable.username,
-  }).from(usersTable).where(eq(usersTable.email, email)).limit(1);
+  }).from(usersTable).where(and(eq(usersTable.email, email), eq(usersTable.schoolId, schoolId))).limit(1);
   const [usernameAccount] = username ? await db.select({ id: usersTable.id }).from(usersTable).where(and(eq(usersTable.schoolId, schoolId), eq(usersTable.username, username))).limit(1) : [];
 
   let mail: { to: string; subject: string; text: string; html: string } | undefined;
@@ -520,7 +526,7 @@ router.post("/local/verify/resend", localAccountLimiter, async (req, res) => {
       res.status(503).json({ error: "E-Mail-Versand ist derzeit nicht erreichbar." });
       return;
     }
-    const [user] = await db.select({ id: usersTable.id, email: usersTable.email, emailVerifiedAt: usersTable.emailVerifiedAt }).from(usersTable).where(and(eq(usersTable.email, email), eq(usersTable.authProvider, getLocalProvider().key))).limit(1);
+    const [user] = await db.select({ id: usersTable.id, email: usersTable.email, emailVerifiedAt: usersTable.emailVerifiedAt }).from(usersTable).where(and(eq(usersTable.email, email), eq(usersTable.authProvider, getLocalProvider().key), eq(usersTable.schoolId, requiredSchoolId()))).limit(1);
   let mail: { to: string; subject: string; text: string; html: string } | undefined;
   if (user && !user.emailVerifiedAt) {
     const token = await issueAuthToken(user.id, "email_verify", new Date(Date.now() + 24 * 60 * 60 * 1000));
@@ -557,7 +563,7 @@ router.post("/local/password/forgot", resetIpLimiter, resetEmailLimiter, async (
   // Reset nur fuer bestaetigte Adressen. Eine unbestaetigte Adresse gehoert
   // moeglicherweise gar nicht dem Kontoinhaber (Verwalter-Korrektur, noch
   // nicht bestaetigt); eine Reset-Mail dorthin waere eine Uebernahmekette.
-  const [user] = await db.select({ id: usersTable.id, email: usersTable.email, emailVerifiedAt: usersTable.emailVerifiedAt }).from(usersTable).where(and(eq(usersTable.email, email), eq(usersTable.authProvider, getLocalProvider().key))).limit(1);
+  const [user] = await db.select({ id: usersTable.id, email: usersTable.email, emailVerifiedAt: usersTable.emailVerifiedAt }).from(usersTable).where(and(eq(usersTable.email, email), eq(usersTable.authProvider, getLocalProvider().key), eq(usersTable.schoolId, requiredSchoolId()))).limit(1);
   let mail: { to: string; subject: string; text: string; html: string } | undefined;
   if (user && user.emailVerifiedAt) {
     const token = await issueAuthToken(user.id, "password_reset", new Date(Date.now() + 60 * 60 * 1000));
@@ -1187,7 +1193,7 @@ async function completeOidcCallback(req: import("express").Request, res: import(
   }
 
   const { subject, profile } = authResult;
-  const schoolId = process.env["SCHOOL_ID"]?.trim() || "school";
+  const schoolId = requiredSchoolId();
 
   if (authResult.returnTo && !authResult.handoffChallenge) {
     res.status(400).json({ error: "Native Weiterleitung ist unvollstaendig." });
@@ -1390,7 +1396,7 @@ router.post("/apple/native/complete", authLimiter, async (req, res) => {
   }
 
   try {
-    const schoolId = process.env["SCHOOL_ID"]?.trim() || "school";
+    const schoolId = requiredSchoolId();
     const account = await reconcileAccount(provider.key, authResult.subject, authResult.profile, schoolId);
 
     // Instanz mit Schul-Zugangscode: die App wechselt auf den Schul-Code-Screen,
