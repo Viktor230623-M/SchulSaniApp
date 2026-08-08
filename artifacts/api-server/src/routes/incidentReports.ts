@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 import { Router } from "express";
 import { and, desc, eq } from "drizzle-orm";
 import { db, incidentReportsTable, missionsTable, usersTable } from "@workspace/db";
-import { requireAuth, type AuthRequest } from "../middlewares/auth";
+import { requireAuth, schoolIdOf, type AuthRequest } from "../middlewares/auth";
 import { notifyUser } from "../services/notifications";
 
 import { logReportAccess } from "../lib/reportAccessLog";
@@ -54,12 +54,14 @@ const router = Router();
 // GET / — list reports (scope by access)
 router.get("/", requireAuth, async (req: AuthRequest, res) => {
   const { userId } = req.user!;
+  const schoolId = schoolIdOf(req);
   const perms: readonly string[] = req.user!.permissions ?? [];
   const { missionId, status, mine } = req.query;
 
   let all = await db
     .select()
     .from(incidentReportsTable)
+    .where(eq(incidentReportsTable.schoolId, schoolId))
     .orderBy(desc(incidentReportsTable.createdAt));
 
   if (missionId) all = all.filter((r) => r.missionId === missionId);
@@ -78,6 +80,7 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
   });
 
   logReportAccess({
+    schoolId,
     userId,
     action: "list",
     patientVisible: showPatient,
@@ -90,11 +93,12 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
 // GET /:id — single report
 router.get("/:id", requireAuth, async (req: AuthRequest, res) => {
   const { userId } = req.user!;
+  const schoolId = schoolIdOf(req);
   const perms: readonly string[] = req.user!.permissions ?? [];
   const [report] = await db
     .select()
     .from(incidentReportsTable)
-    .where(eq(incidentReportsTable.id, (req.params.id as string)));
+    .where(and(eq(incidentReportsTable.id, (req.params.id as string)), eq(incidentReportsTable.schoolId, schoolId)));
 
   if (!report) { res.status(404).json({ error: "Not found" }); return; }
   if (!canAccessReport(report, userId, perms)) { res.status(403).json({ error: "Forbidden" }); return; }
@@ -104,6 +108,7 @@ router.get("/:id", requireAuth, async (req: AuthRequest, res) => {
     ((report.responderIdsJson as string[] | null) ?? []).includes(userId);
 
   logReportAccess({
+    schoolId,
     userId,
     reportId: report.id,
     action: "detail",
@@ -116,13 +121,14 @@ router.get("/:id", requireAuth, async (req: AuthRequest, res) => {
 // POST / — create draft
 router.post("/", requireAuth, async (req: AuthRequest, res) => {
   const { userId } = req.user!;
+  const schoolId = schoolIdOf(req);
   const body = req.body as Record<string, unknown>;
 
   const missionId = typeof body["missionId"] === "string" ? body["missionId"] : null;
 
   // If linked to a mission, verify it exists and user has some relation to it
   if (missionId) {
-    const [mission] = await db.select().from(missionsTable).where(eq(missionsTable.id, missionId));
+    const [mission] = await db.select().from(missionsTable).where(and(eq(missionsTable.id, missionId), eq(missionsTable.schoolId, schoolId)));
     if (!mission) { res.status(404).json({ error: "Mission not found" }); return; }
   }
 
@@ -131,7 +137,7 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
 
   const report: typeof incidentReportsTable.$inferInsert = {
     id,
-    schoolId: typeof body["schoolId"] === "string" ? body["schoolId"] : null,
+    schoolId,
     missionId,
     authorId: userId,
     status: "draft",
@@ -174,11 +180,12 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
 // PUT /:id — update draft
 router.put("/:id", requireAuth, async (req: AuthRequest, res) => {
   const { userId } = req.user!;
+  const schoolId = schoolIdOf(req);
   const perms: readonly string[] = req.user!.permissions ?? [];
   const [existing] = await db
     .select()
     .from(incidentReportsTable)
-    .where(eq(incidentReportsTable.id, (req.params.id as string)));
+    .where(and(eq(incidentReportsTable.id, (req.params.id as string)), eq(incidentReportsTable.schoolId, schoolId)));
 
   if (!existing) { res.status(404).json({ error: "Not found" }); return; }
   if (existing.status !== "draft") { res.status(400).json({ error: "Report is already submitted and locked" }); return; }
@@ -222,7 +229,7 @@ router.put("/:id", requireAuth, async (req: AuthRequest, res) => {
   const [updated] = await db
     .update(incidentReportsTable)
     .set(updates)
-    .where(eq(incidentReportsTable.id, (req.params.id as string)))
+    .where(and(eq(incidentReportsTable.id, (req.params.id as string)), eq(incidentReportsTable.schoolId, schoolId)))
     .returning();
 
   res.json(updated);
@@ -231,11 +238,12 @@ router.put("/:id", requireAuth, async (req: AuthRequest, res) => {
 // POST /:id/submit — submit and lock
 router.post("/:id/submit", requireAuth, async (req: AuthRequest, res) => {
   const { userId } = req.user!;
+  const schoolId = schoolIdOf(req);
   const perms: readonly string[] = req.user!.permissions ?? [];
   const [existing] = await db
     .select()
     .from(incidentReportsTable)
-    .where(eq(incidentReportsTable.id, (req.params.id as string)));
+    .where(and(eq(incidentReportsTable.id, (req.params.id as string)), eq(incidentReportsTable.schoolId, schoolId)));
 
   if (!existing) { res.status(404).json({ error: "Not found" }); return; }
   if (existing.status !== "draft") { res.status(400).json({ error: "Already submitted" }); return; }
@@ -252,7 +260,7 @@ router.post("/:id/submit", requireAuth, async (req: AuthRequest, res) => {
   const [report] = await db
     .update(incidentReportsTable)
     .set({ status: "submitted", submittedAt: now, updatedAt: now })
-    .where(eq(incidentReportsTable.id, (req.params.id as string)))
+    .where(and(eq(incidentReportsTable.id, (req.params.id as string)), eq(incidentReportsTable.schoolId, schoolId)))
     .returning();
 
   // If linked to a mission, complete it
@@ -260,16 +268,17 @@ router.post("/:id/submit", requireAuth, async (req: AuthRequest, res) => {
     const [mission] = await db
       .select()
       .from(missionsTable)
-      .where(eq(missionsTable.id, report.missionId));
+      .where(and(eq(missionsTable.id, report.missionId), eq(missionsTable.schoolId, schoolId)));
 
     if (mission && mission.status === "accepted") {
       await db
         .update(missionsTable)
         .set({ status: "completed", notes: existing.description ?? null })
-        .where(eq(missionsTable.id, report.missionId));
+        .where(and(eq(missionsTable.id, report.missionId), eq(missionsTable.schoolId, schoolId)));
 
       // Notify leadership that the mission has a report
       notifyUser(mission.requestedBy ?? "unknown", {
+        schoolId,
         type: "mission_completed",
         title: "Einsatzprotokoll eingereicht",
         body: `Protokoll für "${mission.title}" wurde abgegeben`,
@@ -284,11 +293,12 @@ router.post("/:id/submit", requireAuth, async (req: AuthRequest, res) => {
 // POST /:id/addendum — add a note after locking
 router.post("/:id/addendum", requireAuth, async (req: AuthRequest, res) => {
   const { userId } = req.user!;
+  const schoolId = schoolIdOf(req);
   const perms: readonly string[] = req.user!.permissions ?? [];
   const [existing] = await db
     .select()
     .from(incidentReportsTable)
-    .where(eq(incidentReportsTable.id, (req.params.id as string)));
+    .where(and(eq(incidentReportsTable.id, (req.params.id as string)), eq(incidentReportsTable.schoolId, schoolId)));
 
   if (!existing) { res.status(404).json({ error: "Not found" }); return; }
   if (!canAccessReport(existing, userId, perms)) { res.status(403).json({ error: "Forbidden" }); return; }
@@ -305,7 +315,7 @@ router.post("/:id/addendum", requireAuth, async (req: AuthRequest, res) => {
   const [updated] = await db
     .update(incidentReportsTable)
     .set({ addendaJson: addenda, updatedAt: new Date() })
-    .where(eq(incidentReportsTable.id, (req.params.id as string)))
+    .where(and(eq(incidentReportsTable.id, (req.params.id as string)), eq(incidentReportsTable.schoolId, schoolId)))
     .returning();
 
   res.json(updated);
@@ -314,13 +324,14 @@ router.post("/:id/addendum", requireAuth, async (req: AuthRequest, res) => {
 // GET /:id/pdf — render PDF
 router.get("/:id/pdf", requireAuth, async (req: AuthRequest, res) => {
   const { userId } = req.user!;
+  const schoolId = schoolIdOf(req);
   const perms: readonly string[] = req.user!.permissions ?? [];
   const lang = (req.query["lang"] === "en" ? "en" : "de") as "de" | "en";
 
   const [report] = await db
     .select()
     .from(incidentReportsTable)
-    .where(eq(incidentReportsTable.id, (req.params.id as string)));
+    .where(and(eq(incidentReportsTable.id, (req.params.id as string)), eq(incidentReportsTable.schoolId, schoolId)));
 
   if (!report) { res.status(404).json({ error: "Not found" }); return; }
   if (!canAccessReport(report, userId, perms)) { res.status(403).json({ error: "Forbidden" }); return; }
@@ -330,10 +341,11 @@ router.get("/:id/pdf", requireAuth, async (req: AuthRequest, res) => {
     ((report.responderIdsJson as string[] | null) ?? []).includes(userId);
 
   logReportAccess({
+    schoolId,
     userId: req.user!.userId,
     reportId: report.id,
     action: "pdf",
-    patientVisible: true,
+    patientVisible: showPatient,
   });
 
   const labels = LABELS[lang];
@@ -431,7 +443,8 @@ router.get("/:id/pdf", requireAuth, async (req: AuthRequest, res) => {
   if (responderIds.length > 0) {
     const users = await db
       .select({ id: usersTable.id, firstName: usersTable.firstName, lastName: usersTable.lastName })
-      .from(usersTable);
+      .from(usersTable)
+      .where(eq(usersTable.schoolId, schoolId));
     const names = responderIds
       .map((id) => {
         const u = users.find((u) => u.id === id);

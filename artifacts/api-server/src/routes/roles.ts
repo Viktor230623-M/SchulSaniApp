@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Router } from "express";
 import rateLimit from "express-rate-limit";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, isNull, or, sql } from "drizzle-orm";
 import { db, rolesTable, rolePermissionsTable, usersTable } from "@workspace/db";
 import { requireAuth, requirePermission, invalidateRoleCache, invalidateAllRoleCaches, type AuthRequest } from "../middlewares/auth";
 import { isValidPermission, PERMISSIONS } from "../lib/permissions";
@@ -35,8 +35,10 @@ const KEY_PATTERN = /^[a-z][a-z0-9_]{1,49}$/;
 // Bestands auf eine Schulkennung ist damit moeglich, ohne dass hier vorher
 // etwas kaputtgeht. Sobald mehrere Mandanten auf einer Instanz laufen, kommt
 // die Kennung aus dem Token — dann zieht diese Funktion nach.
-function scopeOf(_req: AuthRequest): string | null {
-  return null;
+function scopeOf(req: AuthRequest): string {
+  const schoolId = req.user?.schoolId;
+  if (!schoolId) throw new Error("Schulkontext fehlt");
+  return schoolId;
 }
 
 // Ohne Argument, also alle Bereiche. Eine ungebundene Rolle geht in die
@@ -47,8 +49,8 @@ function verwerfeRechte(): void {
   invalidateRolePermissions();
 }
 
-function scopeCondition(schoolId: string | null) {
-  return schoolId ? eq(rolesTable.schoolId, schoolId) : isNull(rolesTable.schoolId);
+function scopeCondition(schoolId: string) {
+  return or(eq(rolesTable.schoolId, schoolId), isNull(rolesTable.schoolId));
 }
 
 /**
@@ -72,6 +74,7 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
       .orderBy(rolesTable.sortOrder),
     db.select({ role: usersTable.role, count: sql<number>`count(*)` })
       .from(usersTable)
+      .where(eq(usersTable.schoolId, scopeOf(req)))
       .groupBy(usersTable.role),
   ]);
   const countByKey = new Map(counts.map((c) => [String(c.role), Number(c.count)]));
@@ -142,7 +145,7 @@ router.patch("/:id", requireAuth, requirePermission("roles.manage"), writeLimite
   const schoolId = scopeOf(req);
 
   const [role] = await db.select().from(rolesTable)
-    .where(and(eq(rolesTable.id, id), scopeCondition(schoolId))).limit(1);
+    .where(and(eq(rolesTable.id, id), eq(rolesTable.schoolId, schoolId))).limit(1);
   if (!role) { res.status(404).json({ error: "Nicht gefunden" }); return; }
 
   const patch: Record<string, unknown> = { updatedAt: new Date() };
@@ -171,7 +174,7 @@ router.patch("/:id", requireAuth, requirePermission("roles.manage"), writeLimite
     patch["sortOrder"] = sortOrder;
   }
 
-  await db.update(rolesTable).set(patch).where(eq(rolesTable.id, id));
+  await db.update(rolesTable).set(patch).where(and(eq(rolesTable.id, id), eq(rolesTable.schoolId, schoolId)));
   verwerfeRechte();
   res.json({ id });
 });
@@ -181,14 +184,17 @@ router.delete("/:id", requireAuth, requirePermission("roles.manage"), writeLimit
   const schoolId = scopeOf(req);
 
   const [role] = await db.select().from(rolesTable)
-    .where(and(eq(rolesTable.id, id), scopeCondition(schoolId))).limit(1);
+    .where(and(eq(rolesTable.id, id), eq(rolesTable.schoolId, schoolId))).limit(1);
   if (!role) { res.status(404).json({ error: "Nicht gefunden" }); return; }
   if (role.isSystem) {
     res.status(403).json({ error: "Eine Systemrolle kann nicht geloescht werden." }); return;
   }
 
   const [holders] = await db.select({ count: sql<number>`count(*)` }).from(usersTable)
-    .where(sql`${usersTable.role}::text = ${role.key}`);
+    .where(and(
+      sql`${usersTable.role}::text = ${role.key}`,
+      schoolId ? eq(usersTable.schoolId, schoolId) : isNull(usersTable.schoolId),
+    ));
   const anzahl = Number(holders?.count ?? 0);
   if (anzahl > 0) {
     res.status(409).json({ error: `Dieser Rolle sind noch ${anzahl} Nutzer zugeordnet.` });
@@ -198,7 +204,7 @@ router.delete("/:id", requireAuth, requirePermission("roles.manage"), writeLimit
   try {
     await db.transaction(async (tx) => {
       // role_permissions haengt per Fremdschluessel mit onDelete cascade daran.
-      await tx.delete(rolesTable).where(eq(rolesTable.id, id));
+      await tx.delete(rolesTable).where(and(eq(rolesTable.id, id), eq(rolesTable.schoolId, schoolId)));
       await logRoleChangeTx(tx, { actorId: req.user!.userId, roleId: id, roleKey: role.key, action: "delete", before: role, after: null });
       await assertAdminReachable(tx, schoolId);
     });
@@ -232,7 +238,7 @@ router.put("/:id/permissions", requireAuth, requirePermission("roles.manage"), w
   }
 
   const [role] = await db.select().from(rolesTable)
-    .where(and(eq(rolesTable.id, id), scopeCondition(schoolId))).limit(1);
+    .where(and(eq(rolesTable.id, id), eq(rolesTable.schoolId, schoolId))).limit(1);
   if (!role) { res.status(404).json({ error: "Nicht gefunden" }); return; }
 
   // roles.manage darf ueber diese Route nie neu hinzukommen. Wer sie schon

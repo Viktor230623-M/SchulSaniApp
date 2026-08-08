@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { db, notificationsTable, deviceTokensTable, usersTable, dutyTable, type Notification, type NewNotification, type DeviceToken } from "@workspace/db";
 import { sendWebPush } from "../lib/webPush";
 import { config } from "../config";
@@ -21,6 +21,7 @@ function uid(): string {
 }
 
 export async function createNotification(data: {
+  schoolId: string;
   userId: string;
   type: NotificationType;
   title: string;
@@ -28,8 +29,16 @@ export async function createNotification(data: {
   priority?: "normal" | "high";
   relatedId?: string;
 }): Promise<Notification> {
+  const [recipient] = await db
+    .select({ id: usersTable.id })
+    .from(usersTable)
+    .where(and(eq(usersTable.id, data.userId), eq(usersTable.schoolId, data.schoolId)))
+    .limit(1);
+  if (!recipient) throw new Error("Notification recipient is outside the school");
+
   const notification: NewNotification = {
     id: uid(),
+    schoolId: data.schoolId,
     userId: data.userId,
     type: data.type,
     title: data.title,
@@ -48,14 +57,21 @@ export async function createNotification(data: {
 }
 
 export async function createNotificationForMultipleUsers(userIds: string[], data: {
+  schoolId: string;
   type: NotificationType;
   title: string;
   body: string;
   priority?: "normal" | "high";
   relatedId?: string;
 }): Promise<Notification[]> {
-  const notifications: NewNotification[] = userIds.map((userId) => ({
+  const recipients = await db
+    .select({ id: usersTable.id })
+    .from(usersTable)
+    .where(and(eq(usersTable.schoolId, data.schoolId), inArray(usersTable.id, userIds)));
+  const allowedIds = new Set(recipients.map((user) => user.id));
+  const notifications: NewNotification[] = userIds.filter((userId) => allowedIds.has(userId)).map((userId) => ({
     id: uid(),
+    schoolId: data.schoolId,
     userId,
     type: data.type,
     title: data.title,
@@ -66,8 +82,10 @@ export async function createNotificationForMultipleUsers(userIds: string[], data
     createdAt: new Date(),
   }));
 
+  if (notifications.length === 0) return [];
+
   const created = await db.insert(notificationsTable).values(notifications).returning();
-  
+
   for (const notification of created) {
     sendPushNotification(notification).catch(console.error);
   }
@@ -76,6 +94,7 @@ export async function createNotificationForMultipleUsers(userIds: string[], data
 }
 
 export async function notifySanitaeters(data: {
+  schoolId: string;
   type: NotificationType;
   title: string;
   body: string;
@@ -86,7 +105,8 @@ export async function notifySanitaeters(data: {
   // (lib/rolePermissions.ts), nicht aus einer zweiten, fest verdrahteten Liste.
   const allUsers = await db
     .select({ id: usersTable.id, role: usersTable.role, schoolId: usersTable.schoolId })
-    .from(usersTable);
+    .from(usersTable)
+    .where(eq(usersTable.schoolId, data.schoolId));
 
   const schoolIds = Array.from(new Set(allUsers.map((u) => u.schoolId ?? null)));
   const rolePermsBySchool = new Map<string | null, Record<string, string[]>>();
@@ -107,6 +127,7 @@ export async function notifySanitaeters(data: {
 }
 
 export async function notifyOnDutyUsers(data: {
+  schoolId: string;
   type: NotificationType;
   title: string;
   body: string;
@@ -116,7 +137,7 @@ export async function notifyOnDutyUsers(data: {
   const onDuty = await db
     .select({ id: dutyTable.userId })
     .from(dutyTable)
-    .where(eq(dutyTable.status, "on_duty"));
+    .where(and(eq(dutyTable.status, "on_duty"), eq(dutyTable.schoolId, data.schoolId)));
 
   const userIds = onDuty.map((u) => u.id);
 
@@ -130,6 +151,7 @@ export async function notifyOnDutyUsers(data: {
 }
 
 export async function notifyUser(userId: string, data: {
+  schoolId: string;
   type: NotificationType;
   title: string;
   body: string;
@@ -153,7 +175,7 @@ async function sendPushNotification(notification: Notification): Promise<void> {
     const tokens = await db
       .select()
       .from(deviceTokensTable)
-      .where(eq(deviceTokensTable.userId, notification.userId));
+      .where(and(eq(deviceTokensTable.userId, notification.userId), eq(deviceTokensTable.schoolId, notification.schoolId ?? "")));
 
     if (tokens.length === 0) {
       return;
@@ -251,7 +273,7 @@ async function sendExpoPushMessages(messages: any[]): Promise<void> {
   }
 }
 
-export async function saveDeviceToken(userId: string, token: string, platform: "ios" | "android" | "web", deviceId?: string): Promise<void> {
+export async function saveDeviceToken(userId: string, schoolId: string, token: string, platform: "ios" | "android" | "web", deviceId?: string): Promise<void> {
   if (typeof token !== "string" || token.length === 0 || token.length > 4096) {
     throw new Error("Invalid token");
   }
@@ -261,7 +283,7 @@ export async function saveDeviceToken(userId: string, token: string, platform: "
   const existing = await db
     .select()
     .from(deviceTokensTable)
-    .where(and(eq(deviceTokensTable.token, token), eq(deviceTokensTable.userId, userId)))
+    .where(and(eq(deviceTokensTable.token, token), eq(deviceTokensTable.userId, userId), eq(deviceTokensTable.schoolId, schoolId)))
     .limit(1);
 
   if (existing.length > 0) {
@@ -272,6 +294,7 @@ export async function saveDeviceToken(userId: string, token: string, platform: "
   } else {
     await db.insert(deviceTokensTable).values({
       id: uid(),
+      schoolId,
       userId,
       token,
       platform,
@@ -282,6 +305,6 @@ export async function saveDeviceToken(userId: string, token: string, platform: "
   }
 }
 
-export async function removeDeviceToken(token: string): Promise<void> {
-  await db.delete(deviceTokensTable).where(eq(deviceTokensTable.token, token));
+export async function removeDeviceToken(token: string, schoolId: string): Promise<void> {
+  await db.delete(deviceTokensTable).where(and(eq(deviceTokensTable.token, token), eq(deviceTokensTable.schoolId, schoolId)));
 }

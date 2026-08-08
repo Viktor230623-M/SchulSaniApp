@@ -17,6 +17,7 @@ export interface JwtPayload {
   permissions?: string[];
   authTime?: number;
   passwordVersion: number;
+  schoolId?: string | null;
 }
 
 export interface AuthRequest extends Request {
@@ -43,6 +44,7 @@ interface LiveUser {
   mustChangePassword: boolean;
   oneTimePasswordExpiresAt: Date | null;
   passwordVersion: number;
+  schoolId: string | null;
   expires: number;
 }
 
@@ -94,6 +96,7 @@ async function getLiveUser(userId: string): Promise<LiveUser | null> {
     mustChangePassword: row.mustChangePassword,
     oneTimePasswordExpiresAt: row.oneTimePasswordExpiresAt,
     passwordVersion: row.passwordVersion,
+    schoolId: row.schoolId,
     expires: Date.now() + USER_CACHE_TTL_MS,
   };
   userCache.set(userId, entry);
@@ -126,6 +129,10 @@ async function authenticate(req: AuthRequest, res: Response, allowPasswordChange
     res.status(401).json({ error: "Invalid or expired token" });
     return null;
   }
+  if (!live.schoolId) {
+    res.status(403).json({ error: "Schulkontext fehlt" });
+    return null;
+  }
   if (typeof payload.passwordVersion !== "number" || payload.passwordVersion !== live.passwordVersion) {
     res.status(401).json({ error: "Invalid or expired token" });
     return null;
@@ -141,8 +148,30 @@ async function authenticate(req: AuthRequest, res: Response, allowPasswordChange
     iat: payload.iat,
     authTime: payload.authTime ?? payload.iat,
     passwordVersion: live.passwordVersion,
+    schoolId: live.schoolId,
   };
   return live;
+}
+
+export function schoolIdOf(req: AuthRequest): string {
+  const schoolId = req.user?.schoolId;
+  if (!schoolId) throw new MissingSchoolContextError();
+  return schoolId;
+}
+
+export class MissingSchoolContextError extends Error {
+  constructor() {
+    super("Schulkontext fehlt");
+    this.name = "MissingSchoolContextError";
+  }
+}
+
+export function requireSchool(req: AuthRequest, res: Response, next: NextFunction): void {
+  if (!req.user?.schoolId) {
+    res.status(403).json({ error: "Schulkontext fehlt" });
+    return;
+  }
+  next();
 }
 
 export async function requireAuth(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
