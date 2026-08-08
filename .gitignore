@@ -55,3 +55,12 @@ ops/install/auth-providers.json
 docs/superpowers/
 .claude/
 .playwright-mcp/
+
+# graphify — lokale Artefakte, nicht committen
+.graphify/branch.json
+.graphify/worktree.json
+.graphify/needs_update
+.graphify/scope.json
+.graphify/manifest.json
+.graphify/cache/
+.graphify/.graphify_*

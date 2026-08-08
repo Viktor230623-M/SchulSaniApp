@@ -15,7 +15,7 @@ export const PERMISSIONS = [
   { key: "users.approve", description: "Neue Nutzer freischalten", essential: false, hiddenFromUi: false },
   { key: "users.assign_role", description: "Nutzern eine Rolle zuweisen", essential: true, hiddenFromUi: false },
   { key: "users.delete", description: "Nutzerkonten loeschen", essential: false, hiddenFromUi: false },
-  { key: "users.correct_profile", description: "Einen falsch eingegebenen Namen korrigieren", essential: false, hiddenFromUi: false },
+  { key: "users.correct_profile", description: "Einen falsch eingegebenen Namen oder eine falsche E-Mail-Adresse korrigieren", essential: false, hiddenFromUi: false },
   { key: "news.moderate", description: "Nachrichten freigeben oder ablehnen", essential: false, hiddenFromUi: false },
   { key: "news.publish_direct", description: "Nachrichten ohne Freigabe direkt veroeffentlichen", essential: false, hiddenFromUi: false },
   { key: "loa.create", description: "Einen eigenen Abwesenheitsantrag stellen", essential: false, hiddenFromUi: false },

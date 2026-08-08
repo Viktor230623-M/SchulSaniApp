@@ -200,9 +200,8 @@ router.patch("/:id/role", requireAuth, requirePermission("users.assign_role"), a
 });
 
 // Korrigiert einen falsch eingegebenen Namen. Anders als PATCH /auth/profile
-// (einmalig, ohne Berechtigungspruefung, Ziel aus der Sitzung) hier ein Ziel
-// im Pfad plus Berechtigung -- der Weg fuer einen Verwalter, wenn der Nutzer
-// seinen eigenen Namen bereits verbraucht hat.
+// (einmalig, ohne Berechtigungspruefung, Ziel aus der Sitzung) liegt hier ein
+// Ziel im Pfad plus Berechtigung vor. Jede Aenderung landet im Profilprotokoll.
 router.patch("/:id/profile", requireAuth, requirePermission("users.correct_profile"), async (req: AuthRequest, res) => {
   const { id } = req.params as { id: string };
 
@@ -214,7 +213,11 @@ router.patch("/:id/profile", requireAuth, requirePermission("users.correct_profi
     return;
   }
 
-  const { firstName, lastName } = req.body as { firstName?: unknown; lastName?: unknown };
+  const { firstName, lastName, email } = req.body as { firstName?: unknown; lastName?: unknown; email?: unknown };
+  if (email !== undefined) {
+    res.status(400).json({ error: "E-Mail-Korrektur wird nicht unterstuetzt." });
+    return;
+  }
   const cleanFirstName = validateProfileName(firstName);
   const cleanLastName = validateProfileName(lastName);
   if (!cleanFirstName || !cleanLastName) {
@@ -222,7 +225,6 @@ router.patch("/:id/profile", requireAuth, requirePermission("users.correct_profi
     return;
   }
 
-  let existing: typeof usersTable.$inferSelect | undefined;
   let correctionError: "not_found" | "forbidden" | undefined;
   let updated: typeof usersTable.$inferSelect | undefined;
   await db.transaction(async (tx) => {
@@ -231,7 +233,6 @@ router.patch("/:id/profile", requireAuth, requirePermission("users.correct_profi
       .from(usersTable)
       .where(eq(usersTable.id, id))
       .for("update");
-    existing = locked;
     if (!locked) {
       correctionError = "not_found";
       return;
@@ -241,9 +242,20 @@ router.patch("/:id/profile", requireAuth, requirePermission("users.correct_profi
       return;
     }
 
+    const changes: Partial<typeof usersTable.$inferInsert> = {
+      firstName: cleanFirstName,
+      lastName: cleanLastName,
+      updatedAt: new Date(),
+    };
+    // Nur ein noch unbestaetigtes Konto wird durch die Korrektur bestaetigt.
+    // Ein bereits bestaetigter Name darf seinen Zeitstempel nicht verlieren,
+    // wenn nur die Adresse korrigiert wird.
+    if (!locked.profileConfirmedAt) {
+      changes.profileConfirmedAt = new Date();
+    }
     const rows = await tx
       .update(usersTable)
-      .set({ firstName: cleanFirstName, lastName: cleanLastName, profileConfirmedAt: new Date(), updatedAt: new Date() })
+      .set(changes)
       .where(eq(usersTable.id, id))
       .returning();
     updated = rows[0];
