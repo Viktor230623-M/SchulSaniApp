@@ -108,7 +108,7 @@ vi.mock("../lib/roleChangeLog", () => ({
 // DEFAULT_ROLE_PERMISSIONS -- Berechtigungen sind pro Schule in der
 // Datenbank konfigurierbar, ein Test muss also auch Kombinationen abbilden
 // koennen, die der mitgelieferte Katalog aktuell nicht vergibt.
-let actors: Record<string, { role: string; permissions: string[] }> = {};
+let actors: Record<string, { role: string; permissions: string[]; schoolId: string }> = {};
 
 vi.mock("../middlewares/auth", async () => {
   const actual = await vi.importActual<typeof import("../middlewares/auth")>("../middlewares/auth");
@@ -120,7 +120,7 @@ vi.mock("../middlewares/auth", async () => {
       const userId = header.startsWith("Bearer ") ? header.slice(7) : "";
       const actor = actors[userId];
       if (!actor) { res.status(401).json({ error: "Unauthorized" }); return; }
-      req.user = { userId, role: actor.role, permissions: actor.permissions };
+      req.user = { userId, role: actor.role, permissions: actor.permissions, schoolId: actor.schoolId };
       next();
     },
     requirePermission: (...perms: string[]) => (req: any, res: any, next: any) => {
@@ -181,7 +181,7 @@ describe("PATCH /api/users/:id/approve -- Rollenwechsel beim Freischalten", () =
     // /approve tat das vor der Korrektur nicht -- derselbe Nutzer konnte sich
     // ueber den Freischalt-Weg auf admin befoerdern.
     const actorId = "actor-self";
-    actors[actorId] = { role: "sanitaeter_leitung_admin", permissions: ["users.approve", "users.assign_role"] };
+    actors[actorId] = { role: "sanitaeter_leitung_admin", permissions: ["users.approve", "users.assign_role"], schoolId: "school" };
     fakeUsers[actorId] = { id: actorId, role: "sanitaeter_leitung_admin", isApproved: true, approvedBy: null, updatedAt: null };
 
     const result = await approve(actorId, actorId, { role: "admin" });
@@ -198,7 +198,7 @@ describe("PATCH /api/users/:id/approve -- Rollenwechsel beim Freischalten", () =
     // "users.assign_role" vergibt (Registrierung freigeben, aber keine
     // Rollen zuweisen duerfen), war davon nicht geschuetzt.
     const actorId = "actor-approve-only";
-    actors[actorId] = { role: "admin", permissions: ["users.approve"] };
+    actors[actorId] = { role: "admin", permissions: ["users.approve"], schoolId: "school" };
     const targetId = "target-pending";
     fakeUsers[targetId] = { id: targetId, role: "sanitaeter", isApproved: false, approvedBy: null, updatedAt: null };
 
@@ -210,7 +210,7 @@ describe("PATCH /api/users/:id/approve -- Rollenwechsel beim Freischalten", () =
 
   it("erlaubt weiterhin die einfache Freischaltung ohne Rollenwechsel", async () => {
     const actorId = "actor-approve-plain";
-    actors[actorId] = { role: "admin", permissions: ["users.approve"] };
+    actors[actorId] = { role: "admin", permissions: ["users.approve"], schoolId: "school" };
     const targetId = "target-pending-2";
     fakeUsers[targetId] = { id: targetId, role: "sanitaeter", isApproved: false, approvedBy: null, updatedAt: null };
 
@@ -223,7 +223,7 @@ describe("PATCH /api/users/:id/approve -- Rollenwechsel beim Freischalten", () =
 
   it("erlaubt den Rollenwechsel weiterhin mit beiden Berechtigungen", async () => {
     const actorId = "actor-full";
-    actors[actorId] = { role: "admin", permissions: ["users.approve", "users.assign_role"] };
+    actors[actorId] = { role: "admin", permissions: ["users.approve", "users.assign_role"], schoolId: "school" };
     const targetId = "target-pending-3";
     fakeUsers[targetId] = { id: targetId, role: "sanitaeter", isApproved: false, approvedBy: null, updatedAt: null };
 
