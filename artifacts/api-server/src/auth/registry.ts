@@ -3,6 +3,12 @@ import { createLocalProvider } from "./providers/local";
 import { createOidcRedirectProvider } from "./providers/oidc";
 import type { AuthProvider } from "./types";
 
+/** Zentrale Callback-Domain im Relay-Modus, siehe oidc.ts. */
+export interface AuthRelaySettings {
+  baseUrl: string;
+  instanceOrigin: string;
+}
+
 interface RawLocalProviderConfig {
   key: string;
   displayName: string;
@@ -36,7 +42,7 @@ interface RawOidcRedirectProviderConfig {
 
 const EXAMPLE_FILE = "ops/install/auth-providers.example.json";
 
-function buildProvider(raw: RawLocalProviderConfig | RawOidcRedirectProviderConfig): AuthProvider {
+function buildProvider(raw: RawLocalProviderConfig | RawOidcRedirectProviderConfig, relay?: AuthRelaySettings): AuthProvider {
   if (raw.type === "local") {
     if (!raw.key || !raw.displayName) {
       throw new Error(`Anmeldeweg "${raw.key ?? "?"}" ist unvollstaendig konfiguriert (key und displayName erforderlich).`);
@@ -83,6 +89,7 @@ function buildProvider(raw: RawLocalProviderConfig | RawOidcRedirectProviderConf
       clientId: raw.clientId,
       clientSecret: raw.clientSecret,
       redirectUri: raw.redirectUri,
+      relay,
       scopes: raw.scopes,
       groupsClaim: raw.groupsClaim,
       allowedHostedDomains: raw.allowedHostedDomains,
@@ -98,7 +105,7 @@ function buildProvider(raw: RawLocalProviderConfig | RawOidcRedirectProviderConf
 }
 
 /** Laedt die aktivierten OIDC-Anmeldewege dieser Installation einmalig beim Start. */
-export function loadAuthProviders(): AuthProvider[] {
+export function loadAuthProviders(relay?: AuthRelaySettings): AuthProvider[] {
   const providersPath = process.env["AUTH_PROVIDERS_PATH"];
   if (!providersPath) {
     throw new Error(
@@ -136,7 +143,7 @@ export function loadAuthProviders(): AuthProvider[] {
     throw new Error(`Keine lokalen oder OIDC-Anmeldewege in "${providersPath}" aktiviert.`);
   }
 
-  const providers = active.map((entry) => buildProvider(entry as RawLocalProviderConfig | RawOidcRedirectProviderConfig));
+  const providers = active.map((entry) => buildProvider(entry as RawLocalProviderConfig | RawOidcRedirectProviderConfig, relay));
   if (providers.filter((provider) => provider.type === "local").length > 1) {
     throw new Error("Es darf nur ein lokaler Anmeldeweg aktiviert sein.");
   }

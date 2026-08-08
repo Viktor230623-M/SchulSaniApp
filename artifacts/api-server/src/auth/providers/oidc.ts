@@ -48,6 +48,13 @@ export interface OidcRedirectProviderConfig {
   clientSecret?: string;
   /** Genau die Weiterleitungs-URL, die beim Anbieter fuer diesen Client registriert ist. */
   redirectUri: string;
+  /**
+   * Zentrale Callback-Domain im Relay-Modus: Die bei Apple/Google/Microsoft
+   * registrierte URL zeigt auf die gemeinsame Domain, nicht auf diese Instanz.
+   * Der state-Parameter traegt dann die Instanz-Herkunft als Praefix, damit
+   * der Relay den Ruecksprung zurueckschicken kann.
+   */
+  relay?: { baseUrl: string; instanceOrigin: string };
   /** Ohne Angabe: "openid email profile". "openid" wird immer erzwungen. */
   scopes?: string[];
   /** Anspruch im ID-Token, der die Gruppen traegt. Ohne Angabe: "groups". */
@@ -90,8 +97,13 @@ function generateOpaqueToken(): string {
  * Nutzerprojektion ab, die auch der IServ-Formularweg liefert.
  */
 export function createOidcRedirectProvider(cfg: OidcRedirectProviderConfig): RedirectAuthProvider {
-  const { key, displayName, issuerUrl, clientId, clientSecret, redirectUri } = cfg;
+  const { key, displayName, issuerUrl, clientId, clientSecret, redirectUri, relay } = cfg;
   const scopes = Array.from(new Set(["openid", ...(cfg.scopes ?? ["email", "profile"])]));
+  // Im Relay-Modus laeuft der komplette Weiterlauf ueber die zentrale Domain:
+  // die beim Anbieter registrierte redirect_uri zeigt dorthin, der state
+  // traegt die Herkunft dieser Instanz als Praefix vor dem eigentlichen Token.
+  const relayCallbackUri = relay ? `${relay.baseUrl.replace(/\/$/, "")}/api/auth/${key}/callback` : undefined;
+  const callbackUri = relayCallbackUri ?? redirectUri;
   const normalizedIssuer = issuerUrl.replace(/\/$/, "");
   const isGoogle = normalizedIssuer === "https://accounts.google.com";
   const isApple = normalizedIssuer === "https://appleid.apple.com";
@@ -171,13 +183,18 @@ export function createOidcRedirectProvider(cfg: OidcRedirectProviderConfig): Red
     async beginRedirect(options = {}) {
       const doc = await discover();
 
-      const state = generateOpaqueToken();
+      const opaque = generateOpaqueToken();
       const nonce = generateOpaqueToken();
       const codeVerifier = generateCodeVerifier();
       const codeChallenge = codeChallengeFromVerifier(codeVerifier);
 
       pruneExpired(Date.now());
-      pendingRequests.set(state, {
+      // Der Praefix steht vor dem eigentlichen Token, damit der Relay den
+      // Ruecksprung ohne eigene Zustaende weiterleiten kann. Beim Zurueckkommen
+      // wird er wieder abgetrennt, bevor der Token im pendingRequests nach-
+      // geschlagen wird.
+      const state = relay ? `${relay.instanceOrigin}|${opaque}` : opaque;
+      pendingRequests.set(opaque, {
         nonce,
         codeVerifier,
         returnTo: options.returnTo,
@@ -189,7 +206,7 @@ export function createOidcRedirectProvider(cfg: OidcRedirectProviderConfig): Red
       const url = new URL(doc.authorization_endpoint);
       url.searchParams.set("response_type", "code");
       url.searchParams.set("client_id", clientId);
-      url.searchParams.set("redirect_uri", redirectUri);
+      url.searchParams.set("redirect_uri", callbackUri);
       url.searchParams.set("scope", scopes.join(" "));
       url.searchParams.set("state", state);
       url.searchParams.set("nonce", nonce);
@@ -211,11 +228,21 @@ export function createOidcRedirectProvider(cfg: OidcRedirectProviderConfig): Red
         throw new Error("State oder Code fehlt in der Rueckantwort.");
       }
 
+      // Im Relay-Modus muss der Praefix die eigene Herkunft tragen. Ein State
+      // mit fremdem Praefix ist kein echter Ruecksprung, sondern ein Versuch,
+      // die Anmeldung einer anderen Instanz hier zu verarbeiten -- abgebrochen
+      // wird mit demselben Fehler wie ein unbekannter State, ohne zu verraten,
+      // woran es lag.
+      if (relay && !state.startsWith(`${relay.instanceOrigin}|`)) {
+        throw new Error("Unbekannter oder abgelaufener State -- Anmeldung abgebrochen.");
+      }
+      const opaque = relay ? state.slice(state.indexOf("|") + 1) : state;
+
       pruneExpired(Date.now());
-      const pending = pendingRequests.get(state);
+      const pending = pendingRequests.get(opaque);
       // Einmalig verbrauchen -- unabhaengig davon, ob der weitere Ablauf
       // gelingt. Ein zweiter Versuch mit demselben State darf nicht greifen.
-      pendingRequests.delete(state);
+      pendingRequests.delete(opaque);
       if (!pending) {
         throw new Error("Unbekannter oder abgelaufener State -- Anmeldung abgebrochen.");
       }
@@ -225,7 +252,7 @@ export function createOidcRedirectProvider(cfg: OidcRedirectProviderConfig): Red
       const tokenBody = new URLSearchParams({
         grant_type: "authorization_code",
         code,
-        redirect_uri: redirectUri,
+        redirect_uri: callbackUri,
         client_id: clientId,
         code_verifier: pending.codeVerifier,
       });

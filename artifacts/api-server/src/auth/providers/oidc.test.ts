@@ -223,6 +223,63 @@ describe("oidc-provider-tests", () => {
     expect(body.get("client_secret")).toBe("apple-client-secret");
   });
 
+  describe("Relay-Modus (zentrale Callback-Domain)", () => {
+    function relayProvider() {
+      return createOidcRedirectProvider({
+        key: "apple",
+        displayName: "Apple",
+        issuerUrl: "https://appleid.apple.com",
+        clientId: "com.example.service",
+        redirectUri: "https://app.example.test/api/auth/apple/callback",
+        clientSecretMode: "apple-jwt",
+        appleTeamId: "TEAMID1234",
+        appleKeyId: "KEYID12345",
+        applePrivateKeyPath: "/tmp/apple-signin-test.p8",
+        relay: { baseUrl: "https://auth.schulsani.test", instanceOrigin: "https://app.example.test" },
+      });
+    }
+
+    it("stellt den Anbieter-Aufruf auf die zentrale Redirect-URI um", async () => {
+      const { redirectUrl } = await relayProvider().beginRedirect();
+      const url = new URL(redirectUrl);
+      expect(url.searchParams.get("redirect_uri")).toBe("https://auth.schulsani.test/api/auth/apple/callback");
+    });
+
+    it("traegt die Instanz-Herkunft als state-Praefix", async () => {
+      const { redirectUrl } = await relayProvider().beginRedirect();
+      const state = new URL(redirectUrl).searchParams.get("state") ?? "";
+      expect(state.startsWith("https://app.example.test|")).toBe(true);
+      expect(state.length).toBeGreaterThan("https://app.example.test|".length);
+    });
+
+    it("akzeptiert den eigenen Praefix und tauscht gegen die zentrale URL", async () => {
+      const provider = relayProvider();
+      const { state, nonce } = await redirectParams(provider);
+      jwtVerifyMock.mockResolvedValueOnce({
+        payload: { sub: "apple-user", nonce, email: "a@example.test" },
+      } as never);
+      const result = await provider.completeRedirect({ state, code: "abc" });
+      expect(result.subject).toBe("apple-user");
+      const tokenRequest = fetchMock.mock.calls.find(([url]) => String(url).includes("/token"));
+      expect(tokenRequest).toBeDefined();
+      const body = new URLSearchParams(String(tokenRequest![1]?.body));
+      expect(body.get("redirect_uri")).toBe("https://auth.schulsani.test/api/auth/apple/callback");
+    });
+
+    it("lehnt einen fremden state-Praefix ab", async () => {
+      const provider = relayProvider();
+      await expect(provider.completeRedirect({
+        state: "https://fremde-schule.test|opaque",
+        code: "abc",
+      })).rejects.toThrow(/State/);
+    });
+
+    it("lehnt einen state ohne Praefix ab", async () => {
+      const provider = relayProvider();
+      await expect(provider.completeRedirect({ state: "opaque-ohne-praefix", code: "abc" })).rejects.toThrow(/State/);
+    });
+  });
+
   it("liest Apples einmaligen Namensrumpf aus dem Ruecksprung", async () => {
     const provider = createOidcRedirectProvider({
       key: "apple",
