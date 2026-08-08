@@ -300,12 +300,23 @@ export default function SettingsScreen() {
     const firstName = correctFirstName.trim();
     const lastName = correctLastName.trim();
     if (!firstName || !lastName) return;
+    const nameChanged = firstName !== u.firstName || lastName !== u.lastName;
+    if (!nameChanged) {
+      setCorrectingId(null);
+      return;
+    }
+    const lines = [];
+    if (nameChanged) {
+      lines.push(
+        t("settings.correctNameConfirm", lang)
+          .replace("{name}", formatFullName(u.firstName, u.lastName))
+          .replace("{firstName}", firstName)
+          .replace("{lastName}", lastName),
+      );
+    }
     const confirmed = await confirmAction({
-      title: t("settings.correctNameTitle", lang),
-      message: t("settings.correctNameConfirm", lang)
-        .replace("{name}", formatFullName(u.firstName, u.lastName))
-        .replace("{firstName}", firstName)
-        .replace("{lastName}", lastName),
+      title: t("settings.correctProfileTitle", lang),
+      message: lines.join("\n"),
       confirmLabel: t("common.save", lang),
       cancelLabel: t("common.cancel", lang),
     });
@@ -317,7 +328,7 @@ export default function SettingsScreen() {
       setCorrectingId(null);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (err) {
-      await notify(t("common.error", lang), err instanceof Error ? err.message : t("settings.correctNameFailed", lang));
+      await notify(t("common.error", lang), err instanceof Error ? err.message : t("settings.correctProfileFailed", lang));
     } finally {
       setCorrectBusy(false);
     }
@@ -937,21 +948,30 @@ export default function SettingsScreen() {
                         </View>
                       </View>
                       {correctingId === u.id && (
-                        <View style={styles.correctBox}>
-                          <TextInput
-                            value={correctFirstName}
-                            onChangeText={setCorrectFirstName}
-                            placeholder={t("common.firstName", lang)}
-                            placeholderTextColor={theme.textTertiary}
-                            style={[styles.input, { backgroundColor: theme.background, borderColor: theme.cardBorder, color: theme.text }]}
-                          />
-                          <TextInput
-                            value={correctLastName}
-                            onChangeText={setCorrectLastName}
-                            placeholder={t("common.lastName", lang)}
-                            placeholderTextColor={theme.textTertiary}
-                            style={[styles.input, { backgroundColor: theme.background, borderColor: theme.cardBorder, color: theme.text }]}
-                          />
+                        <View style={[styles.correctBox, { borderTopColor: theme.cardBorder }]}>
+                          <View style={styles.correctField}>
+                            <Text style={[styles.correctLabel, { color: theme.textSecondary }]}>{t("common.firstName", lang)}</Text>
+                            <TextInput
+                              value={correctFirstName}
+                              onChangeText={setCorrectFirstName}
+                              placeholder={t("common.firstName", lang)}
+                              placeholderTextColor={theme.textTertiary}
+                              style={[styles.correctInput, { backgroundColor: theme.backgroundTertiary, color: theme.text }]}
+                            />
+                          </View>
+                          <View style={styles.correctField}>
+                            <Text style={[styles.correctLabel, { color: theme.textSecondary }]}>{t("common.lastName", lang)}</Text>
+                            <TextInput
+                              value={correctLastName}
+                              onChangeText={setCorrectLastName}
+                              placeholder={t("common.lastName", lang)}
+                              placeholderTextColor={theme.textTertiary}
+                              style={[styles.correctInput, { backgroundColor: theme.backgroundTertiary, color: theme.text }]}
+                            />
+                          </View>
+                          <Text style={[styles.correctHint, { color: theme.textTertiary }]}>
+                            {t("settings.correctHint", lang)}
+                          </Text>
                           <View style={styles.editActions}>
                             <Pressable onPress={() => setCorrectingId(null)} style={[styles.secondaryBtn, { borderColor: theme.cardBorder }]}>
                               <Text style={[styles.secondaryBtnText, { color: theme.textSecondary }]}>{t("common.cancel", lang)}</Text>
@@ -1060,8 +1080,14 @@ const styles = StyleSheet.create({
   pendingStatusText: { fontSize: 10, fontFamily: "Inter_600SemiBold", color: "#B45309" },
   adminCard: { borderRadius: 12, borderWidth: 1, padding: 12, gap: 10 },
   adminCardHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
-  correctBox: { gap: 8, marginTop: 4 },
-  input: { borderWidth: 1, borderRadius: 10, padding: 10, fontSize: 14, fontFamily: "Inter_400Regular" },
+  correctBox: { gap: 12, marginTop: 6, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth },
+  correctField: { gap: 5 },
+  correctLabel: { fontSize: 11, fontFamily: "Inter_600SemiBold", textTransform: "uppercase", letterSpacing: 0.5 },
+  correctLabelRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  correctInput: { borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, fontFamily: "Inter_400Regular" },
+  verifiedPill: { flexDirection: "row", alignItems: "center", gap: 3 },
+  verifiedText: { fontSize: 11, fontFamily: "Inter_500Medium" },
+  correctHint: { fontSize: 11, fontFamily: "Inter_400Regular" },
   editActions: { flexDirection: "row", gap: 10, justifyContent: "flex-end" },
   secondaryBtn: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 9 },
   secondaryBtnText: { fontSize: 13, fontFamily: "Inter_500Medium" },

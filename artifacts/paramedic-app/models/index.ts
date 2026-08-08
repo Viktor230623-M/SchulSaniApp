@@ -11,6 +11,7 @@ export interface User {
   firstName: string;
   lastName: string;
   email: string;
+  /** Vom Server mitgeliefert; zeigt an, ob die Adresse bestaetigt ist. */
   phone: string;
   role: UserRole;
   schoolId: string;

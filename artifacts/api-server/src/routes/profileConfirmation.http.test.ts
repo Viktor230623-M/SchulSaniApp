@@ -9,7 +9,6 @@ interface FakeUserRow {
   schoolId: string | null;
   profileConfirmedAt: Date | null;
   authProvider: string;
-  emailVerifiedAt: Date | null;
   passwordVersion: number;
   firstName: string | null;
   lastName: string | null;
@@ -23,7 +22,21 @@ function extractEqId(cond: any): string | undefined {
   const chunks = cond?.queryChunks;
   if (!Array.isArray(chunks)) return undefined;
   const param = chunks.find((c: any) => c?.constructor?.name === "Param");
-  return param?.value;
+  return typeof param?.value === "string" ? param.value : undefined;
+}
+
+function extractParams(cond: any): unknown[] {
+  const out: unknown[] = [];
+  const collect = (c: any) => {
+    if (c?.constructor?.name === "Param") {
+      out.push(c.value);
+      return;
+    }
+    const chunks = c?.queryChunks;
+    if (Array.isArray(chunks)) chunks.forEach(collect);
+  };
+  collect(cond);
+  return out;
 }
 
 vi.mock("@workspace/db", async () => {
@@ -42,7 +55,6 @@ vi.mock("@workspace/db", async () => {
     firstName: text("first_name"),
     lastName: text("last_name"),
     email: text("email"),
-    emailVerifiedAt: text("email_verified_at"),
     passwordVersion: text("password_version"),
     username: text("username"),
   });
@@ -63,7 +75,12 @@ vi.mock("@workspace/db", async () => {
     const chain: any = {
       from: (t: any) => { isUsers = t === usersTableMock; return chain; },
       innerJoin: () => chain,
-      where: (cond: any) => { whereId = extractEqId(cond); return chain; },
+      where: (cond: any) => {
+        const params = extractParams(cond);
+        const idParam = params.find((p) => typeof p === "string" && !p.includes("@") && fakeUsers[p]);
+        if (typeof idParam === "string") whereId = idParam;
+        return chain;
+      },
       limit: () => chain,
       for: () => chain,
       then: (onFulfilled: any, onRejected?: any) => resolve().then(onFulfilled, onRejected),
@@ -153,7 +170,6 @@ function makeUser(overrides: Partial<FakeUserRow> = {}): FakeUserRow {
     schoolId: null,
     profileConfirmedAt: null,
     authProvider: "oidc-beispiel",
-    emailVerifiedAt: new Date(),
     passwordVersion: 0,
     firstName: "Vorschlag",
     lastName: "Nachname",
@@ -330,6 +346,55 @@ describe("Namensbestaetigung -- Sperre, Endpunkt, Verwalter-Korrektur", () => {
       const result = await call("PATCH", `/api/users/${actor.id}/profile`, tokenFor(actor), { firstName: "Neu", lastName: "Selbst" });
 
       expect(result.status).toBe(403);
+      expect(profileChangeEntries).toHaveLength(0);
+    });
+
+    it("korrigiert nur den Namen und schreibt zwei Protokolleintraege", async () => {
+      const actor = makeUser({ id: "actor-admin-name", role: "admin", profileConfirmedAt: new Date() });
+      const target = makeUser({ id: "target-name", firstName: "Falsch", lastName: "Geschrieben", profileConfirmedAt: null });
+      fakeUsers[actor.id] = actor;
+      fakeUsers[target.id] = target;
+
+      const result = await call("PATCH", `/api/users/${target.id}/profile`, tokenFor(actor), {
+        firstName: "Richtig",
+        lastName: "Korrigiert",
+      });
+
+      expect(result.status).toBe(200);
+      expect(fakeUsers[target.id]!.firstName).toBe("Richtig");
+      expect(fakeUsers[target.id]!.lastName).toBe("Korrigiert");
+      expect(profileChangeEntries.map((e) => e.field).sort()).toEqual(["first_name", "last_name"]);
+    });
+
+    it("laesst den Zeitstempel eines bestaetigten Namens bei unveraendertem Namen stehen", async () => {
+      const confirmedAt = new Date("2026-07-01T10:00:00Z");
+      const actor = makeUser({ id: "actor-admin-ts", role: "admin", profileConfirmedAt: new Date() });
+      const target = makeUser({ id: "target-ts", profileConfirmedAt: confirmedAt });
+      fakeUsers[actor.id] = actor;
+      fakeUsers[target.id] = target;
+
+      const result = await call("PATCH", `/api/users/${target.id}/profile`, tokenFor(actor), {
+        firstName: target.firstName,
+        lastName: target.lastName,
+      });
+
+      expect(result.status).toBe(200);
+      expect(fakeUsers[target.id]!.profileConfirmedAt).toBe(confirmedAt);
+    });
+
+    it("weist E-Mail-Korrekturen mit 400 ab", async () => {
+      const actor = makeUser({ id: "actor-admin-mail", role: "admin", profileConfirmedAt: new Date() });
+      const target = makeUser({ id: "target-mail" });
+      fakeUsers[actor.id] = actor;
+      fakeUsers[target.id] = target;
+
+      const result = await call("PATCH", `/api/users/${target.id}/profile`, tokenFor(actor), {
+        firstName: target.firstName,
+        lastName: target.lastName,
+        email: "neu@vitest.beispiel.invalid",
+      });
+
+      expect(result.status).toBe(400);
       expect(profileChangeEntries).toHaveLength(0);
     });
   });

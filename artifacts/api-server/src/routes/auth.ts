@@ -21,6 +21,7 @@ import { hashPassword } from "../auth/providers/local";
 import { issueAuthToken, hashAuthToken } from "../lib/authTokens";
 import { assertMailerConfig, authLink, sendMail, verifyMailer } from "../services/mailer";
 import { validateProfileName } from "../lib/profileName";
+import { normaliseEmail } from "../lib/email";
 
 const router = Router();
 
@@ -79,12 +80,6 @@ const AUTH_RESPONSE_FLOOR_MS = 400;
 const SESSION_COOKIE = "sani-session";
 const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const LINK_SESSION_FRESHNESS_MS = 15 * 60 * 1000;
-
-function normaliseEmail(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const email = value.trim().toLowerCase();
-  return email.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : null;
-}
 
 function validPassword(value: unknown): value is string {
   return typeof value === "string" && value.length >= 10 && value.length <= 200;
@@ -210,7 +205,7 @@ if (localProvider) {
   assertMailerConfig();
 }
 
-function getLocalProvider(): PasswordAuthProvider {
+export function getLocalProvider(): PasswordAuthProvider {
   if (!localProvider) throw new Error("Lokale Konten sind in dieser Installation nicht aktiviert.");
   return localProvider;
 }
@@ -547,9 +542,12 @@ router.post("/local/password/forgot", resetIpLimiter, resetEmailLimiter, async (
     return;
   }
   await hashPassword(email);
-  const [user] = await db.select({ id: usersTable.id, email: usersTable.email }).from(usersTable).where(and(eq(usersTable.email, email), eq(usersTable.authProvider, getLocalProvider().key))).limit(1);
+  // Reset nur fuer bestaetigte Adressen. Eine unbestaetigte Adresse gehoert
+  // moeglicherweise gar nicht dem Kontoinhaber (Verwalter-Korrektur, noch
+  // nicht bestaetigt); eine Reset-Mail dorthin waere eine Uebernahmekette.
+  const [user] = await db.select({ id: usersTable.id, email: usersTable.email, emailVerifiedAt: usersTable.emailVerifiedAt }).from(usersTable).where(and(eq(usersTable.email, email), eq(usersTable.authProvider, getLocalProvider().key))).limit(1);
   let mail: { to: string; subject: string; text: string; html: string } | undefined;
-  if (user) {
+  if (user && user.emailVerifiedAt) {
     const token = await issueAuthToken(user.id, "password_reset", new Date(Date.now() + 60 * 60 * 1000));
     const text = `Setze dein Passwort innerhalb von 60 Minuten neu:\n\n${authLink("passwort-zuruecksetzen", token)}`;
     mail = { to: email, subject: "Passwort zuruecksetzen", text, html: htmlMailText(text) };
