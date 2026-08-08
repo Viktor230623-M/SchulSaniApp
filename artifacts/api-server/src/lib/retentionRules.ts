@@ -29,6 +29,8 @@ export interface RetentionCutoffs {
   roleChangeLog: Date;
   /** Protokoll von Namenskorrekturen: 12 Monate, wie role_change_log. */
   profileChangeLog: Date;
+  /** Protokoll von Kontoverknuepfungen: 12 Monate, wie role_change_log. */
+  identityChangeLog: Date;
   /** Sitzungen: 30 Tage nach Widerruf. */
   sessionsRevoked: Date;
   /** Auth-Links: sieben Tage nach Ablauf. */
@@ -67,6 +69,7 @@ export function computeCutoffs(now: Date): RetentionCutoffs {
     accessLog: minusMonths(now, 12),
     roleChangeLog: minusMonths(now, 12),
     profileChangeLog: minusMonths(now, 12),
+    identityChangeLog: minusMonths(now, 12),
     sessionsRevoked: minusDays(now, 30),
     authTokens: minusDays(now, 7),
     unverifiedAccounts: minusDays(now, 30),
