@@ -103,7 +103,6 @@ export default function SettingsScreen() {
   const [correctingId, setCorrectingId] = useState<string | null>(null);
   const [correctFirstName, setCorrectFirstName] = useState("");
   const [correctLastName, setCorrectLastName] = useState("");
-  const [correctEmail, setCorrectEmail] = useState("");
   const [correctBusy, setCorrectBusy] = useState(false);
 
   useEffect(() => {
@@ -295,17 +294,14 @@ export default function SettingsScreen() {
     setCorrectingId(u.id);
     setCorrectFirstName(u.firstName);
     setCorrectLastName(u.lastName);
-    setCorrectEmail(u.email ?? "");
   }
 
   async function handleCorrect(u: User) {
     const firstName = correctFirstName.trim();
     const lastName = correctLastName.trim();
-    const email = correctEmail.trim();
     if (!firstName || !lastName) return;
     const nameChanged = firstName !== u.firstName || lastName !== u.lastName;
-    const emailChanged = email.toLowerCase() !== (u.email ?? "").toLowerCase();
-    if (!nameChanged && !emailChanged) {
+    if (!nameChanged) {
       setCorrectingId(null);
       return;
     }
@@ -318,14 +314,6 @@ export default function SettingsScreen() {
           .replace("{lastName}", lastName),
       );
     }
-    if (emailChanged) {
-      lines.push(
-        t("settings.correctEmailConfirm", lang)
-          .replace("{oldEmail}", u.email ?? "—")
-          .replace("{email}", email),
-        t("settings.correctEmailVerifyHint", lang),
-      );
-    }
     const confirmed = await confirmAction({
       title: t("settings.correctProfileTitle", lang),
       message: lines.join("\n"),
@@ -335,12 +323,7 @@ export default function SettingsScreen() {
     if (!confirmed) return;
     setCorrectBusy(true);
     try {
-      const updated = await ApiService.correctUserProfile(
-        u.id,
-        firstName,
-        lastName,
-        emailChanged ? email : undefined,
-      );
+      const updated = await ApiService.correctUserProfile(u.id, firstName, lastName);
       setAllUsers((prev) => prev.map((x) => (x.id === u.id ? { ...x, ...updated } : x)));
       setCorrectingId(null);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -983,27 +966,6 @@ export default function SettingsScreen() {
                               onChangeText={setCorrectLastName}
                               placeholder={t("common.lastName", lang)}
                               placeholderTextColor={theme.textTertiary}
-                              style={[styles.correctInput, { backgroundColor: theme.backgroundTertiary, color: theme.text }]}
-                            />
-                          </View>
-                          <View style={styles.correctField}>
-                            <View style={styles.correctLabelRow}>
-                              <Text style={[styles.correctLabel, { color: theme.textSecondary }]}>{t("auth.email", lang)}</Text>
-                              {u.emailVerifiedAt ? (
-                                <View style={styles.verifiedPill}>
-                                  <Ionicons name="checkmark-circle" size={12} color={theme.success} />
-                                  <Text style={[styles.verifiedText, { color: theme.success }]}>{t("settings.emailVerified", lang)}</Text>
-                                </View>
-                              ) : null}
-                            </View>
-                            <TextInput
-                              value={correctEmail}
-                              onChangeText={setCorrectEmail}
-                              placeholder="name@schule.de"
-                              placeholderTextColor={theme.textTertiary}
-                              autoCapitalize="none"
-                              autoCorrect={false}
-                              keyboardType="email-address"
                               style={[styles.correctInput, { backgroundColor: theme.backgroundTertiary, color: theme.text }]}
                             />
                           </View>

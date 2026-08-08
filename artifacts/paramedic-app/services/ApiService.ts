@@ -668,12 +668,12 @@ const ApiService = {
     return resp.json();
   },
 
-  /** Korrigiert einen falsch eingegebenen Namen oder eine falsche E-Mail-Adresse fremder Konten (PATCH /users/:id/profile, users.correct_profile). */
-  async correctUserProfile(id: string, firstName: string, lastName: string, email?: string): Promise<User> {
+  /** Korrigiert den Namen eines fremden Kontos (PATCH /users/:id/profile, users.correct_profile). */
+  async correctUserProfile(id: string, firstName: string, lastName: string): Promise<User> {
     const resp = await apiFetch(`${API_BASE}/users/${id}/profile`, {
       method: "PATCH",
       headers: headers(),
-      body: JSON.stringify({ firstName, lastName, ...(email !== undefined ? { email } : {}) }),
+      body: JSON.stringify({ firstName, lastName }),
     });
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok) throw new Error(data.error ?? "Profil konnte nicht korrigiert werden");

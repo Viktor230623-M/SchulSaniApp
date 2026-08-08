@@ -9,7 +9,6 @@ interface FakeUserRow {
   schoolId: string | null;
   profileConfirmedAt: Date | null;
   authProvider: string;
-  emailVerifiedAt: Date | null;
   passwordVersion: number;
   firstName: string | null;
   lastName: string | null;
@@ -23,7 +22,7 @@ function extractEqId(cond: any): string | undefined {
   const chunks = cond?.queryChunks;
   if (!Array.isArray(chunks)) return undefined;
   const param = chunks.find((c: any) => c?.constructor?.name === "Param");
-  return param?.value;
+  return typeof param?.value === "string" ? param.value : undefined;
 }
 
 function extractParams(cond: any): unknown[] {
@@ -56,7 +55,6 @@ vi.mock("@workspace/db", async () => {
     firstName: text("first_name"),
     lastName: text("last_name"),
     email: text("email"),
-    emailVerifiedAt: text("email_verified_at"),
     passwordVersion: text("password_version"),
     username: text("username"),
   });
@@ -69,14 +67,8 @@ vi.mock("@workspace/db", async () => {
   function makeSelectChain(): any {
     let isUsers = false;
     let whereId: string | undefined;
-    let emailWhere: string | undefined;
     const resolve = () => {
       if (!isUsers) return Promise.resolve([]);
-      // Eindeutigkeitsabfrage der E-Mail-Korrektur: sucht ueber die Adresse und
-      // schliesst das Ziel aus (and(eq(email, ...), ne(id, ...))).
-      if (emailWhere !== undefined) {
-        return Promise.resolve(Object.values(fakeUsers).filter((u) => u.email === emailWhere && u.id !== whereId));
-      }
       if (whereId !== undefined) return Promise.resolve(fakeUsers[whereId] ? [fakeUsers[whereId]] : []);
       return Promise.resolve(Object.values(fakeUsers));
     };
@@ -86,9 +78,7 @@ vi.mock("@workspace/db", async () => {
       where: (cond: any) => {
         const params = extractParams(cond);
         const idParam = params.find((p) => typeof p === "string" && !p.includes("@") && fakeUsers[p]);
-        const mailParam = params.find((p) => typeof p === "string" && p.includes("@"));
-        if (idParam !== undefined) whereId = idParam;
-        if (mailParam !== undefined) emailWhere = mailParam;
+        if (typeof idParam === "string") whereId = idParam;
         return chain;
       },
       limit: () => chain,
@@ -180,7 +170,6 @@ function makeUser(overrides: Partial<FakeUserRow> = {}): FakeUserRow {
     schoolId: null,
     profileConfirmedAt: null,
     authProvider: "oidc-beispiel",
-    emailVerifiedAt: new Date(),
     passwordVersion: 0,
     firstName: "Vorschlag",
     lastName: "Nachname",
@@ -360,91 +349,49 @@ describe("Namensbestaetigung -- Sperre, Endpunkt, Verwalter-Korrektur", () => {
       expect(profileChangeEntries).toHaveLength(0);
     });
 
-    it("korrigiert die E-Mail-Adresse, entzieht ihr den Bestaetigt-Status und protokolliert sie", async () => {
-      const actor = makeUser({ id: "actor-admin-mail", role: "admin", profileConfirmedAt: new Date() });
-      const target = makeUser({ id: "target-mail", email: "alt@vitest.beispiel.invalid", emailVerifiedAt: null });
+    it("korrigiert nur den Namen und schreibt zwei Protokolleintraege", async () => {
+      const actor = makeUser({ id: "actor-admin-name", role: "admin", profileConfirmedAt: new Date() });
+      const target = makeUser({ id: "target-name", firstName: "Falsch", lastName: "Geschrieben", profileConfirmedAt: null });
       fakeUsers[actor.id] = actor;
       fakeUsers[target.id] = target;
 
       const result = await call("PATCH", `/api/users/${target.id}/profile`, tokenFor(actor), {
-        firstName: target.firstName,
-        lastName: target.lastName,
-        email: "Neu@Vitest.Beispiel.Invalid",
+        firstName: "Richtig",
+        lastName: "Korrigiert",
       });
 
       expect(result.status).toBe(200);
-      expect(fakeUsers[target.id]!.email).toBe("neu@vitest.beispiel.invalid");
-      // Erst die Bestaetigung durch den Kontoinhaber hebt den Status wieder
-      // an; der Verwalter darf eine Adresse nicht selbst freischalten.
-      expect(fakeUsers[target.id]!.emailVerifiedAt).toBeNull();
-      const emailEntry = profileChangeEntries.find((e) => e.field === "email");
-      expect(emailEntry).toBeDefined();
-      expect(emailEntry!.before).toBe("alt@vitest.beispiel.invalid");
-      expect(emailEntry!.after).toBe("neu@vitest.beispiel.invalid");
+      expect(fakeUsers[target.id]!.firstName).toBe("Richtig");
+      expect(fakeUsers[target.id]!.lastName).toBe("Korrigiert");
+      expect(profileChangeEntries.map((e) => e.field).sort()).toEqual(["first_name", "last_name"]);
     });
 
-    it("entzieht einer zuvor bestaetigten Adresse den Status bei Korrektur", async () => {
-      const actor = makeUser({ id: "actor-admin-mail-2", role: "admin", profileConfirmedAt: new Date() });
-      const target = makeUser({ id: "target-mail-2", email: "alt@vitest.beispiel.invalid", emailVerifiedAt: new Date("2026-07-01T10:00:00Z") });
-      fakeUsers[actor.id] = actor;
-      fakeUsers[target.id] = target;
-
-      const result = await call("PATCH", `/api/users/${target.id}/profile`, tokenFor(actor), {
-        firstName: target.firstName,
-        lastName: target.lastName,
-        email: "neu@vitest.beispiel.invalid",
-      });
-
-      expect(result.status).toBe(200);
-      expect(fakeUsers[target.id]!.emailVerifiedAt).toBeNull();
-    });
-
-    it("verweigert eine bereits vergebene E-Mail-Adresse mit 409", async () => {
-      const actor = makeUser({ id: "actor-admin-taken", role: "admin", profileConfirmedAt: new Date() });
-      const target = makeUser({ id: "target-taken", email: "a@vitest.beispiel.invalid" });
-      const other = makeUser({ id: "other-taken", email: "b@vitest.beispiel.invalid" });
-      fakeUsers[actor.id] = actor;
-      fakeUsers[target.id] = target;
-      fakeUsers[other.id] = other;
-
-      const result = await call("PATCH", `/api/users/${target.id}/profile`, tokenFor(actor), {
-        firstName: target.firstName,
-        lastName: target.lastName,
-        email: "b@vitest.beispiel.invalid",
-      });
-
-      expect(result.status).toBe(409);
-      expect(fakeUsers[target.id]!.email).toBe("a@vitest.beispiel.invalid");
-      expect(profileChangeEntries.some((e) => e.field === "email")).toBe(false);
-    });
-
-    it("laesst den Zeitstempel eines bestaetigten Namens bei reiner E-Mail-Korrektur stehen", async () => {
+    it("laesst den Zeitstempel eines bestaetigten Namens bei unveraendertem Namen stehen", async () => {
       const confirmedAt = new Date("2026-07-01T10:00:00Z");
       const actor = makeUser({ id: "actor-admin-ts", role: "admin", profileConfirmedAt: new Date() });
-      const target = makeUser({ id: "target-ts", profileConfirmedAt: confirmedAt, email: "alt@vitest.beispiel.invalid" });
+      const target = makeUser({ id: "target-ts", profileConfirmedAt: confirmedAt });
       fakeUsers[actor.id] = actor;
       fakeUsers[target.id] = target;
 
       const result = await call("PATCH", `/api/users/${target.id}/profile`, tokenFor(actor), {
         firstName: target.firstName,
         lastName: target.lastName,
-        email: "neu@vitest.beispiel.invalid",
       });
 
       expect(result.status).toBe(200);
       expect(fakeUsers[target.id]!.profileConfirmedAt).toBe(confirmedAt);
     });
 
-    it("weist eine ungueltige E-Mail-Adresse mit 400 ab", async () => {
-      const actor = makeUser({ id: "actor-admin-bad", role: "admin", profileConfirmedAt: new Date() });
-      const target = makeUser({ id: "target-bad-mail", email: "a@vitest.beispiel.invalid" });
+    it("weist E-Mail-Korrekturen mit 400 ab", async () => {
+      const actor = makeUser({ id: "actor-admin-mail", role: "admin", profileConfirmedAt: new Date() });
+      const target = makeUser({ id: "target-mail" });
       fakeUsers[actor.id] = actor;
       fakeUsers[target.id] = target;
 
       const result = await call("PATCH", `/api/users/${target.id}/profile`, tokenFor(actor), {
         firstName: target.firstName,
         lastName: target.lastName,
-        email: "keine-adresse",
+        email: "neu@vitest.beispiel.invalid",
       });
 
       expect(result.status).toBe(400);

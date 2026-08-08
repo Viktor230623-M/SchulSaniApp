@@ -5,7 +5,7 @@ import type { Tx } from "./rolePermissions";
 export interface ProfileChangeEntry {
   actorId: string;
   targetUserId: string;
-  field: "first_name" | "last_name" | "email";
+  field: "first_name" | "last_name";
   before: string | null;
   after: string | null;
 }
