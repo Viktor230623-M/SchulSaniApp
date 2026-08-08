@@ -917,6 +917,14 @@ router.delete("/identities/:id", authLimiter, requireAuth, async (req: AuthReque
     if (count <= 1) return "last_identity" as const;
 
     await tx.delete(userIdentitiesTable).where(eq(userIdentitiesTable.id, identityId));
+    // Die Identitaet ist ein Zugangsschluessel: alte Bearer-Tokens und
+    // Sitzungen duerfen nach dem Entfernen nicht weiter gelten.
+    await tx.update(usersTable)
+      .set({ passwordVersion: sql`${usersTable.passwordVersion} + 1`, updatedAt: new Date() })
+      .where(eq(usersTable.id, req.user!.userId));
+    await tx.update(sessionsTable)
+      .set({ revokedAt: new Date() })
+      .where(and(eq(sessionsTable.userId, req.user!.userId), isNull(sessionsTable.revokedAt)));
     await logIdentityChangeTx(tx, {
       userId: req.user!.userId,
       providerKey: identity.providerKey,

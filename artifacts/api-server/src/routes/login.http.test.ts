@@ -5,10 +5,11 @@ import { dirname, resolve } from "node:path";
 import type { Express } from "express";
 
 const hier = dirname(fileURLToPath(import.meta.url));
-const { activeUserId, authAgeSeconds, identityLog } = vi.hoisted(() => ({
+const { activeUserId, authAgeSeconds, identityLog, revokedSessions } = vi.hoisted(() => ({
   activeUserId: { value: "nutzer-oidc-1" },
   authAgeSeconds: { value: 0 },
   identityLog: { value: [] as Array<{ userId: string; providerKey: string; action: string }> },
+  revokedSessions: { value: 0 },
 }));
 
 interface FakeUserRow {
@@ -76,6 +77,7 @@ vi.mock("@workspace/db", async () => {
   }
 
   const identityChangeLogTableMock = createMockTable("identity_change_log");
+  const sessionsTableMock = createMockTable("sessions");
 
   function firstParam(cond: any): unknown {
     const out: unknown[] = [];
@@ -151,7 +153,14 @@ vi.mock("@workspace/db", async () => {
         return { onConflictDoUpdate: () => Promise.resolve(), onConflictDoNothing: () => Promise.resolve() };
       },
     }),
-    update: () => ({ set: () => ({ where: () => ({ returning: () => Promise.resolve([]) }) }) }),
+    update: (table: any) => ({
+      set: (values: any) => ({
+        where: () => {
+          if (table === sessionsTableMock) revokedSessions.value += 1;
+          return { returning: () => Promise.resolve([]) };
+        },
+      }),
+    }),
     delete: (t: any) => ({
       where: (cond: any) => {
         if (t === userIdentitiesTableMock) {
@@ -183,7 +192,7 @@ vi.mock("@workspace/db", async () => {
     dbConsoleLogTable: createMockTable("db_console_log"),
     rolesTable: createMockTable("roles"),
     rolePermissionsTable: createMockTable("role_permissions"),
-    sessionsTable: createMockTable("sessions"),
+    sessionsTable: sessionsTableMock,
     roleChangeLogTable: createMockTable("role_change_log"),
     profileChangeLogTable: createMockTable("profile_change_log"),
     identityChangeLogTable: identityChangeLogTableMock,
@@ -266,6 +275,7 @@ describe("OIDC-only Authentifizierung", () => {
     fakeIdentities = [];
     authAgeSeconds.value = 0;
     identityLog.value = [];
+    revokedSessions.value = 0;
   });
 
   it("listet den aktivierten OIDC-Anmeldeweg", async () => {
@@ -374,6 +384,7 @@ describe("OIDC-only Authentifizierung", () => {
       expect(identityLog.value).toEqual([
         { userId: "nutzer-oidc-1", providerKey: "oidc-beispiel", action: "unlink" },
       ]);
+      expect(revokedSessions.value).toBe(1);
     });
 
     it("weist das Entfernen der letzten Identitaet ab", async () => {
