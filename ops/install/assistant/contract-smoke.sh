@@ -40,30 +40,13 @@ const fs = require("node:fs");
 const cookiePath = process.argv[2];
 const port = process.argv[3];
 const body = {
-  authMode: "local+oidc",
+  loginOptions: ["email", "google", "microsoft"],
+  providers: [
+    { option: "google", clientId: "google-id", clientSecret: `google-${process.pid}-${Date.now()}`, allowedHostedDomains: "example.test", groupsClaim: "groups", groupToRoleMap: "sanis=sanitaeter" },
+    { option: "microsoft", tenantId: "00000000-0000-0000-0000-000000000000", clientId: "microsoft-id", clientSecret: `microsoft-${process.pid}-${Date.now()}`, groupsClaim: "roles", groupToRoleMap: "leaders=sanitaeter_leitung" }
+  ],
   schoolName: "Beispielschule",
   domain: "sani.example.test",
-  providerKey: "google",
-  providerDisplayName: "Google",
-  providerIssuerUrl: "https://accounts.google.com",
-  providerClientId: "google-id",
-  providerClientSecret: `google-${process.pid}-${Date.now()}`,
-  providerScopes: "openid email profile calendar.readonly",
-  providerAllowedHostedDomains: "example.test",
-  providerGroupsClaim: "groups",
-  providerGroupToRoleMap: "sanis=sanitaeter",
-  providerClientSecretMode: "static",
-  providerResponseMode: "query",
-  provider2Key: "microsoft",
-  provider2DisplayName: "Microsoft",
-  provider2IssuerUrl: "https://login.microsoftonline.com/tenant/v2.0",
-  provider2ClientId: "microsoft-id",
-  provider2ClientSecret: `microsoft-${process.pid}-${Date.now()}`,
-  provider2Scopes: "openid email profile",
-  provider2GroupsClaim: "roles",
-  provider2GroupToRoleMap: "leaders=sanitaeter_leitung",
-  provider2ClientSecretMode: "static",
-  provider2ResponseMode: "query",
   smtpHost: "mail.example.test",
   smtpPort: "587",
   smtpUser: "mailer@example.test",
@@ -86,7 +69,10 @@ const post = async (pathname, payload) => {
   if (!response.ok) throw new Error(`${pathname} antwortet mit ${response.status}`);
 };
 (async () => {
-  const missingSecrets = { ...body, providerClientSecret: "", provider2ClientSecret: "" };
+  const missingSecrets = {
+    ...body,
+    providers: body.providers.map((p) => ({ ...p, clientSecret: "" })),
+  };
   const rejected = await fetch(`http://127.0.0.1:${port}/api/config`, { method: "POST", headers, body: JSON.stringify(missingSecrets) });
   if (rejected.status !== 422) throw new Error(`Konfiguration ohne Google-/Microsoft-Secret wurde mit ${rejected.status} akzeptiert.`);
   await post("/api/config", body);
@@ -98,10 +84,14 @@ node - "$providers" "$root/artifacts/api-server/.env" <<'NODE'
 const fs = require("node:fs");
 const providers = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
 if (providers.length !== 3) throw new Error("Erwartet: lokaler Weg und zwei OIDC-Anbieter.");
-const [local, google, microsoft] = providers;
-if (local.type !== "local" || google.key !== "google" || microsoft.key !== "microsoft") throw new Error("Anbieterstruktur ungueltig.");
-if (google.scopes.length !== 4 || google.groupToRoleMap.sanis !== "sanitaeter") throw new Error("Google-Optionen fehlen.");
-if (microsoft.scopes.length !== 3 || microsoft.groupToRoleMap.leaders !== "sanitaeter_leitung") throw new Error("Microsoft-Optionen fehlen.");
+const local = providers.find((p) => p.type === "local");
+const google = providers.find((p) => p.key === "google");
+const microsoft = providers.find((p) => p.key === "microsoft");
+if (!local || !google || !microsoft) throw new Error("Anbieterstruktur ungueltig.");
+if (google.groupToRoleMap.sanis !== "sanitaeter") throw new Error("Google-Optionen fehlen.");
+if (microsoft.groupToRoleMap.leaders !== "sanitaeter_leitung") throw new Error("Microsoft-Optionen fehlen.");
+if (google.issuerUrl !== "https://accounts.google.com") throw new Error("Google-Issuer ungueltig.");
+if (microsoft.issuerUrl !== "https://login.microsoftonline.com/00000000-0000-0000-0000-000000000000/v2.0") throw new Error("Microsoft-Issuer aus Tenant-ID ungueltig.");
 const env = fs.readFileSync(process.argv[3], "utf8");
 for (const key of ["SMTP_HOST", "SMTP_PORT", "SMTP_REQUIRE_TLS", "MAIL_FROM", "APP_BASE_URL"]) {
   if (!env.includes(`${key}=`)) throw new Error(`${key} fehlt in Backend-.env.`);

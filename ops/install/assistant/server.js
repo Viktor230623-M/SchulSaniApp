@@ -175,6 +175,8 @@ function clearPendingSecrets() {
 }
 
 function authModeIsLocal(cfg) {
+  const options = cfg.loginOptions && cfg.loginOptions.length > 0 ? cfg.loginOptions : null;
+  if (options) return options.includes("email");
   return cfg.authMode === "local" || cfg.authMode === "local+oidc";
 }
 
@@ -266,12 +268,18 @@ function validateConfig(body) {
   const errors = {};
   const out = {};
 
-  out.authMode = trimOrEmpty(body.authMode).toLowerCase() || "local";
-  if (!["local", "oidc", "local+oidc"].includes(out.authMode)) {
-    errors.authMode = "Bitte E-Mail, OIDC oder E-Mail mit OIDC auswaehlen.";
+  // Login-Optionen als Liste: E-Mail optional, dazu Apple/Google/Microsoft/
+  // eigener OIDC in beliebiger Kombination. Altformat (authMode) bleibt fuer
+  // gespeicherte Staende aus frueheren Assistenten lesbar, das Formular sendet
+  // aber immer loginOptions.
+  const loginOptions = Array.isArray(body.loginOptions) ? body.loginOptions : [];
+  const validOptions = ["email", "apple", "google", "microsoft", "custom"];
+  out.loginOptions = loginOptions.filter((option) => validOptions.includes(option));
+  if (out.loginOptions.length === 0) {
+    errors.loginOptions = "Bitte mindestens eine Login-Option waehlen.";
   }
-  const usesLocal = out.authMode === "local" || out.authMode === "local+oidc";
-  const usesOidc = out.authMode === "oidc" || out.authMode === "local+oidc";
+  const usesLocal = out.loginOptions.includes("email");
+  const usesOidc = out.loginOptions.some((option) => option !== "email");
 
   // Mindestens sechs Zeichen: Der Code ist die Eintrittskarte der Schule und
   // haelt eine 15-Minuten-Rate von wenigen Versuchen pro Minute aus. Kuerzere
@@ -295,42 +303,115 @@ function validateConfig(body) {
     errors.domain = 'Das ist keine gueltige Domain (Beispiel: sani.beispielschule.de:8443), ohne "https://".';
   }
 
-  out.providerKey = usesOidc ? trimOrEmpty(body.providerKey).toLowerCase() : "local";
-  if (!IDENTIFIER_RE.test(out.providerKey)) {
-    errors.providerKey = "Nur eine kurze Kennung aus Buchstaben, Ziffern, Punkt, Bindestrich und Unterstrich.";
-  }
-
-  out.providerDisplayName = usesOidc ? trimOrEmpty(body.providerDisplayName) : "E-Mail";
-  if (!out.providerDisplayName || out.providerDisplayName.length > 80 || hasControlCharacter(out.providerDisplayName)) {
-    errors.providerDisplayName = "Bitte einen Anzeigenamen zwischen 1 und 80 Zeichen ohne Steuerzeichen angeben.";
-  }
-
-  out.providerIssuerUrl = trimOrEmpty(body.providerIssuerUrl).replace(/\/$/, "");
-  if (usesOidc) {
-    try {
-      const issuer = new URL(out.providerIssuerUrl);
-      if (issuer.protocol !== "https:" || issuer.username || issuer.password || issuer.search || issuer.hash) throw new Error();
-    } catch {
-      errors.providerIssuerUrl = "Bitte eine gueltige HTTPS-Issuer-URL ohne Zugangsdaten angeben.";
+  out.providers = [];
+  const providerBodies = Array.isArray(body.providers) ? body.providers : [];
+  const providerKeysSeen = new Set();
+  for (const raw of providerBodies) {
+    const option = trimOrEmpty(raw.option || raw.key).toLowerCase();
+    const p = {};
+    if (option === "apple") {
+      p.key = "apple";
+      p.displayName = "Apple";
+      p.issuerUrl = "https://appleid.apple.com";
+      p.clientSecretMode = "apple-jwt";
+      p.responseMode = "form_post";
+      p.appleTeamId = trimOrEmpty(raw.appleTeamId);
+      p.appleKeyId = trimOrEmpty(raw.appleKeyId);
+      p.applePrivateKeyPath = trimOrEmpty(raw.applePrivateKeyPath);
+      p.clientId = trimOrEmpty(raw.clientId);
+      if (p.clientId) {
+        if (p.clientId.length > 300 || hasControlCharacter(p.clientId)) errors.appleClientId = "Apple Service-ID ist ungueltig.";
+        if (!p.appleTeamId || !p.appleKeyId || !p.applePrivateKeyPath || path.resolve(p.applePrivateKeyPath).indexOf("/etc/schulsani/") !== 0) {
+          errors.appleTeamId = "Eigener Apple-Anmeldeweg braucht Team-ID, Key-ID und .p8-Datei unter /etc/schulsani/.";
+        }
+        if (p.appleTeamId.length > 32 || p.appleKeyId.length > 32 || p.applePrivateKeyPath.length > 500 || hasControlCharacter(p.appleTeamId) || hasControlCharacter(p.appleKeyId) || hasControlCharacter(p.applePrivateKeyPath)) {
+          errors.applePrivateKeyPath = "Apple-JWT-Konfiguration ist ungueltig.";
+        }
+        p.clientSecret = "";
+      } else {
+        // Keine eigene Service-ID: zentrale Apple-Anmeldung nutzen, sobald die
+        // zentrale Callback-Domain verfuegbar ist. Bis dahin ist Apple ohne
+        // eigene Daten nicht scharf — der Nutzer sieht es in der Zusammenfassung.
+        p.central = true;
+      }
+    } else if (option === "google") {
+      p.key = "google";
+      p.displayName = "Google";
+      p.issuerUrl = "https://accounts.google.com";
+      p.clientSecretMode = "static";
+      p.responseMode = "query";
+      p.clientId = trimOrEmpty(raw.clientId);
+      p.clientSecret = typeof raw.clientSecret === "string" ? raw.clientSecret : "";
+      if (p.clientSecret.length > 1000 || hasControlCharacter(p.clientSecret)) errors.googleClientSecret = "Google Client-Secret ist ungueltig.";
+      p.allowedHostedDomains = trimOrEmpty(raw.allowedHostedDomains).split(",").map((domain) => domain.trim().toLowerCase()).filter(Boolean);
+      p.groupsClaim = trimOrEmpty(raw.groupsClaim) || "groups";
+      p.groupToRoleMap = parseGroupToRoleMap(trimOrEmpty(raw.groupToRoleMap), errors, "google");
+      if (p.allowedHostedDomains.length > 20 || p.allowedHostedDomains.some((domain) => !DOMAIN_RE.test(domain))) {
+        errors.googleAllowedHostedDomains = "Erlaubte Google-Domains sind ungueltig.";
+      }
+      if (!p.clientId) {
+        // Zentrale Google-Anmeldung: Client-ID kommt aus der zentralen
+        // Konfiguration, schoolId trennt die Mandanten (wie GitHub-Apps).
+        p.central = true;
+      } else if (p.clientId.length > 300 || hasControlCharacter(p.clientId)) {
+        errors.googleClientId = "Google Client-ID ist ungueltig.";
+      } else if (!p.clientSecret) {
+        errors.googleClientSecret = "Eigene Google-Anmeldung braucht ein Client-Secret.";
+      }
+    } else if (option === "microsoft") {
+      p.key = "microsoft";
+      p.displayName = "Microsoft";
+      p.clientSecretMode = "static";
+      p.responseMode = "query";
+      const tenantId = trimOrEmpty(raw.tenantId);
+      p.issuerUrl = tenantId
+        ? `https://login.microsoftonline.com/${tenantId}/v2.0`
+        : "https://login.microsoftonline.com/organizations/v2.0";
+      p.clientId = trimOrEmpty(raw.clientId);
+      p.clientSecret = typeof raw.clientSecret === "string" ? raw.clientSecret : "";
+      if (p.clientSecret.length > 1000 || hasControlCharacter(p.clientSecret)) errors.microsoftClientSecret = "Microsoft Client-Secret ist ungueltig.";
+      p.groupsClaim = trimOrEmpty(raw.groupsClaim) || "roles";
+      p.groupToRoleMap = parseGroupToRoleMap(trimOrEmpty(raw.groupToRoleMap), errors, "microsoft");
+      if (tenantId && !/^[0-9a-fA-F-]{36}$/.test(tenantId)) errors.microsoftTenantId = "Microsoft Tenant-ID ist ungueltig.";
+      if (!p.clientId) {
+        p.central = true;
+      } else if (p.clientId.length > 300 || hasControlCharacter(p.clientId)) {
+        errors.microsoftClientId = "Microsoft Client-ID ist ungueltig.";
+      } else if (!p.clientSecret) {
+        errors.microsoftClientSecret = "Eigene Microsoft-Anmeldung braucht ein Client-Secret.";
+      }
+    } else if (option === "custom") {
+      p.key = trimOrEmpty(raw.key).toLowerCase();
+      p.displayName = trimOrEmpty(raw.displayName);
+      p.issuerUrl = trimOrEmpty(raw.issuerUrl).replace(/\/$/, "");
+      p.clientId = trimOrEmpty(raw.clientId);
+      p.clientSecret = typeof raw.clientSecret === "string" ? raw.clientSecret : "";
+      if (!IDENTIFIER_RE.test(p.key)) errors.providerKey = "Nur eine kurze Kennung aus Buchstaben, Ziffern, Punkt, Bindestrich und Unterstrich.";
+      if (!p.displayName || p.displayName.length > 80 || hasControlCharacter(p.displayName)) errors.providerDisplayName = "Bitte einen Anzeigenamen zwischen 1 und 80 Zeichen ohne Steuerzeichen angeben.";
+      try {
+        const issuer = new URL(p.issuerUrl);
+        if (issuer.protocol !== "https:" || issuer.username || issuer.password || issuer.search || issuer.hash) throw new Error();
+      } catch {
+        errors.providerIssuerUrl = "Bitte eine gueltige HTTPS-Issuer-URL ohne Zugangsdaten angeben.";
+      }
+      if (!p.clientId || p.clientId.length > 300 || hasControlCharacter(p.clientId)) errors.providerClientId = "Bitte eine Client-ID ohne Steuerzeichen angeben.";
+      if (p.clientSecret.length > 1000 || hasControlCharacter(p.clientSecret)) errors.providerClientSecret = "Client-Secret ist zu lang oder enthaelt unzulaessige Zeichen.";
+      if (needsConfidentialClientSecret(p.issuerUrl) && !p.clientSecret) errors.providerClientSecret = "Google und Microsoft brauchen fuer den Server-Anmeldeweg ein Client-Secret.";
+      const customOptions = readProviderOptions(body, "", errors, p.issuerUrl);
+      Object.assign(p, customOptions);
+    } else {
+      continue;
     }
-  } else {
-    out.providerIssuerUrl = "";
+    if (providerKeysSeen.has(p.key)) {
+      errors.providerKey = "Anbieter-Kennungen muessen eindeutig sein.";
+      continue;
+    }
+    providerKeysSeen.add(p.key);
+    out.providers.push(p);
   }
-
-  out.providerClientId = trimOrEmpty(body.providerClientId);
-  if (usesOidc && (!out.providerClientId || out.providerClientId.length > 300 || hasControlCharacter(out.providerClientId))) {
-    errors.providerClientId = "Bitte eine Client-ID ohne Steuerzeichen angeben.";
+  if (usesOidc && out.providers.length === 0) {
+    errors.loginOptions = "Mindestens ein OIDC-Anbieter ist unvollstaendig.";
   }
-  if (!usesOidc) out.providerClientId = "";
-
-  out.providerClientSecret = typeof body.providerClientSecret === "string" ? body.providerClientSecret : "";
-  if (out.providerClientSecret.length > 1000 || hasControlCharacter(out.providerClientSecret)) {
-    errors.providerClientSecret = "Client-Secret ist zu lang oder enthaelt unzulaessige Zeichen.";
-  }
-  if (usesOidc && needsConfidentialClientSecret(out.providerIssuerUrl) && !out.providerClientSecret) {
-    errors.providerClientSecret = "Google und Microsoft brauchen fuer den Server-Anmeldeweg ein Client-Secret.";
-  }
-  if (!usesOidc) out.providerClientSecret = "";
 
   out.smtpHost = trimOrEmpty(body.smtpHost);
   if (usesLocal && (!SMTP_HOST_RE.test(out.smtpHost) || out.smtpHost.includes(".."))) {
@@ -395,51 +476,31 @@ function validateConfig(body) {
     out.vapidSubject = `mailto:admin@${out.domain || "beispielschule.de"}`;
   }
   out.ownerAccountId = out.ownerUserId || crypto.randomUUID();
-  const primaryOptions = usesOidc ? readProviderOptions(body, "", errors, out.providerIssuerUrl) : null;
-  out.providers = usesOidc ? [{
-    key: out.providerKey,
-    displayName: out.providerDisplayName,
-    issuerUrl: out.providerIssuerUrl,
-    clientId: out.providerClientId,
-    clientSecret: out.providerClientSecret,
-    ...(primaryOptions || {}),
-  }] : [];
-  const secondKey = trimOrEmpty(body.provider2Key).toLowerCase();
-  const secondDisplayName = trimOrEmpty(body.provider2DisplayName);
-  const secondIssuerUrl = trimOrEmpty(body.provider2IssuerUrl).replace(/\/$/, "");
-  const secondClientId = trimOrEmpty(body.provider2ClientId);
-  const secondClientSecret = typeof body.provider2ClientSecret === "string" ? body.provider2ClientSecret : "";
-  if (secondClientSecret.length > 1000 || hasControlCharacter(secondClientSecret)) errors.provider2ClientSecret = "Client-Secret des zweiten Anbieters ist zu lang oder enthaelt unzulaessige Zeichen.";
-  const secondPresent = secondKey || secondDisplayName || secondIssuerUrl || secondClientId || secondClientSecret;
-  if (secondPresent && needsConfidentialClientSecret(secondIssuerUrl) && !secondClientSecret) {
-    errors.provider2ClientSecret = "Google und Microsoft brauchen fuer den Server-Anmeldeweg ein Client-Secret.";
-  }
-  const secondOptions = secondPresent ? readProviderOptions(body, "2", errors, secondIssuerUrl) : null;
-  if (secondPresent) {
-    let secondValid =
-      IDENTIFIER_RE.test(secondKey) &&
-      secondDisplayName.length > 0 &&
-      secondDisplayName.length <= 80 &&
-      !hasControlCharacter(secondDisplayName) &&
-      secondClientId.length > 0 &&
-      secondClientId.length <= 300 &&
-      !hasControlCharacter(secondClientId);
-    try {
-      const issuer = new URL(secondIssuerUrl);
-      secondValid = secondValid && issuer.protocol === "https:" && !issuer.username && !issuer.password && !issuer.search && !issuer.hash;
-    } catch {
-      secondValid = false;
-    }
-    if (hasControlCharacter(secondKey) || hasControlCharacter(secondIssuerUrl)) secondValid = false;
-    if (!secondValid) errors.provider2Key = "Zweiter OIDC-Anbieter ist unvollstaendig oder ungueltig.";
-    if (secondValid) out.providers.push({ key: secondKey, displayName: secondDisplayName, issuerUrl: secondIssuerUrl, clientId: secondClientId, clientSecret: secondClientSecret, ...(secondOptions || {}) });
-  }
-  if (new Set(out.providers.map((provider) => provider.key)).size !== out.providers.length) {
-    errors.providerKey = "Anbieter-Kennungen muessen eindeutig sein.";
-  }
-  out.ownerProviderKey = usesLocal ? "local" : out.providerKey;
+  // Eigentuemer-Login: E-Mail-Konto, oder der erste gewaehlte OIDC-Anbieter.
+  out.ownerProviderKey = usesLocal ? "local" : (out.providers[0] ? out.providers[0].key : "local");
 
   return { out, errors };
+}
+
+// "gruppe=rolle"-Zeilen (eine pro Zeile) zu einem Objekt parsen; Rollen sind
+// auf die Bestandsrollen begrenzt. Fehler landen am angegebenen Feld.
+function parseGroupToRoleMap(text, errors, field) {
+  const map = {};
+  if (!text) return map;
+  for (const line of text.split(/\r?\n/).map((entry) => entry.trim()).filter(Boolean)) {
+    const separator = line.indexOf("=");
+    const group = separator === -1 ? "" : line.slice(0, separator).trim();
+    const role = separator === -1 ? "" : line.slice(separator + 1).trim();
+    if (!group || !role || group.length > 120 || role.length > 80 || !INSTALLER_ROLE_KEYS.has(role) || hasControlCharacter(line)) {
+      errors[field] = "Gruppen-Zuordnung ist ungueltig.";
+      return map;
+    }
+    map[group] = role;
+  }
+  if (Object.keys(map).length > 50) {
+    errors[field] = "Gruppen-Zuordnung enthaelt zu viele Eintraege.";
+  }
+  return map;
 }
 
 function validateAdmin(body, cfg) {
@@ -692,12 +753,26 @@ function writeAuthProvidersFile(cfg, clientSecret) {
       appleNativeClientId: entry.clientSecretMode === "apple-jwt" ? cfg.bundleId : undefined,
       responseMode: entry.responseMode,
     };
-    const secret = pendingProviderSecrets[entry.key] || (entry.key === cfg.providerKey ? clientSecret : existingProviderClientSecret(entry.key));
+    const secret = pendingProviderSecrets[entry.key] || existingProviderClientSecret(entry.key);
     if (secret) provider.clientSecret = secret;
+    if (entry.central) {
+      // Zentraler Anmeldeweg ohne eigene Zugangsdaten: Client-ID und Secret
+      // kommen aus der zentralen Konfiguration des Betreibers. Solange dort
+      // nichts hinterlegt ist, bleibt der Anbieter deaktiviert.
+      const centralId = process.env[`CENTRAL_${entry.key.toUpperCase()}_CLIENT_ID`] || "";
+      const centralSecret = process.env[`CENTRAL_${entry.key.toUpperCase()}_CLIENT_SECRET`] || "";
+      if (centralId && centralSecret) {
+        provider.clientId = centralId;
+        provider.clientSecret = centralSecret;
+        delete provider.central;
+      } else {
+        provider.enabled = false;
+      }
+    }
     providers.push(provider);
   }
   for (const entry of cfg.providers || []) {
-    if (entry.clientSecretMode !== "apple-jwt") continue;
+    if (entry.clientSecretMode !== "apple-jwt" || entry.central) continue;
     const keyPath = path.resolve(entry.applePrivateKeyPath || "");
     let realKeyPath = "";
     try {
@@ -825,6 +900,7 @@ function publicState() {
     config: state.config
       ? {
           authMode: state.config.authMode,
+          loginOptions: state.config.loginOptions,
           schoolName: state.config.schoolName,
           domain: state.config.domain,
           providerKey: state.config.providerKey,

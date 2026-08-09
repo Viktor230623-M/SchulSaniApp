@@ -159,9 +159,35 @@
     outline-offset: 1px;
   }
   .field .helper { font-size: 12px; color: var(--text-tertiary); }
-  #oidcFields, #smtpFields, #localOwnerFields, #oidcOwnerFields, #secondProviderFields { display: flex; flex-direction: column; gap: 16px; }
-  #secondProviderFields { margin-top: 8px; }
+  #smtpFields, #localOwnerFields, #oidcOwnerFields { display: flex; flex-direction: column; gap: 16px; }
   #smtpFields h3 { font-size: 15px; margin: 4px 0 -8px; }
+  .option-row { display: flex; flex-wrap: wrap; gap: 8px; }
+  .option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-radius: 12px;
+    border: 1px solid var(--input-border);
+    background: var(--card);
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: border-color 150ms ease-out, background 150ms ease-out;
+  }
+  .option:hover { border-color: var(--tint); }
+  .option input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--tint); }
+  .provider-block {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 16px;
+    border: 1px solid var(--card-border);
+    border-radius: 14px;
+    background: var(--bg-secondary);
+  }
+  .provider-block h3 { font-size: 14px; font-weight: 600; margin: 0; }
+  .provider-block .hint { font-size: 12px; color: var(--text-tertiary); margin: -6px 0 0; }
   .field .error {
     display: none;
     align-items: center;
@@ -272,14 +298,16 @@
         <div class="error"><span>—</span></div>
       </div>
 
-      <div class="field" data-field="authMode">
-        <label for="authMode">Anmeldung</label>
-        <select id="authMode" name="authMode">
-          <option value="local">E-Mail und Passwort</option>
-          <option value="oidc">Ein OIDC-Anbieter</option>
-          <option value="local+oidc">E-Mail plus OIDC-Anbieter</option>
-        </select>
-        <div class="helper">IServ-Formularanmeldung ist nicht enthalten. OIDC kann Google, Microsoft oder einen anderen kompatiblen Anbieter abbilden.</div>
+      <div class="field" data-field="loginOptions">
+        <label>Login-Optionen</label>
+        <div class="option-row" id="loginOptions">
+          <label class="option"><input type="checkbox" id="optEmail" value="email" checked> <span>E-Mail und Passwort</span></label>
+          <label class="option"><input type="checkbox" id="optApple" value="apple"> <span>Apple</span></label>
+          <label class="option"><input type="checkbox" id="optGoogle" value="google"> <span>Google</span></label>
+          <label class="option"><input type="checkbox" id="optMicrosoft" value="microsoft"> <span>Microsoft</span></label>
+          <label class="option"><input type="checkbox" id="optCustom" value="custom"> <span>Eigener OIDC-Anbieter</span></label>
+        </div>
+        <div class="helper">Eine oder mehrere waehlen. IServ-Formularanmeldung ist nicht enthalten. Google/Microsoft koennen ohne eigene Zugangsdaten laufen (zentrale Anmeldung); eigene Felder ueberschreiben sie.</div>
         <div class="error"><span>—</span></div>
       </div>
 
@@ -290,49 +318,124 @@
         <div class="error"><span>—</span></div>
       </div>
 
-      <div id="oidcFields">
+      <div id="appleFields" class="provider-block" data-option="apple" style="display:none">
+        <h3>Apple <span class="optional">(eigener Anmeldeweg)</span></h3>
+        <p class="hint">Leer lassen, um die zentrale Apple-Anmeldung zu nutzen (sobald verfuegbar). Eigene Werte ueberschreiben sie.</p>
+        <div class="field" data-field="appleClientId">
+          <label for="appleClientId">Apple Service-ID (Client-ID)</label>
+          <input type="text" id="appleClientId" autocomplete="off" placeholder="com.schulsani.service" spellcheck="false">
+          <div class="error"><span>—</span></div>
+        </div>
+        <div class="field" data-field="appleTeamId">
+          <label for="appleTeamId">Apple Team-ID <span class="optional">(leer = zentral)</span></label>
+          <input type="text" id="appleTeamId" spellcheck="false">
+          <div class="error"><span>—</span></div>
+        </div>
+        <div class="field" data-field="appleKeyId">
+          <label for="appleKeyId">Apple Key-ID <span class="optional">(leer = zentral)</span></label>
+          <input type="text" id="appleKeyId" spellcheck="false">
+          <div class="error"><span>—</span></div>
+        </div>
+        <div class="field" data-field="applePrivateKeyPath">
+          <label for="applePrivateKeyPath">Pfad zur Apple-.p8-Datei <span class="optional">(leer = zentral)</span></label>
+          <input type="text" id="applePrivateKeyPath" placeholder="/etc/schulsani/apple-signin.p8" spellcheck="false">
+          <div class="error"><span>—</span></div>
+        </div>
+      </div>
+
+      <div id="googleFields" class="provider-block" data-option="google" style="display:none">
+        <h3>Google <span class="optional">(eigener Anmeldeweg)</span></h3>
+        <p class="hint">Leer lassen, um die zentrale Google-Anmeldung zu nutzen. Eigene Client-ID und Secret ueberschreiben sie.</p>
+        <div class="field" data-field="googleClientId">
+          <label for="googleClientId">Google Client-ID</label>
+          <input type="text" id="googleClientId" autocomplete="off" spellcheck="false">
+          <div class="error"><span>—</span></div>
+        </div>
+        <div class="field" data-field="googleClientSecret">
+          <label for="googleClientSecret">Google Client-Secret</label>
+          <input type="password" id="googleClientSecret" autocomplete="new-password" spellcheck="false">
+          <div class="error"><span>—</span></div>
+        </div>
+        <div class="field" data-field="googleAllowedHostedDomains">
+          <label for="googleAllowedHostedDomains">Erlaubte Google-Domains <span class="optional">(optional)</span></label>
+          <input type="text" id="googleAllowedHostedDomains" placeholder="beispielschule.de, schueler.beispielschule.de">
+          <div class="error"><span>—</span></div>
+        </div>
+        <div class="field" data-field="googleGroupsClaim">
+          <label for="googleGroupsClaim">Gruppen-Claim <span class="optional">(optional)</span></label>
+          <input type="text" id="googleGroupsClaim" placeholder="groups">
+          <div class="error"><span>—</span></div>
+        </div>
+        <div class="field" data-field="googleGroupToRoleMap">
+          <label for="googleGroupToRoleMap">Gruppen zu Rollen <span class="optional">(optional)</span></label>
+          <textarea id="googleGroupToRoleMap" rows="3" placeholder="gruppe=rolle"></textarea>
+          <div class="error"><span>—</span></div>
+        </div>
+      </div>
+
+      <div id="microsoftFields" class="provider-block" data-option="microsoft" style="display:none">
+        <h3>Microsoft <span class="optional">(eigener Anmeldeweg)</span></h3>
+        <p class="hint">Leer lassen, um die zentrale Microsoft-Anmeldung zu nutzen. Eigene Werte ueberschreiben sie.</p>
+        <div class="field" data-field="microsoftTenantId">
+          <label for="microsoftTenantId">Microsoft Tenant-ID <span class="optional">(leer = zentral)</span></label>
+          <input type="text" id="microsoftTenantId" placeholder="00000000-0000-0000-0000-000000000000" spellcheck="false">
+          <div class="error"><span>—</span></div>
+        </div>
+        <div class="field" data-field="microsoftClientId">
+          <label for="microsoftClientId">Microsoft Client-ID</label>
+          <input type="text" id="microsoftClientId" autocomplete="off" spellcheck="false">
+          <div class="error"><span>—</span></div>
+        </div>
+        <div class="field" data-field="microsoftClientSecret">
+          <label for="microsoftClientSecret">Microsoft Client-Secret</label>
+          <input type="password" id="microsoftClientSecret" autocomplete="new-password" spellcheck="false">
+          <div class="error"><span>—</span></div>
+        </div>
+        <div class="field" data-field="microsoftGroupsClaim">
+          <label for="microsoftGroupsClaim">Gruppen-Claim <span class="optional">(optional)</span></label>
+          <input type="text" id="microsoftGroupsClaim" placeholder="roles">
+          <div class="error"><span>—</span></div>
+        </div>
+        <div class="field" data-field="microsoftGroupToRoleMap">
+          <label for="microsoftGroupToRoleMap">Gruppen zu Rollen <span class="optional">(optional)</span></label>
+          <textarea id="microsoftGroupToRoleMap" rows="3" placeholder="gruppe=rolle"></textarea>
+          <div class="error"><span>—</span></div>
+        </div>
+      </div>
+
+      <div id="customFields" class="provider-block" data-option="custom" style="display:none">
+        <h3>Eigener OIDC-Anbieter</h3>
         <div class="field" data-field="providerKey">
           <label for="providerKey">Anbieter-Kennung</label>
-          <input type="text" id="providerKey" name="providerKey" autocomplete="off" placeholder="google" spellcheck="false">
-          <div class="helper">Kurze interne Kennung, etwa „google“ oder „microsoft“.</div>
+          <input type="text" id="providerKey" name="providerKey" autocomplete="off" placeholder="schule" spellcheck="false">
+          <div class="helper">Kurze interne Kennung, etwa „schule“ oder „kreis“.</div>
           <div class="error"><span>—</span></div>
         </div>
-
         <div class="field" data-field="providerDisplayName">
           <label for="providerDisplayName">Anzeigename des Anbieters</label>
-          <input type="text" id="providerDisplayName" name="providerDisplayName" autocomplete="off" placeholder="Google">
+          <input type="text" id="providerDisplayName" name="providerDisplayName" autocomplete="off" placeholder="Schule">
           <div class="error"><span>—</span></div>
         </div>
-
         <div class="field" data-field="providerIssuerUrl">
           <label for="providerIssuerUrl">OIDC-Issuer-URL</label>
-          <input type="url" id="providerIssuerUrl" name="providerIssuerUrl" autocomplete="off" placeholder="https://accounts.google.com" spellcheck="false">
+          <input type="url" id="providerIssuerUrl" name="providerIssuerUrl" autocomplete="off" placeholder="https://login.schule.de" spellcheck="false">
           <div class="helper">HTTPS-URL des OIDC-Anbieters, ohne Zugangsdaten.</div>
           <div class="error"><span>—</span></div>
         </div>
-
         <div class="field" data-field="providerClientId">
           <label for="providerClientId">Client-ID</label>
           <input type="text" id="providerClientId" name="providerClientId" autocomplete="off" spellcheck="false">
           <div class="error"><span>—</span></div>
         </div>
-
         <div class="field" data-field="providerClientSecret">
-          <label for="providerClientSecret">Client-Secret <span class="optional">(optional bei Apple)</span></label>
+          <label for="providerClientSecret">Client-Secret</label>
           <input type="password" id="providerClientSecret" name="providerClientSecret" autocomplete="new-password" spellcheck="false">
-          <div class="helper">Fuer Google und Microsoft erforderlich. Wird zugriffsgeschuetzt gespeichert und nie protokolliert.</div>
           <div class="error"><span>—</span></div>
         </div>
         <div class="field" data-field="providerScopes">
           <label for="providerScopes">OIDC-Scopes <span class="optional">(optional)</span></label>
           <input type="text" id="providerScopes" placeholder="openid email profile">
           <div class="helper">Mit Leerzeichen oder Komma trennen. <code>openid</code> wird immer erzwungen.</div>
-          <div class="error"><span>—</span></div>
-        </div>
-        <div class="field" data-field="providerAllowedHostedDomains">
-          <label for="providerAllowedHostedDomains">Erlaubte Google-Domains <span class="optional">(optional)</span></label>
-          <input type="text" id="providerAllowedHostedDomains" placeholder="beispielschule.de, schueler.beispielschule.de">
-          <div class="helper">Nur fuer Google; mehrere Domains mit Komma trennen.</div>
           <div class="error"><span>—</span></div>
         </div>
         <div class="field" data-field="providerGroupsClaim">
@@ -376,24 +479,6 @@
           <label for="providerApplePrivateKeyPath">Pfad zur Apple-.p8-Datei <span class="optional">(nur Apple)</span></label>
           <input type="text" id="providerApplePrivateKeyPath" placeholder="/etc/schulsani/apple-signin.p8" spellcheck="false">
           <div class="error"><span>—</span></div>
-        </div>
-
-        <div id="secondProviderFields">
-          <h3>Zweiter OIDC-Anbieter <span class="optional">(optional)</span></h3>
-          <div class="field" data-field="provider2Key"><label for="provider2Key">Kennung</label><input type="text" id="provider2Key" placeholder="microsoft" spellcheck="false"><div class="error"><span>—</span></div></div>
-          <div class="field" data-field="provider2DisplayName"><label for="provider2DisplayName">Anzeigename</label><input type="text" id="provider2DisplayName" placeholder="Microsoft"><div class="error"><span>—</span></div></div>
-          <div class="field" data-field="provider2IssuerUrl"><label for="provider2IssuerUrl">Issuer-URL</label><input type="url" id="provider2IssuerUrl" placeholder="https://login.microsoftonline.com/tenant/v2.0" spellcheck="false"><div class="error"><span>—</span></div></div>
-          <div class="field" data-field="provider2ClientId"><label for="provider2ClientId">Client-ID</label><input type="text" id="provider2ClientId" spellcheck="false"><div class="error"><span>—</span></div></div>
-          <div class="field" data-field="provider2ClientSecret"><label for="provider2ClientSecret">Client-Secret <span class="optional">(optional bei Apple)</span></label><input type="password" id="provider2ClientSecret" autocomplete="new-password" spellcheck="false"><div class="helper">Fuer Google und Microsoft erforderlich.</div><div class="error"><span>—</span></div></div>
-          <div class="field" data-field="provider2Scopes"><label for="provider2Scopes">OIDC-Scopes <span class="optional">(optional)</span></label><input type="text" id="provider2Scopes" placeholder="openid email profile"><div class="error"><span>—</span></div></div>
-          <div class="field" data-field="provider2AllowedHostedDomains"><label for="provider2AllowedHostedDomains">Erlaubte Google-Domains <span class="optional">(optional)</span></label><input type="text" id="provider2AllowedHostedDomains" placeholder="beispielschule.de, schueler.beispielschule.de"><div class="error"><span>—</span></div></div>
-          <div class="field" data-field="provider2GroupsClaim"><label for="provider2GroupsClaim">Gruppen-Claim <span class="optional">(optional)</span></label><input type="text" id="provider2GroupsClaim" placeholder="groups"><div class="error"><span>—</span></div></div>
-          <div class="field" data-field="provider2GroupToRoleMap"><label for="provider2GroupToRoleMap">Gruppen zu Rollen <span class="optional">(optional)</span></label><textarea id="provider2GroupToRoleMap" rows="3" placeholder="gruppe=rolle"></textarea><div class="error"><span>—</span></div></div>
-          <div class="field" data-field="provider2ClientSecretMode"><label for="provider2ClientSecretMode">Secret-Modus</label><select id="provider2ClientSecretMode"><option value="static">Statisches Client-Secret</option><option value="apple-jwt">Apple-JWT aus .p8-Datei</option></select><div class="error"><span>—</span></div></div>
-          <div class="field" data-field="provider2ResponseMode"><label for="provider2ResponseMode">OIDC-Antwortmodus</label><select id="provider2ResponseMode"><option value="query">Query</option><option value="form_post">Form POST (Apple)</option></select><div class="error"><span>—</span></div></div>
-          <div class="field" data-field="provider2AppleTeamId"><label for="provider2AppleTeamId">Apple Team-ID <span class="optional">(nur Apple)</span></label><input type="text" id="provider2AppleTeamId" spellcheck="false"><div class="error"><span>—</span></div></div>
-          <div class="field" data-field="provider2AppleKeyId"><label for="provider2AppleKeyId">Apple Key-ID <span class="optional">(nur Apple)</span></label><input type="text" id="provider2AppleKeyId" spellcheck="false"><div class="error"><span>—</span></div></div>
-          <div class="field" data-field="provider2ApplePrivateKeyPath"><label for="provider2ApplePrivateKeyPath">Pfad zur Apple-.p8-Datei <span class="optional">(nur Apple)</span></label><input type="text" id="provider2ApplePrivateKeyPath" placeholder="/etc/schulsani/apple-signin.p8" spellcheck="false"><div class="error"><span>—</span></div></div>
         </div>
       </div>
 
@@ -554,7 +639,21 @@
   var current = 1;
 
   var fieldMessages = {
-    authMode: "Bitte einen Anmeldeweg auswaehlen.",
+    loginOptions: "Bitte mindestens eine Login-Option waehlen.",
+    appleClientId: "Apple Service-ID ist ungueltig.",
+    appleTeamId: "Apple Team-ID ist ungueltig.",
+    appleKeyId: "Apple Key-ID ist ungueltig.",
+    applePrivateKeyPath: "Apple-.p8-Pfad ist ungueltig.",
+    googleClientId: "Google Client-ID ist ungueltig.",
+    googleClientSecret: "Google Client-Secret ist ungueltig.",
+    googleAllowedHostedDomains: "Erlaubte Google-Domains sind ungueltig.",
+    googleGroupsClaim: "Gruppen-Claim ist ungueltig.",
+    googleGroupToRoleMap: "Gruppen-Zuordnung ist ungueltig.",
+    microsoftTenantId: "Microsoft Tenant-ID ist ungueltig.",
+    microsoftClientId: "Microsoft Client-ID ist ungueltig.",
+    microsoftClientSecret: "Microsoft Client-Secret ist ungueltig.",
+    microsoftGroupsClaim: "Gruppen-Claim ist ungueltig.",
+    microsoftGroupToRoleMap: "Gruppen-Zuordnung ist ungueltig.",
     joinCode: "Schul-Zugangscode muss 6 bis 200 Zeichen lang sein.",
     schoolName: "Bitte einen Namen angeben.",
     domain: 'Das ist keine gueltige Domain, ohne "https://".',
@@ -572,20 +671,6 @@
     providerAppleTeamId: "Apple-JWT-Konfiguration ist unvollstaendig.",
     providerAppleKeyId: "Apple-JWT-Konfiguration ist unvollstaendig.",
     providerApplePrivateKeyPath: "Apple-JWT-Konfiguration ist ungueltig.",
-    provider2Key: "Zweiter OIDC-Anbieter ist ungueltig.",
-    provider2DisplayName: "Anzeigename des zweiten Anbieters ist ungueltig.",
-    provider2IssuerUrl: "Issuer-URL des zweiten Anbieters ist ungueltig.",
-    provider2ClientId: "Client-ID des zweiten Anbieters ist ungueltig.",
-    provider2ClientSecret: "Client-Secret ist zu lang.",
-    provider2Scopes: "OIDC-Scopes sind ungueltig.",
-    provider2AllowedHostedDomains: "Erlaubte Google-Domains sind ungueltig.",
-    provider2GroupsClaim: "Gruppen-Claim ist ungueltig.",
-    provider2GroupToRoleMap: "Gruppen-Zuordnung ist ungueltig.",
-    provider2ClientSecretMode: "Secret-Modus ist ungueltig.",
-    provider2ResponseMode: "Antwortmodus ist ungueltig.",
-    provider2AppleTeamId: "Apple-JWT-Konfiguration ist unvollstaendig.",
-    provider2AppleKeyId: "Apple-JWT-Konfiguration ist unvollstaendig.",
-    provider2ApplePrivateKeyPath: "Apple-JWT-Konfiguration ist ungueltig.",
     smtpHost: "Bitte einen SMTP-Host angeben.",
     smtpPort: "Bitte einen Port zwischen 1 und 65535 angeben.",
     smtpUser: "SMTP-Benutzername ist ungueltig.",
@@ -612,7 +697,21 @@
   var smtpHostRe = /^(?:[a-z0-9][a-z0-9.-]{0,253}|\[?[0-9a-f:]+\]?)$/i;
 
   var requiredValidators = {
-    authMode:    function (v) { return v === "local" || v === "oidc" || v === "local+oidc"; },
+    loginOptions: function () { return selectedOptions().length > 0; },
+    appleClientId: function (v) { return v.trim() === "" || (v.trim().length <= 300 && v.trim().indexOf(" ") === -1); },
+    appleTeamId: function (v) { return v.trim() === "" || (v.trim().length <= 32 && /^[A-Z0-9]+$/.test(v.trim())); },
+    appleKeyId: function (v) { return v.trim() === "" || (v.trim().length <= 32 && /^[A-Z0-9]+$/.test(v.trim())); },
+    applePrivateKeyPath: function (v) { return v.trim() === "" || v.trim().length <= 500; },
+    googleClientId: function (v) { return v.trim() === "" || (v.trim().length <= 300 && v.trim().indexOf(" ") === -1); },
+    googleClientSecret: function (v) { return v.trim().length <= 1000; },
+    googleAllowedHostedDomains: function (v) { return v.trim().length <= 1000; },
+    googleGroupsClaim: function (v) { return v.trim() === "" || /^[A-Za-z][A-Za-z0-9_.-]{0,63}$/.test(v.trim()); },
+    googleGroupToRoleMap: function (v) { return v.length <= 4000; },
+    microsoftTenantId: function (v) { return v.trim() === "" || /^[0-9a-fA-F-]{36}$/.test(v.trim()); },
+    microsoftClientId: function (v) { return v.trim() === "" || (v.trim().length <= 300 && v.trim().indexOf(" ") === -1); },
+    microsoftClientSecret: function (v) { return v.trim().length <= 1000; },
+    microsoftGroupsClaim: function (v) { return v.trim() === "" || /^[A-Za-z][A-Za-z0-9_.-]{0,63}$/.test(v.trim()); },
+    microsoftGroupToRoleMap: function (v) { return v.length <= 4000; },
     joinCode: function (v) { var t = v.trim(); return t === "" || (t.length >= 6 && t.length <= 200 && t.indexOf("\n") === -1 && t.indexOf("\r") === -1); },
     schoolName: function (v) { return v.trim().length > 0 && v.trim().length <= 120; },
     domain: function (v) { var m = v.trim().match(/:([0-9]{1,5})$/); if (m && (Number(m[1]) < 1 || Number(m[1]) > 65535)) return false; return domainRe.test(v.trim()); },
@@ -630,20 +729,6 @@
     providerAppleTeamId: function (v) { return v.trim().length <= 32; },
     providerAppleKeyId: function (v) { return v.trim().length <= 32; },
     providerApplePrivateKeyPath: function (v) { return v.trim().length <= 500; },
-    provider2Key: function (v) { return v.trim() === "" || providerKeyRe.test(v.trim()); },
-    provider2DisplayName: function (v) { return v.trim() === "" || (v.trim().length <= 80 && v.trim().length > 0); },
-    provider2IssuerUrl: function (v) { return v.trim() === "" || issuerRe.test(v.trim()); },
-    provider2ClientId: function (v) { return v.trim() === "" || (v.trim().length <= 300 && v.trim().length > 0); },
-    provider2ClientSecret: function (v) { return v.trim().length <= 1000; },
-    provider2Scopes: function (v) { return v.trim().length <= 1000; },
-    provider2AllowedHostedDomains: function (v) { return v.trim().length <= 1000; },
-    provider2GroupsClaim: function (v) { return v.trim() === "" || /^[A-Za-z][A-Za-z0-9_.-]{0,63}$/.test(v.trim()); },
-    provider2GroupToRoleMap: function (v) { return v.length <= 4000; },
-    provider2ClientSecretMode: function (v) { return v === "static" || v === "apple-jwt"; },
-    provider2ResponseMode: function (v) { return v === "query" || v === "form_post"; },
-    provider2AppleTeamId: function (v) { return v.trim().length <= 32; },
-    provider2AppleKeyId: function (v) { return v.trim().length <= 32; },
-    provider2ApplePrivateKeyPath: function (v) { return v.trim().length <= 500; },
     smtpHost: function (v) { return smtpHostRe.test(v.trim()) && v.indexOf("..") === -1; },
     smtpPort: function (v) { var n = Number(v.trim()); return Number.isInteger(n) && n >= 1 && n <= 65535; },
     smtpUser: function (v) { return v.trim().length <= 254; },
@@ -661,7 +746,7 @@
   };
 
   var pageFields = {
-    1: ["authMode", "joinCode", "schoolName", "domain", "providerKey", "providerDisplayName", "providerIssuerUrl", "providerClientId", "providerClientSecret", "providerScopes", "providerAllowedHostedDomains", "providerGroupsClaim", "providerGroupToRoleMap", "providerClientSecretMode", "providerResponseMode", "providerAppleTeamId", "providerAppleKeyId", "providerApplePrivateKeyPath", "provider2Key", "provider2DisplayName", "provider2IssuerUrl", "provider2ClientId", "provider2ClientSecret", "provider2Scopes", "provider2AllowedHostedDomains", "provider2GroupsClaim", "provider2GroupToRoleMap", "provider2ClientSecretMode", "provider2ResponseMode", "provider2AppleTeamId", "provider2AppleKeyId", "provider2ApplePrivateKeyPath", "smtpHost", "smtpPort", "smtpUser", "smtpPassword", "smtpSecure", "mailFrom", "mailFromName"],
+    1: ["appleClientId", "appleTeamId", "appleKeyId", "applePrivateKeyPath", "googleClientId", "googleClientSecret", "googleAllowedHostedDomains", "googleGroupsClaim", "googleGroupToRoleMap", "microsoftTenantId", "microsoftClientId", "microsoftClientSecret", "microsoftGroupsClaim", "microsoftGroupToRoleMap", "providerKey", "providerDisplayName", "providerIssuerUrl", "providerClientId", "providerClientSecret", "providerScopes", "providerGroupsClaim", "providerGroupToRoleMap", "providerClientSecretMode", "providerResponseMode", "providerAppleTeamId", "providerAppleKeyId", "providerApplePrivateKeyPath", "smtpHost", "smtpPort", "smtpUser", "smtpPassword", "smtpSecure", "mailFrom", "mailFromName"],
     2: ["schoolId", "ownerUserId", "vapidSubject"],
     3: []
   };
@@ -694,34 +779,59 @@
     }
   }
 
-  function isLocal() { return el("authMode").value === "local" || el("authMode").value === "local+oidc"; }
-  function usesOidc() { return el("authMode").value === "oidc" || el("authMode").value === "local+oidc"; }
+  function selectedOptions() {
+    return Array.prototype.filter.call(document.querySelectorAll("#loginOptions input[type=checkbox]"), function (c) { return c.checked; })
+      .map(function (c) { return c.value; });
+  }
+  function isLocal() { return selectedOptions().indexOf("email") !== -1; }
+  function usesOidc() { return selectedOptions().some(function (o) { return o !== "email"; }); }
 
   function updateAuthFields() {
-    var local = isLocal();
-    el("oidcFields").style.display = usesOidc() ? "flex" : "none";
-    el("secondProviderFields").style.display = usesOidc() ? "flex" : "none";
-    el("smtpFields").style.display = local ? "flex" : "none";
-    el("localOwnerFields").style.display = local ? "flex" : "none";
-    el("oidcOwnerFields").style.display = local ? "none" : "flex";
-    if (local) {
-      el("providerKey").value = "local";
-      el("providerDisplayName").value = "E-Mail";
-    }
+    var opts = selectedOptions();
+    document.querySelectorAll(".provider-block").forEach(function (block) {
+      block.style.display = opts.indexOf(block.getAttribute("data-option")) !== -1 ? "flex" : "none";
+    });
+    el("smtpFields").style.display = isLocal() ? "flex" : "none";
+    el("localOwnerFields").style.display = isLocal() ? "flex" : "none";
+    el("oidcOwnerFields").style.display = isLocal() ? "none" : "flex";
   }
+
+  function initLoginOptions() {
+    document.querySelectorAll("#loginOptions input[type=checkbox]").forEach(function (c) {
+      c.addEventListener("change", updateAuthFields);
+    });
+    updateAuthFields();
+  }
+
+  function isOptionActive(option) { return selectedOptions().indexOf(option) !== -1; }
+
+  // Nur Felder aktiver Login-Optionen validieren. E-Mail-Felder (smtp*,
+  // mailFrom) sind nur bei E-Mail aktiv, Provider-Felder nur bei der
+  // jeweiligen Option. Felder leerer Optionen sind automatisch gueltig.
+  var optionFieldMap = {
+    apple: ["appleClientId", "appleTeamId", "appleKeyId", "applePrivateKeyPath"],
+    google: ["googleClientId", "googleClientSecret", "googleAllowedHostedDomains", "googleGroupsClaim", "googleGroupToRoleMap"],
+    microsoft: ["microsoftTenantId", "microsoftClientId", "microsoftClientSecret", "microsoftGroupsClaim", "microsoftGroupToRoleMap"],
+    custom: ["providerKey", "providerDisplayName", "providerIssuerUrl", "providerClientId", "providerClientSecret", "providerScopes", "providerGroupsClaim", "providerGroupToRoleMap", "providerClientSecretMode", "providerResponseMode", "providerAppleTeamId", "providerAppleKeyId", "providerApplePrivateKeyPath"]
+  };
 
   function validatePage(n) {
     var fields = pageFields[n] || [];
     if (n === 3) fields = isLocal() ? ["ownerEmail", "ownerPassword", "ownerPasswordConfirm"] : ["externalSubject"];
     var ok = true;
+    var active = selectedOptions();
     fields.forEach(function (name) {
       var input = el(name);
       if (!input) return;
+      // Nur aktive Optionen pruefen; E-Mail-Felder nur bei E-Mail-Option.
+      var belongsToOption = Object.keys(optionFieldMap).find(function (opt) {
+        return optionFieldMap[opt].indexOf(name) !== -1;
+      });
+      if (belongsToOption && !isOptionActive(belongsToOption)) { setFieldError(name, ""); return; }
+      if (name.indexOf("smtp") === 0 || name === "mailFrom" || name === "mailFromName") {
+        if (!isLocal()) { setFieldError(name, ""); return; }
+      }
       var valid = requiredValidators[name] ? requiredValidators[name](input.value) : true;
-      if (isLocal() && ["providerKey", "providerDisplayName", "providerIssuerUrl", "providerClientId", "providerClientSecret"].indexOf(name) >= 0) valid = true;
-      if (!isLocal() && ["smtpHost", "smtpPort", "smtpUser", "smtpPassword", "smtpSecure", "mailFrom", "mailFromName"].indexOf(name) >= 0) valid = true;
-      if (!usesOidc() && (name.indexOf("provider2") === 0 || name.indexOf("provider") === 0)) valid = true;
-      if (name.indexOf("Apple") >= 0 || name.indexOf("AllowedHostedDomains") >= 0 || name.indexOf("GroupsClaim") >= 0 || name.indexOf("GroupToRoleMap") >= 0) valid = true;
       setFieldError(name, valid ? "" : fieldMessages[name]);
       if (!valid) ok = false;
     });
@@ -739,40 +849,70 @@
     b.classList.add("visible");
   }
 
+  function providerConfig(option, key, displayName, issuerUrl, extra) {
+    return Object.assign({
+      key: key,
+      displayName: displayName,
+      issuerUrl: issuerUrl,
+      clientId: el(option + "ClientId") ? el(option + "ClientId").value.trim() : "",
+      clientSecret: el(option + "ClientSecret") ? el(option + "ClientSecret").value : "",
+      scopes: el(option + "Scopes") ? el(option + "Scopes").value : "",
+      allowedHostedDomains: el(option + "AllowedHostedDomains") ? el(option + "AllowedHostedDomains").value : "",
+      groupsClaim: el(option + "GroupsClaim") ? el(option + "GroupsClaim").value : "",
+      groupToRoleMap: el(option + "GroupToRoleMap") ? el(option + "GroupToRoleMap").value : "",
+      tenantId: el(option + "TenantId") ? el(option + "TenantId").value.trim() : "",
+      appleTeamId: el(option + "TeamId") ? el(option + "TeamId").value : "",
+      appleKeyId: el(option + "KeyId") ? el(option + "KeyId").value : "",
+      applePrivateKeyPath: el(option + "PrivateKeyPath") ? el(option + "PrivateKeyPath").value : "",
+    }, extra || {});
+  }
+
   function collectConfig() {
+    var opts = selectedOptions();
+    var providers = [];
+    var addProvider = function (p) { if (p) providers.push(p); };
+    if (opts.indexOf("apple") !== -1) {
+      addProvider(providerConfig("apple", "apple", "Apple", "https://appleid.apple.com", {
+        clientSecretMode: "apple-jwt",
+        responseMode: "form_post",
+        clientId: el("appleClientId").value.trim(),
+      }));
+    }
+    if (opts.indexOf("google") !== -1) {
+      addProvider(providerConfig("google", "google", "Google", "https://accounts.google.com", {
+        clientSecretMode: "static",
+        responseMode: "query",
+      }));
+    }
+    if (opts.indexOf("microsoft") !== -1) {
+      addProvider(providerConfig("microsoft", "microsoft", "Microsoft", "https://login.microsoftonline.com/tenant/v2.0", {
+        clientSecretMode: "static",
+        responseMode: "query",
+      }));
+    }
+    if (opts.indexOf("custom") !== -1) {
+      addProvider({
+        key: el("providerKey").value,
+        displayName: el("providerDisplayName").value,
+        issuerUrl: el("providerIssuerUrl").value,
+        clientId: el("providerClientId").value,
+        clientSecret: el("providerClientSecret").value,
+        scopes: el("providerScopes").value,
+        groupsClaim: el("providerGroupsClaim").value,
+        groupToRoleMap: el("providerGroupToRoleMap").value,
+        clientSecretMode: el("providerClientSecretMode").value,
+        responseMode: el("providerResponseMode").value,
+        appleTeamId: el("providerAppleTeamId").value,
+        appleKeyId: el("providerAppleKeyId").value,
+        applePrivateKeyPath: el("providerApplePrivateKeyPath").value,
+      });
+    }
     return {
       joinCode: el("joinCode").value,
       schoolName: el("schoolName").value,
       domain: el("domain").value,
-      providerKey: el("providerKey").value,
-      providerDisplayName: el("providerDisplayName").value,
-      providerIssuerUrl: el("providerIssuerUrl").value,
-      providerClientId: el("providerClientId").value,
-      providerClientSecret: el("providerClientSecret").value,
-      providerScopes: el("providerScopes").value,
-      providerAllowedHostedDomains: el("providerAllowedHostedDomains").value,
-      providerGroupsClaim: el("providerGroupsClaim").value,
-      providerGroupToRoleMap: el("providerGroupToRoleMap").value,
-      providerClientSecretMode: el("providerClientSecretMode").value,
-      providerResponseMode: el("providerResponseMode").value,
-      providerAppleTeamId: el("providerAppleTeamId").value,
-      providerAppleKeyId: el("providerAppleKeyId").value,
-      providerApplePrivateKeyPath: el("providerApplePrivateKeyPath").value,
-      provider2Key: el("provider2Key").value,
-      provider2DisplayName: el("provider2DisplayName").value,
-      provider2IssuerUrl: el("provider2IssuerUrl").value,
-      provider2ClientId: el("provider2ClientId").value,
-      provider2ClientSecret: el("provider2ClientSecret").value,
-      provider2Scopes: el("provider2Scopes").value,
-      provider2AllowedHostedDomains: el("provider2AllowedHostedDomains").value,
-      provider2GroupsClaim: el("provider2GroupsClaim").value,
-      provider2GroupToRoleMap: el("provider2GroupToRoleMap").value,
-      provider2ClientSecretMode: el("provider2ClientSecretMode").value,
-      provider2ResponseMode: el("provider2ResponseMode").value,
-      provider2AppleTeamId: el("provider2AppleTeamId").value,
-      provider2AppleKeyId: el("provider2AppleKeyId").value,
-      provider2ApplePrivateKeyPath: el("provider2ApplePrivateKeyPath").value,
-      authMode: el("authMode").value,
+      loginOptions: opts,
+      providers: providers,
       smtpHost: el("smtpHost").value,
       smtpPort: el("smtpPort").value,
       smtpUser: el("smtpUser").value,
@@ -786,17 +926,26 @@
     };
   }
 
+  var OPTION_LABELS = {
+    email: "E-Mail und Passwort",
+    apple: "Apple",
+    google: "Google",
+    microsoft: "Microsoft",
+    custom: "Eigener OIDC-Anbieter"
+  };
+
   function renderSummary() {
     var cfg = collectConfig();
+    var names = (cfg.loginOptions || []).map(function (o) { return OPTION_LABELS[o] || o; });
+    var providerNames = (cfg.providers || []).map(function (p) {
+      return p.displayName + (p.clientId ? " (eigene ID)" : " (zentral)");
+    });
     var rows = [
-      ["Anmeldung", cfg.authMode === "local" ? "E-Mail und Passwort" : cfg.authMode === "local+oidc" ? "E-Mail plus OIDC" : "OIDC"],
+      ["Anmeldung", names.length ? names.join(", ") : "(keine)"],
       ["Schule", cfg.schoolName],
       ["Domain", cfg.domain],
       ["Schul-Zugangscode", cfg.joinCode || "(nicht gesetzt)"],
-      ["Anbieter", cfg.providerDisplayName + " (" + cfg.providerKey + ")"],
-      ["Issuer", cfg.providerIssuerUrl],
-      ["Client-ID", cfg.providerClientId || "(nicht gesetzt)"],
-      ["Zweiter Anbieter", cfg.provider2Key || "(nicht gesetzt)"],
+      ["Anbieter", providerNames.length ? providerNames.join(", ") : "(nur E-Mail)"],
       ["SMTP", isLocal() ? cfg.smtpHost + ":" + cfg.smtpPort : "(nicht gesetzt)"],
       ["Absender", cfg.mailFrom || "(nicht gesetzt)"],
       ["Anwendungsname", "SchulSani (fest)"],
@@ -902,40 +1051,77 @@
     });
   }
 
+  function setProviderField(provider, index, option, name) {
+    var p = (c.providers || [])[index];
+    var value;
+    if (name === "clientId") value = p ? p.clientId || "" : "";
+    else if (name === "clientSecret") value = ""; // Secrets nie zurueckschreiben
+    else if (name === "scopes") value = p && p.scopes ? p.scopes.join(" ") : "openid email profile";
+    else if (name === "allowedHostedDomains") value = p && p.allowedHostedDomains ? p.allowedHostedDomains.join(", ") : "";
+    else if (name === "groupsClaim") value = p ? p.groupsClaim || "groups" : "groups";
+    else if (name === "groupToRoleMap") value = p ? Object.entries(p.groupToRoleMap || {}).map(function (entry) { return entry[0] + "=" + entry[1]; }).join("\n") : "";
+    else if (name === "clientSecretMode") value = p ? p.clientSecretMode || "static" : "static";
+    else if (name === "responseMode") value = p ? p.responseMode || "query" : "query";
+    else if (name === "appleTeamId") value = p ? p.appleTeamId || "" : "";
+    else if (name === "appleKeyId") value = p ? p.appleKeyId || "" : "";
+    else if (name === "applePrivateKeyPath") value = p ? p.applePrivateKeyPath || "" : "";
+    else if (name === "tenantId") value = p ? (p.issuerUrl || "").replace("https://login.microsoftonline.com/", "").replace("/v2.0", "") : "";
+    else value = "";
+    var id = option + name.charAt(0).toUpperCase() + name.slice(1);
+    if (el(id)) el(id).value = value;
+  }
+
+  // Bestehende Provider nach Option sortieren, damit Felder der Checkboxen
+  // wiederhergestellt werden (Secrets bewusst leer gelassen).
+  function providerIndexForOption(c, option) {
+    var key = option === "custom" ? c.providerKey || "" : option;
+    var found = -1;
+    (c.providers || []).forEach(function (p, i) { if (p.key === key) found = i; });
+    return found;
+  }
+
   function loadExistingState() {
     fetch("/api/state").then(function (res) { return res.json(); }).then(function (data) {
       if (!data.config) return;
       var c = data.config;
-      if (el("authMode")) el("authMode").value = c.authMode || "local";
+      var opts = c.loginOptions || [];
+      if (opts.length === 0) {
+        // Altformat aus frueheren Assistenten-Staenden uebernehmen.
+        opts = [];
+        if (c.authMode !== "oidc") opts.push("email");
+        if (c.authMode !== "local" && c.providerKey) opts.push("custom");
+      }
+      document.querySelectorAll("#loginOptions input[type=checkbox]").forEach(function (cb) {
+        cb.checked = opts.indexOf(cb.value) !== -1;
+      });
       if (el("joinCode")) el("joinCode").value = c.joinCode || "";
       if (el("schoolName")) el("schoolName").value = c.schoolName || "";
       if (el("domain")) el("domain").value = c.domain || "";
-      if (el("providerKey")) el("providerKey").value = c.providerKey || "";
-      if (el("providerDisplayName")) el("providerDisplayName").value = c.providerDisplayName || "";
-      if (el("providerIssuerUrl")) el("providerIssuerUrl").value = c.providerIssuerUrl || "";
-      if (el("providerClientId")) el("providerClientId").value = c.providerClientId || "";
-      if (el("providerScopes")) el("providerScopes").value = c.providers && c.providers[0] ? (c.providers[0].scopes || []).join(" ") : "openid email profile";
-      if (el("providerAllowedHostedDomains")) el("providerAllowedHostedDomains").value = (c.providers && c.providers[0] && c.providers[0].allowedHostedDomains || []).join(", ");
-      if (el("providerGroupsClaim")) el("providerGroupsClaim").value = c.providers && c.providers[0] ? c.providers[0].groupsClaim || "groups" : "groups";
-      if (el("providerGroupToRoleMap")) el("providerGroupToRoleMap").value = c.providers && c.providers[0] ? Object.entries(c.providers[0].groupToRoleMap || {}).map(function (entry) { return entry[0] + "=" + entry[1]; }).join("\n") : "";
-      if (el("providerClientSecretMode")) el("providerClientSecretMode").value = c.providers && c.providers[0] ? c.providers[0].clientSecretMode || "static" : "static";
-      if (el("providerResponseMode")) el("providerResponseMode").value = c.providers && c.providers[0] ? c.providers[0].responseMode || "query" : "query";
-      if (el("providerAppleTeamId")) el("providerAppleTeamId").value = c.providers && c.providers[0] ? c.providers[0].appleTeamId || "" : "";
-      if (el("providerAppleKeyId")) el("providerAppleKeyId").value = c.providers && c.providers[0] ? c.providers[0].appleKeyId || "" : "";
-      if (el("providerApplePrivateKeyPath")) el("providerApplePrivateKeyPath").value = c.providers && c.providers[0] ? c.providers[0].applePrivateKeyPath || "" : "";
-      if (el("provider2Key")) el("provider2Key").value = c.providers && c.providers[1] ? c.providers[1].key || "" : "";
-      if (el("provider2DisplayName")) el("provider2DisplayName").value = c.providers && c.providers[1] ? c.providers[1].displayName || "" : "";
-      if (el("provider2IssuerUrl")) el("provider2IssuerUrl").value = c.providers && c.providers[1] ? c.providers[1].issuerUrl || "" : "";
-      if (el("provider2ClientId")) el("provider2ClientId").value = c.providers && c.providers[1] ? c.providers[1].clientId || "" : "";
-      if (el("provider2Scopes")) el("provider2Scopes").value = c.providers && c.providers[1] ? (c.providers[1].scopes || []).join(" ") : "openid email profile";
-      if (el("provider2AllowedHostedDomains")) el("provider2AllowedHostedDomains").value = (c.providers && c.providers[1] && c.providers[1].allowedHostedDomains || []).join(", ");
-      if (el("provider2GroupsClaim")) el("provider2GroupsClaim").value = c.providers && c.providers[1] ? c.providers[1].groupsClaim || "groups" : "groups";
-      if (el("provider2GroupToRoleMap")) el("provider2GroupToRoleMap").value = c.providers && c.providers[1] ? Object.entries(c.providers[1].groupToRoleMap || {}).map(function (entry) { return entry[0] + "=" + entry[1]; }).join("\n") : "";
-      if (el("provider2ClientSecretMode")) el("provider2ClientSecretMode").value = c.providers && c.providers[1] ? c.providers[1].clientSecretMode || "static" : "static";
-      if (el("provider2ResponseMode")) el("provider2ResponseMode").value = c.providers && c.providers[1] ? c.providers[1].responseMode || "query" : "query";
-      if (el("provider2AppleTeamId")) el("provider2AppleTeamId").value = c.providers && c.providers[1] ? c.providers[1].appleTeamId || "" : "";
-      if (el("provider2AppleKeyId")) el("provider2AppleKeyId").value = c.providers && c.providers[1] ? c.providers[1].appleKeyId || "" : "";
-      if (el("provider2ApplePrivateKeyPath")) el("provider2ApplePrivateKeyPath").value = c.providers && c.providers[1] ? c.providers[1].applePrivateKeyPath || "" : "";
+      setProviderField(c, providerIndexForOption(c, "apple"), "apple", "clientId");
+      setProviderField(c, providerIndexForOption(c, "apple"), "apple", "appleTeamId");
+      setProviderField(c, providerIndexForOption(c, "apple"), "apple", "appleKeyId");
+      setProviderField(c, providerIndexForOption(c, "apple"), "apple", "applePrivateKeyPath");
+      setProviderField(c, providerIndexForOption(c, "google"), "google", "clientId");
+      setProviderField(c, providerIndexForOption(c, "google"), "google", "allowedHostedDomains");
+      setProviderField(c, providerIndexForOption(c, "google"), "google", "groupsClaim");
+      setProviderField(c, providerIndexForOption(c, "google"), "google", "groupToRoleMap");
+      setProviderField(c, providerIndexForOption(c, "microsoft"), "microsoft", "tenantId");
+      setProviderField(c, providerIndexForOption(c, "microsoft"), "microsoft", "clientId");
+      setProviderField(c, providerIndexForOption(c, "microsoft"), "microsoft", "groupsClaim");
+      setProviderField(c, providerIndexForOption(c, "microsoft"), "microsoft", "groupToRoleMap");
+      setProviderField(c, providerIndexForOption(c, "custom"), "custom", "clientId");
+      setProviderField(c, providerIndexForOption(c, "custom"), "custom", "scopes");
+      setProviderField(c, providerIndexForOption(c, "custom"), "custom", "allowedHostedDomains");
+      setProviderField(c, providerIndexForOption(c, "custom"), "custom", "groupsClaim");
+      setProviderField(c, providerIndexForOption(c, "custom"), "custom", "groupToRoleMap");
+      setProviderField(c, providerIndexForOption(c, "custom"), "custom", "clientSecretMode");
+      setProviderField(c, providerIndexForOption(c, "custom"), "custom", "responseMode");
+      setProviderField(c, providerIndexForOption(c, "custom"), "custom", "appleTeamId");
+      setProviderField(c, providerIndexForOption(c, "custom"), "custom", "appleKeyId");
+      setProviderField(c, providerIndexForOption(c, "custom"), "custom", "applePrivateKeyPath");
+      if (c.providers && c.providers[0] && el("providerDisplayName")) el("providerDisplayName").value = c.providers[0].displayName || "";
+      if (c.providers && c.providers[0] && el("providerKey")) el("providerKey").value = c.providers[0].key || "";
+      if (c.providers && c.providers[0] && el("providerIssuerUrl")) el("providerIssuerUrl").value = c.providers[0].issuerUrl || "";
       if (el("smtpHost")) el("smtpHost").value = c.smtpHost || "";
       if (el("smtpPort")) el("smtpPort").value = c.smtpPort || "587";
       if (el("smtpUser")) el("smtpUser").value = c.smtpUser || "";
@@ -968,9 +1154,7 @@
     }
   });
 
-  el("authMode").addEventListener("change", updateAuthFields);
-  updateAuthFields();
-
+  initLoginOptions();
   // Die Schul-Kennung darf auf diesem Server nur einmal vergeben sein. Der
   // Server entscheidet beim Speichern endgueltig; hier wird nur fruehzeitig
   // gewarnt, damit man nicht erst am Ende merkt, dass die Kennung belegt ist.
