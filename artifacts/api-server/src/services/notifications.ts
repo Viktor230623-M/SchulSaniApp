@@ -211,7 +211,9 @@ async function sendPushNotification(notification: Notification): Promise<void> {
       },
       priority: notification.priority === "high" ? "high" : "default",
       channelId: notification.priority === "high" ? "high-priority" : "default",
-      sound: notification.priority === "high" ? "default" : "default",
+      // Einsatz-Alarm: eigener Sound statt Systemsound, damit sich der
+      // Einsatz von normalen Benachrichtigungen abhebt.
+      sound: notification.priority === "high" ? "alarm.wav" : "default",
     }));
 
     await sendExpoPushMessages(messages);
