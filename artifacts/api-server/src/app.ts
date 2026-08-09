@@ -1,4 +1,5 @@
 import express, { type Express } from "express";
+import compression from "compression";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
@@ -14,6 +15,9 @@ app.disable("x-powered-by");
 // limiters throttle all users as one.
 app.set("trust proxy", 1);
 app.use(helmet());
+// JSON- und Text-Antworten ab ~1KB komprimieren. Nginx vor dem Backend
+// komprimiert selbst nichts, also passiert es hier.
+app.use(compression({ threshold: 1024 }));
 
 app.use(cors({
   origin: config.allowedOrigins,

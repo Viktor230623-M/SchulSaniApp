@@ -22,6 +22,20 @@ import type { RedirectAuthProvider, AuthResult } from "../types";
 
 const STATE_TTL_MS = 10 * 60 * 1000;
 
+// Feste Obergrenze fuer ausgehende Provider-Abrufe: ein haengender Anbieter
+// darf weder den Login blockieren noch unbegrenzt Verbindungen belegen.
+const OIDC_FETCH_TIMEOUT_MS = 10_000;
+
+async function fetchWithTimeout(url: string, init?: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), OIDC_FETCH_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 interface PendingRequest {
   nonce: string;
   codeVerifier: string;
@@ -132,7 +146,7 @@ export function createOidcRedirectProvider(cfg: OidcRedirectProviderConfig): Red
     if (!discoveryPromise) {
       discoveryPromise = (async () => {
         const discoveryUrl = `${issuerUrl.replace(/\/$/, "")}/.well-known/openid-configuration`;
-        const resp = await fetch(discoveryUrl, { headers: { Accept: "application/json" } });
+        const resp = await fetchWithTimeout(discoveryUrl, { headers: { Accept: "application/json" } });
         if (!resp.ok) throw new Error(`Discovery fuer Anmeldeweg "${key}" fehlgeschlagen (${resp.status}).`);
         const doc = (await resp.json()) as Partial<OidcDiscoveryDocument>;
         if (!doc.issuer || !doc.authorization_endpoint || !doc.token_endpoint || !doc.jwks_uri) {
@@ -268,7 +282,7 @@ export function createOidcRedirectProvider(cfg: OidcRedirectProviderConfig): Red
         tokenHeaders["Authorization"] = `Basic ${Buffer.from(`${clientId}:${resolvedClientSecret}`).toString("base64")}`;
       }
 
-      const tokenResp = await fetch(doc.token_endpoint, {
+      const tokenResp = await fetchWithTimeout(doc.token_endpoint, {
         method: "POST",
         headers: tokenHeaders,
         body: tokenBody.toString(),
