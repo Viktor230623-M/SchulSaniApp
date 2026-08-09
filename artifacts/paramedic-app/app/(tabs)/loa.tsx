@@ -19,7 +19,7 @@ import { useTopPad } from "@/hooks/useTopPad";
 import { GlassLoader } from "@/components/GlassLoader";
 import { appleCardStyle } from "@/components/AppleSurface";
 import { t } from "@/constants/i18n";
-import { getTheme, istDunklesThema } from "@/constants/theme";
+import { getTheme, istDunklesThema, withAlpha } from "@/constants/theme";
 import { DatePickerField } from "@/components/DatePickerField";
 import type { LOARequest, LOAStatus } from "@/models";
 import { confirmAction, notify } from "@/lib/dialog";
@@ -43,13 +43,13 @@ function toYMD(d: Date): string {
 
 function StatusBadge({ status, lang }: { status: LOAStatus; lang: string }) {
   const cfg = {
-    pending: { key: "loa.pending", color: "#F97316", bg: "#FFF7ED" },
-    approved: { key: "loa.approved", color: "#22C55E", bg: "#F0FDF4" },
-    rejected: { key: "loa.rejected", color: "#EF4444", bg: "#FEF2F2" },
-    appealed: { key: "loa.appealed", color: "#8B5CF6", bg: "#F5F3FF" },
+    pending: { key: "loa.pending", color: "#F97316" },
+    approved: { key: "loa.approved", color: "#22C55E" },
+    rejected: { key: "loa.rejected", color: "#EF4444" },
+    appealed: { key: "loa.appealed", color: "#8B5CF6" },
   }[status];
   return (
-    <View style={[styles.badge, { backgroundColor: cfg.bg }]}>
+    <View style={[styles.badge, { backgroundColor: withAlpha(cfg.color, 0.14) }]}>
       <Text style={[styles.badgeText, { color: cfg.color }]}>{t(cfg.key, lang as any)}</Text>
     </View>
   );
@@ -219,12 +219,12 @@ export default function LOAScreen() {
                 )}
                 <Pressable onPress={() => switchTab("mine")} style={styles.segmentBtn}>
                   <Text style={[styles.segmentText, { color: tab === "mine" ? "#fff" : theme.textSecondary }]}>
-                    {lang === "de" ? "Meine Anträge" : "My Requests"}
+                    {t("loa.myRequests", lang)}
                   </Text>
                 </Pressable>
                 <Pressable onPress={() => switchTab("all")} style={styles.segmentBtn}>
                   <Text style={[styles.segmentText, { color: tab === "all" ? "#fff" : theme.textSecondary }]}>
-                    {lang === "de" ? "Alle Anträge" : "All Requests"}
+                    {t("loa.allRequests", lang)}
                     {othersRequests.filter((r) => r.status === "pending").length > 0 && (
                       <Text style={{ color: tab === "all" ? "#fff" : theme.tint }}>{" "}({othersRequests.filter((r) => r.status === "pending").length})</Text>
                     )}

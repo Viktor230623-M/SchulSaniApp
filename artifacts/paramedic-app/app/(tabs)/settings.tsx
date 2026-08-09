@@ -37,7 +37,7 @@ import { useTopPad } from "@/hooks/useTopPad";
 import { appleCardStyle } from "@/components/AppleSurface";
 import { useRoles } from "@/hooks/useRoles";
 import { t } from "@/constants/i18n";
-import { getTheme, type ThemeColors } from "@/constants/theme";
+import { getTheme, type ThemeColors, istDunklesThema, withAlpha } from "@/constants/theme";
 import type { AppLanguage, AppTheme, User, Mission, LOARequest } from "@/models";
 import { confirmAction, notify } from "@/lib/dialog";
 import ApiService, { type AuthIdentityInfo } from "@/services/ApiService";
@@ -589,7 +589,7 @@ export default function SettingsScreen() {
           ) : (
             activityLogData.map((item, index) => (
               <View key={item.id || index} style={[styles.activityRow, { borderTopColor: theme.cardBorder }]}>
-                <View style={[styles.activityIcon, { backgroundColor: item.type === "mission" ? "#FEE2E2" : "#DBEAFE" }]}>
+                <View style={[styles.activityIcon, { backgroundColor: item.type === "mission" ? withAlpha("#DC2626", 0.14) : withAlpha("#2563EB", 0.14) }]}>
                   <Ionicons name={item.type === "mission" ? "medical" : "calendar-outline"} size={14} color={item.type === "mission" ? "#DC2626" : "#2563EB"} />
                 </View>
                 <View style={styles.activityInfo}>
@@ -597,11 +597,11 @@ export default function SettingsScreen() {
                     {item.type === "mission" ? item.title : item.reason}
                   </Text>
                   <Text style={[styles.activityDate, { color: theme.textTertiary }]}>
-                    {item.type === "mission" ? new Date(item.requestedAt).toLocaleDateString("de-DE") : `${new Date(item.fromDate).toLocaleDateString("de-DE")} - ${new Date(item.toDate).toLocaleDateString("de-DE")}`}
+                    {item.type === "mission" ? new Date(item.requestedAt).toLocaleDateString(lang === "de" ? "de-DE" : "en-GB") : `${new Date(item.fromDate).toLocaleDateString(lang === "de" ? "de-DE" : "en-GB")} - ${new Date(item.toDate).toLocaleDateString(lang === "de" ? "de-DE" : "en-GB")}`}
                   </Text>
                 </View>
-                <View style={[styles.statusBadge, { backgroundColor: (item.type === "mission" ? (item.status === "completed" ? "#DCFCE7" : "#FEF3C7") : (item.status === "approved" ? "#DCFCE7" : "#FEF3C7")) }]}>
-                  <Text style={[styles.statusText, { color: (item.type === "mission" ? (item.status === "completed" ? "#16A34A" : "#D97706") : (item.status === "approved" ? "#16A34A" : "#D97706")) }]}>
+                <View style={[styles.statusBadge, { backgroundColor: withAlpha(item.type === "mission" ? (item.status === "completed" ? "#16A34A" : "#D97706") : (item.status === "approved" ? "#16A34A" : "#D97706"), 0.14) }]}>
+                  <Text style={[styles.statusText, { color: item.type === "mission" ? (item.status === "completed" ? (istDunklesThema(theme.background) ? "#4ADE80" : "#16A34A") : (istDunklesThema(theme.background) ? "#FBBF24" : "#D97706")) : (item.status === "approved" ? (istDunklesThema(theme.background) ? "#4ADE80" : "#16A34A") : (istDunklesThema(theme.background) ? "#FBBF24" : "#D97706")) }]}>
                     {item.type === "mission" ? (item.status === "completed" ? t("missions.completed", lang) : item.status === "accepted" ? t("missions.accepted", lang) : t("missions.pending", lang)) : (item.status === "approved" ? t("loa.approved", lang) : item.status === "rejected" ? t("loa.rejected", lang) : t("loa.pending", lang))}
                   </Text>
                 </View>
@@ -768,8 +768,8 @@ export default function SettingsScreen() {
             ) : (
               saniActivityData.map((item, index) => (
                 <View key={item.id || index} style={[styles.saniActivityRow, { borderTopColor: theme.cardBorder }]}>
-                  <View style={[styles.saniAvatar, { backgroundColor: item.assignedUser ? "#DCFCE7" : "#F3F4F6" }]}>
-                    <Text style={[styles.saniAvatarText, { color: item.assignedUser ? "#16A34A" : "#6B7280" }]}>
+                  <View style={[styles.saniAvatar, { backgroundColor: item.assignedUser ? withAlpha("#16A34A", 0.14) : theme.backgroundTertiary }]}>
+                    <Text style={[styles.saniAvatarText, { color: item.assignedUser ? "#16A34A" : theme.textTertiary }]}>
                       {item.assignedUser ? `${formatName(item.assignedUser.firstName || "")[0]}${formatName(item.assignedUser.lastName || "")[0]}` : "?"}
                     </Text>
                   </View>
@@ -782,7 +782,7 @@ export default function SettingsScreen() {
                     </Text>
                   </View>
                   <Text style={[styles.saniTime, { color: theme.textTertiary }]}>
-                    {item.scheduledFor ? new Date(item.scheduledFor).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) : "--:--"}
+                    {item.scheduledFor ? new Date(item.scheduledFor).toLocaleTimeString(lang === "de" ? "de-DE" : "en-GB", { hour: "2-digit", minute: "2-digit" }) : "--:--"}
                   </Text>
                 </View>
               ))
@@ -880,8 +880,8 @@ export default function SettingsScreen() {
                   return (
                     <View key={u.id} style={[styles.pendingCard, { borderColor: "#F59E0B", backgroundColor: theme.backgroundTertiary }]}>
                       <View style={styles.adminCardHeader}>
-                        <View style={[styles.userAvatar, { backgroundColor: "#FEF3C7" }]}>
-                          <Text style={[styles.userAvatarText, { color: "#B45309" }]}>
+                        <View style={[styles.userAvatar, { backgroundColor: withAlpha("#F59E0B", 0.16) }]}>
+                          <Text style={[styles.userAvatarText, { color: istDunklesThema(theme.background) ? "#FBBF24" : "#B45309" }]}>
                             {formatName(u.firstName || "")[0]}{formatName(u.lastName || "")[0]}
                           </Text>
                         </View>
@@ -890,7 +890,7 @@ export default function SettingsScreen() {
                           <Text style={[styles.userEmail, { color: theme.textTertiary }]}>{u.iservUsername ?? u.email}</Text>
                         </View>
                         <View style={styles.pendingStatusPill}>
-                          <Text style={styles.pendingStatusText}>{t("settings.pending", lang)}</Text>
+                          <Text style={[styles.pendingStatusText, { color: istDunklesThema(theme.background) ? "#FBBF24" : "#B45309" }]}>{t("settings.pending", lang)}</Text>
                         </View>
                       </View>
                       <View style={styles.rolePicker}>
@@ -988,7 +988,7 @@ export default function SettingsScreen() {
                               <Ionicons name="trash-outline" size={16} color={theme.danger} />
                             </Pressable>
                           ) : (
-                            <View style={styles.selfTag}>
+                            <View style={[styles.selfTag, { backgroundColor: theme.backgroundTertiary }]}>
                               <Text style={[styles.selfTagText, { color: theme.textTertiary }]}>{isCurrentUser ? t("common.you", lang) : ""}</Text>
                             </View>
                           )}
@@ -1069,7 +1069,7 @@ export default function SettingsScreen() {
         onPress={handleLogout}
         style={({ pressed }) => [
           styles.logoutBtn,
-          { backgroundColor: "#FEF2F2", opacity: pressed ? 0.8 : 1 },
+          { backgroundColor: withAlpha(theme.danger, 0.12), opacity: pressed ? 0.8 : 1 },
         ]}
       >
         <Ionicons name="log-out-outline" size={20} color="#EF4444" />
@@ -1116,15 +1116,15 @@ const styles = StyleSheet.create({
   pendingCountText: { fontSize: 11, fontFamily: "Inter_700Bold", color: "#fff" },
   adminSubHeader: { flexDirection: "row", alignItems: "center", gap: 8, paddingTop: 12, borderTopWidth: 1 },
   adminSubtitle: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
-  amberCountBadge: { backgroundColor: "#FEF3C7", paddingHorizontal: 7, paddingVertical: 2, borderRadius: 8 },
+  amberCountBadge: { backgroundColor: withAlpha("#F59E0B", 0.16), paddingHorizontal: 7, paddingVertical: 2, borderRadius: 8 },
   amberCountText: { fontSize: 11, fontFamily: "Inter_700Bold", color: "#D97706" },
   adminLoadingRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 8 },
   adminLoadingText: { fontSize: 13, fontFamily: "Inter_400Regular" },
   adminEmptyRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8 },
-  adminEmptyIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: "#DCFCE7", alignItems: "center", justifyContent: "center" },
+  adminEmptyIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: withAlpha("#16A34A", 0.14), alignItems: "center", justifyContent: "center" },
   pendingCard: { borderRadius: 12, borderWidth: 1.5, padding: 12, gap: 10 },
-  pendingStatusPill: { backgroundColor: "#FEF3C7", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: "#F59E0B33" },
-  pendingStatusText: { fontSize: 10, fontFamily: "Inter_600SemiBold", color: "#B45309" },
+  pendingStatusPill: { backgroundColor: withAlpha("#F59E0B", 0.16), paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: withAlpha("#F59E0B", 0.3) },
+  pendingStatusText: { fontSize: 10, fontFamily: "Inter_600SemiBold" },
   adminCard: { borderRadius: 12, borderWidth: 1, padding: 12, gap: 10 },
   adminCardHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
   correctBox: { gap: 12, marginTop: 6, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth },
@@ -1146,7 +1146,7 @@ const styles = StyleSheet.create({
   approveBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 11, borderRadius: 10 },
   approveBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: "#fff" },
   deleteBtn: { width: 36, height: 36, borderRadius: 8, alignItems: "center", justifyContent: "center" },
-  selfTag: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: "#F3F4F6" },
+  selfTag: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
   selfTagText: { fontSize: 11, fontFamily: "Inter_500Medium" },
   userRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingTop: 12, borderTopWidth: 1 },
   userAvatar: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },

@@ -19,7 +19,7 @@ import { useTopPad } from "@/hooks/useTopPad";
 import { GlassLoader } from "@/components/GlassLoader";
 import { appleCardStyle } from "@/components/AppleSurface";
 import { t } from "@/constants/i18n";
-import { getTheme, type ThemeColors, istDunklesThema } from "@/constants/theme";
+import { getTheme, type ThemeColors, istDunklesThema, withAlpha } from "@/constants/theme";
 import type { AppLanguage, NewsItem, NewsStatus } from "@/models";
 import { confirmAction, notify } from "@/lib/dialog";
 import ApiService from "@/services/ApiService";
@@ -30,21 +30,21 @@ type Filter = "all" | NewsStatus;
 
 function categoryConfig(cat: NewsItem["category"], tint: string, lang: AppLanguage) {
   return {
-    announcement: { label: t("news.catAnnouncement", lang), icon: "megaphone-outline" as const, color: "#3B82F6", bg: "#EFF6FF" },
-    training: { label: t("news.catTraining", lang), icon: "fitness-outline" as const, color: "#8B5CF6", bg: "#F5F3FF" },
-    update: { label: t("news.catUpdate", lang), icon: "refresh-outline" as const, color: tint, bg: "#F0FDF4" },
-    alert: { label: t("news.catAlert", lang), icon: "alert-circle-outline" as const, color: "#EF4444", bg: "#FEF2F2" },
+    announcement: { label: t("news.catAnnouncement", lang), icon: "megaphone-outline" as const, color: "#3B82F6" },
+    training: { label: t("news.catTraining", lang), icon: "fitness-outline" as const, color: "#8B5CF6" },
+    update: { label: t("news.catUpdate", lang), icon: "refresh-outline" as const, color: tint },
+    alert: { label: t("news.catAlert", lang), icon: "alert-circle-outline" as const, color: "#EF4444" },
   }[cat];
 }
 
 function StatusChip({ status, lang }: { status: NewsStatus; lang: AppLanguage }) {
   const cfg = {
-    pending: { label: t("news.statusPending", lang), color: "#F97316", bg: "#FFF7ED" },
-    approved: { label: t("news.statusApproved", lang), color: "#22C55E", bg: "#F0FDF4" },
-    rejected: { label: t("news.statusRejected", lang), color: "#EF4444", bg: "#FEF2F2" },
+    pending: { label: t("news.statusPending", lang), color: "#F97316" },
+    approved: { label: t("news.statusApproved", lang), color: "#22C55E" },
+    rejected: { label: t("news.statusRejected", lang), color: "#EF4444" },
   }[status];
   return (
-    <View style={[styles.chip, { backgroundColor: cfg.bg }]}>
+    <View style={[styles.chip, { backgroundColor: withAlpha(cfg.color, 0.14) }]}>
       <Text style={[styles.chipText, { color: cfg.color }]}>{cfg.label}</Text>
     </View>
   );
@@ -96,7 +96,7 @@ function NewsCard({
       ]}
     >
       <View style={styles.cardRow}>
-        <View style={[styles.catBadge, { backgroundColor: cat.bg }]}>
+        <View style={[styles.catBadge, { backgroundColor: withAlpha(cat.color, 0.14) }]}>
           <Ionicons name={cat.icon} size={12} color={cat.color} />
           <Text style={[styles.catText, { color: cat.color }]}>{cat.label}</Text>
         </View>
@@ -121,7 +121,7 @@ function NewsCard({
       )}
 
       {item.rejectionReason && (
-        <View style={styles.rejectionBox}>
+        <View style={[styles.rejectionBox, { backgroundColor: withAlpha("#EF4444", 0.1) }]}>
           <Ionicons name="alert-circle" size={13} color="#EF4444" />
           <Text style={styles.rejectionText}>
             {canModerate
@@ -133,7 +133,7 @@ function NewsCard({
 
       <View style={styles.cardFooter}>
         <Text style={[styles.author, { color: theme.textTertiary }]}>
-          {item.author} · {new Date(item.publishedAt).toLocaleDateString("de-DE")}
+          {item.author} · {new Date(item.publishedAt).toLocaleDateString(lang === "de" ? "de-DE" : "en-GB")}
         </Text>
         <View style={styles.footerActions}>
           {item.status === "approved" && !item.isRead && (
@@ -554,7 +554,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 16, fontFamily: "Inter_700Bold" },
   summary: { fontSize: 13, fontFamily: "Inter_400Regular", lineHeight: 18 },
   content: { fontSize: 14, fontFamily: "Inter_400Regular", lineHeight: 22, paddingTop: 8, borderTopWidth: 1, marginTop: 4 },
-  rejectionBox: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#FEF2F2", padding: 8, borderRadius: 8 },
+  rejectionBox: { flexDirection: "row", alignItems: "center", gap: 6, padding: 8, borderRadius: 8 },
   rejectionText: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#EF4444", flex: 1 },
   cardFooter: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 },
   author: { fontSize: 11, fontFamily: "Inter_400Regular" },

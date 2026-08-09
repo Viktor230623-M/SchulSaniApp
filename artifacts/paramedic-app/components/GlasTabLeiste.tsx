@@ -10,7 +10,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { istDunklesThema, type ThemeColors } from "@/constants/theme";
+import { istDunklesThema, withAlpha, type ThemeColors } from "@/constants/theme";
 import { LiquidGlassView, nativeGlassAvailable } from "@/modules/liquid-glass/src/LiquidGlassView";
 
 // `@react-navigation/bottom-tabs` haengt nur mittelbar ueber expo-router im
@@ -52,14 +52,6 @@ const ABSTAND_ZUM_KNOPF = 8;
  * Geraets kommt beim Verwenden dazu.
  */
 export const LEISTE_PLATZ = HOEHE + 24;
-
-/** `#RRGGBB` mit Deckung als `rgba(...)`. Andere Schreibweisen bleiben, wie sie sind. */
-function mitDeckung(farbe: string, deckung: number): string {
-  const treffer = /^#([0-9a-f]{6})$/i.exec(farbe.trim());
-  if (!treffer) return farbe;
-  const wert = parseInt(treffer[1]!, 16);
-  return `rgba(${(wert >> 16) & 255},${(wert >> 8) & 255},${wert & 255},${deckung})`;
-}
 
 /**
  * Schwebende Leiste aus Glas statt der durchgehenden Leiste am unteren Rand.
@@ -165,7 +157,7 @@ function Glasflaeche({
           borderTopColor: dunkel ? "rgba(255,255,255,0.28)" : "rgba(255,255,255,0.55)",
           // Ohne Weichzeichner traegt die Farbe allein und muss deutlich
           // dichter sein, sonst wird die Leiste vor hellem Inhalt unlesbar.
-          backgroundColor: weichzeichner || nativ ? "transparent" : mitDeckung(theme.card, 0.86),
+          backgroundColor: weichzeichner || nativ ? "transparent" : withAlpha(theme.card, 0.86),
           shadowColor: dunkel ? "#000" : theme.tabBarBorder,
         },
         style,
@@ -209,7 +201,7 @@ function Glasflaeche({
             pointerEvents="none"
             style={[
               StyleSheet.absoluteFill,
-              { borderRadius: radius, backgroundColor: mitDeckung(theme.card, 0.5) },
+              { borderRadius: radius, backgroundColor: withAlpha(theme.card, 0.5) },
             ]}
           />
         </>
@@ -223,7 +215,7 @@ function Glasflaeche({
           pointerEvents="none"
           style={[
             StyleSheet.absoluteFill,
-            { borderRadius: radius, backgroundColor: mitDeckung(theme.card, 0.35) },
+            { borderRadius: radius, backgroundColor: withAlpha(theme.card, 0.35) },
           ]}
         />
       )}

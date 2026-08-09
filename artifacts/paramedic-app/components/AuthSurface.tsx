@@ -15,7 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MedicalCross } from "@/components/MedicalCross";
 import { appleCardStyle } from "@/components/AppleSurface";
 import { useTopPad } from "@/hooks/useTopPad";
-import { getTheme } from "@/constants/theme";
+import { getTheme, withAlpha } from "@/constants/theme";
 import { SCHOOL_NAME } from "@/constants/appConfig";
 import { t } from "@/constants/i18n";
 import { useAppStore } from "@/store/useAppStore";
@@ -125,9 +125,9 @@ export function AuthButton({ label, loading, disabled, onPress, theme }: { label
 
 export function AuthMessage({ text, error, theme }: { text: string; error?: boolean; theme: AuthTheme }) {
   return (
-    <View style={[styles.message, { backgroundColor: error ? "#FEF2F2" : `${theme.tint}16` }]} accessibilityLiveRegion="polite">
-      <Ionicons name={error ? "alert-circle-outline" : "checkmark-circle-outline"} size={18} color={error ? "#B42318" : theme.tint} />
-      <Text style={[styles.messageText, { color: error ? "#B42318" : theme.text }]}>{text}</Text>
+    <View style={[styles.message, { backgroundColor: error ? withAlpha(theme.danger, 0.12) : withAlpha(theme.tint, 0.12) }]} accessibilityLiveRegion="polite">
+      <Ionicons name={error ? "alert-circle-outline" : "checkmark-circle-outline"} size={18} color={error ? theme.danger : theme.tint} />
+      <Text style={[styles.messageText, { color: error ? theme.danger : theme.text }]}>{text}</Text>
     </View>
   );
 }

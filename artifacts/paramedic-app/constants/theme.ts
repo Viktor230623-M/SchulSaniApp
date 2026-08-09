@@ -241,6 +241,14 @@ export function getTheme(theme: AppTheme): ThemeColors {
   return THEMES[theme] ?? lightTheme;
 }
 
+/** `#RRGGBB` als `rgba(...)` mit gegebener Deckung. Andere Schreibweisen bleiben unveraendert. */
+export function withAlpha(hex: string, alpha: number): string {
+  const treffer = /^#([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!treffer) return hex;
+  const wert = parseInt(treffer[1]!, 16);
+  return `rgba(${(wert >> 16) & 255},${(wert >> 8) & 255},${wert & 255},${alpha})`;
+}
+
 /**
  * Helligkeit nach der Wahrnehmung, nicht nach dem Mittelwert -- Gruen wiegt
  * schwerer als Blau. Damit erkennt eine Komponente ein dunkles Thema selbst,

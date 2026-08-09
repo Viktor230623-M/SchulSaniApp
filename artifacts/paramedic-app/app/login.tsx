@@ -21,7 +21,7 @@ import { MedicalCross } from "@/components/MedicalCross";
 import { useTopPad } from "@/hooks/useTopPad";
 import { SCHOOL_NAME } from "@/constants/appConfig";
 import { t } from "@/constants/i18n";
-import { getTheme, istDunklesThema } from "@/constants/theme";
+import { getTheme, istDunklesThema, withAlpha } from "@/constants/theme";
 import ApiService, { AuthError, type AuthProviderInfo } from "@/services/ApiService";
 import { useAppStore } from "@/store/useAppStore";
 
@@ -327,9 +327,9 @@ export default function LoginScreen() {
             )}
 
             {!!redirectError && (
-              <View style={styles.errorBox}>
-                <Ionicons name="alert-circle" size={18} color="#EF4444" />
-                <Text style={styles.errorText}>{redirectError}</Text>
+              <View style={[styles.errorBox, { backgroundColor: withAlpha(theme.danger, 0.1) }]}>
+                <Ionicons name="alert-circle" size={18} color={theme.danger} />
+                <Text style={[styles.errorText, { color: theme.danger }]}>{redirectError}</Text>
               </View>
             )}
 
@@ -431,8 +431,8 @@ const styles = StyleSheet.create({
   providerHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
   providerIcon: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   providerCopy: { flex: 1, gap: 4 },
-  errorBox: { flexDirection: "row", alignItems: "center", gap: 8, padding: 12, borderRadius: 10, backgroundColor: "#FEF2F2" },
-  errorText: { flex: 1, fontSize: 13, lineHeight: 18, fontFamily: "Inter_400Regular", color: "#EF4444" },
+  errorBox: { flexDirection: "row", alignItems: "center", gap: 8, padding: 12, borderRadius: 10 },
+  errorText: { flex: 1, fontSize: 13, lineHeight: 18, fontFamily: "Inter_400Regular" },
   loginButton: { minHeight: 52, paddingHorizontal: 16, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   appleButton: { height: 52, width: "100%" },
   loadingRow: { flexDirection: "row", alignItems: "center", gap: 8 },

@@ -18,7 +18,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MedicalCross } from "@/components/MedicalCross";
 import { useTopPad } from "@/hooks/useTopPad";
 import { t } from "@/constants/i18n";
-import { getTheme } from "@/constants/theme";
+import { getTheme, withAlpha } from "@/constants/theme";
 import ApiService from "@/services/ApiService";
 import { useAppStore } from "@/store/useAppStore";
 
@@ -101,9 +101,9 @@ export default function NameBestaetigenScreen() {
             </View>
 
             {!!error && (
-              <View style={styles.errorBox}>
-                <Ionicons name="alert-circle" size={16} color="#EF4444" />
-                <Text style={styles.errorText}>{error}</Text>
+              <View style={[styles.errorBox, { backgroundColor: withAlpha(theme.danger, 0.1) }]}>
+                <Ionicons name="alert-circle" size={16} color={theme.danger} />
+                <Text style={[styles.errorText, { color: theme.danger }]}>{error}</Text>
               </View>
             )}
 
@@ -156,9 +156,8 @@ const styles = StyleSheet.create({
     gap: 8,
     padding: 12,
     borderRadius: 10,
-    backgroundColor: "#FEF2F2",
   },
-  errorText: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#EF4444", flex: 1 },
+  errorText: { fontSize: 13, fontFamily: "Inter_400Regular", flex: 1 },
   confirmButton: { paddingVertical: 15, borderRadius: 12, alignItems: "center" },
   confirmButtonText: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: "#fff" },
   logoutLink: { marginTop: 20, padding: 8 },

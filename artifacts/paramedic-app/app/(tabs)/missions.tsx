@@ -22,7 +22,7 @@ import { useTopPad } from "@/hooks/useTopPad";
 import { GlassLoader } from "@/components/GlassLoader";
 import { appleCardStyle } from "@/components/AppleSurface";
 import { t } from "@/constants/i18n";
-import { getTheme, type ThemeColors, istDunklesThema } from "@/constants/theme";
+import { getTheme, type ThemeColors, istDunklesThema, withAlpha } from "@/constants/theme";
 import type { AppLanguage, Mission, MissionPriority, MissionStatus } from "@/models";
 import { confirmAction, notify } from "@/lib/dialog";
 import ApiService from "@/services/ApiService";
@@ -31,13 +31,13 @@ import { localized } from "@/utils/localize";
 
 function PriorityBadge({ priority, lang }: { priority: MissionPriority; lang: AppLanguage }) {
   const cfg = {
-    high: { label: t("missions.high", lang), bg: "#FEF2F2", text: "#EF4444", dot: "#EF4444" },
-    medium: { label: t("missions.medium", lang), bg: "#FFF7ED", text: "#F97316", dot: "#F97316" },
-    low: { label: t("missions.low", lang), bg: "#F0FDF4", text: "#22C55E", dot: "#22C55E" },
+    high: { label: t("missions.high", lang), text: "#EF4444" },
+    medium: { label: t("missions.medium", lang), text: "#F97316" },
+    low: { label: t("missions.low", lang), text: "#22C55E" },
   }[priority];
   return (
-    <View style={[styles.priorityBadge, { backgroundColor: cfg.bg }]}>
-      <View style={[styles.priorityDot, { backgroundColor: cfg.dot }]} />
+    <View style={[styles.priorityBadge, { backgroundColor: withAlpha(cfg.text, 0.14) }]}>
+      <View style={[styles.priorityDot, { backgroundColor: cfg.text }]} />
       <Text style={[styles.priorityText, { color: cfg.text }]}>{cfg.label}</Text>
     </View>
   );
@@ -45,15 +45,15 @@ function PriorityBadge({ priority, lang }: { priority: MissionPriority; lang: Ap
 
 function StatusBadge({ status, lang }: { status: MissionStatus; lang: AppLanguage }) {
   const cfg = ({
-    pending: { label: t("missions.pending", lang), bg: "#EFF6FF", text: "#3B82F6" },
-    accepted: { label: t("missions.accepted", lang), bg: "#F0FDF4", text: "#22C55E" },
-    rejected: { label: t("missions.rejected", lang), bg: "#FEF2F2", text: "#EF4444" },
-    completed: { label: t("missions.completed", lang), bg: "#F3F4F6", text: "#6B7280" },
-    archived: { label: t("activityLog.actions.dismissed", lang), bg: "#F3F4F6", text: "#9CA3AF" },
-  } as Record<string, { label: string; bg: string; text: string }>)[status]
-    ?? { label: status, bg: "#F3F4F6", text: "#9CA3AF" };
+    pending: { label: t("missions.pending", lang), text: "#3B82F6" },
+    accepted: { label: t("missions.accepted", lang), text: "#22C55E" },
+    rejected: { label: t("missions.rejected", lang), text: "#EF4444" },
+    completed: { label: t("missions.completed", lang), text: "#6B7280" },
+    archived: { label: t("activityLog.actions.dismissed", lang), text: "#9CA3AF" },
+  } as Record<string, { label: string; text: string }>)[status]
+    ?? { label: status, text: "#9CA3AF" };
   return (
-    <View style={[styles.statusBadge, { backgroundColor: cfg.bg }]}>
+    <View style={[styles.statusBadge, { backgroundColor: withAlpha(cfg.text, 0.14) }]}>
       <Text style={[styles.statusBadgeText, { color: cfg.text }]}>{cfg.label}</Text>
     </View>
   );
@@ -95,7 +95,7 @@ function MissionCard({ mission, onAccept, onReject, theme, lang, currentUserId, 
   }
 
   function fmt(iso: string) {
-    return new Date(iso).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+    return new Date(iso).toLocaleTimeString(lang === "de" ? "de-DE" : "en-GB", { hour: "2-digit", minute: "2-digit" });
   }
 
   return (
@@ -108,7 +108,7 @@ function MissionCard({ mission, onAccept, onReject, theme, lang, currentUserId, 
         <View>
           <Text style={[styles.timeText, { color: theme.text }]}>{fmt(mission.requestedAt)}</Text>
           <Text style={[styles.dateText, { color: theme.textTertiary }]}>
-            {new Date(mission.requestedAt).toLocaleDateString("de-DE", { day: "2-digit", month: "short" })}
+            {new Date(mission.requestedAt).toLocaleDateString(lang === "de" ? "de-DE" : "en-GB", { day: "2-digit", month: "short" })}
           </Text>
         </View>
       </View>

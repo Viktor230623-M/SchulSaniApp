@@ -98,8 +98,8 @@ export default function ReportsIndexScreen() {
             {isLeadership && (
               <View style={styles.filterRow}>
                 {[
-                  { label: t("news.myArticles", lang).replace("Beiträge", "Protokolle").replace("Articles", "Reports"), value: true },
-                  { label: t("news.allArticles", lang).replace("Beiträge", "Protokolle").replace("Articles", "Reports"), value: false },
+                  { label: lang === "de" ? "Meine Protokolle" : "My Reports", value: true },
+                  { label: lang === "de" ? "Alle Protokolle" : "All Reports", value: false },
                 ].map((opt) => (
                   <Pressable
                     key={String(opt.value)}
@@ -113,9 +113,7 @@ export default function ReportsIndexScreen() {
                     ]}
                   >
                     <Text style={[styles.filterText, { color: mine === opt.value ? "#fff" : theme.textSecondary }]}>
-                      {opt.value
-                        ? (lang === "de" ? "Meine Protokolle" : "My Reports")
-                        : (lang === "de" ? "Alle Protokolle" : "All Reports")}
+                      {opt.label}
                     </Text>
                   </Pressable>
                 ))}

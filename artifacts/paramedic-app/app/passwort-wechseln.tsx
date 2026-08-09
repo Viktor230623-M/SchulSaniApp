@@ -18,7 +18,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MedicalCross } from "@/components/MedicalCross";
 import { useTopPad } from "@/hooks/useTopPad";
 import { t } from "@/constants/i18n";
-import { getTheme } from "@/constants/theme";
+import { getTheme, withAlpha } from "@/constants/theme";
 import ApiService from "@/services/ApiService";
 import { useAppStore } from "@/store/useAppStore";
 
@@ -89,9 +89,9 @@ export default function PasswortWechselnScreen() {
             <PasswordField label={t("auth.repeatPassword", lang)} value={repeatPassword} onChangeText={setRepeatPassword} hidden={!showPasswords} theme={theme} onSubmitEditing={handleChange} />
 
             {!!error && (
-              <View style={styles.errorBox}>
-                <Ionicons name="alert-circle" size={16} color="#EF4444" />
-                <Text style={styles.errorText}>{error}</Text>
+              <View style={[styles.errorBox, { backgroundColor: withAlpha(theme.danger, 0.1) }]}>
+                <Ionicons name="alert-circle" size={16} color={theme.danger} />
+                <Text style={[styles.errorText, { color: theme.danger }]}>{error}</Text>
               </View>
             )}
 
@@ -149,8 +149,8 @@ const styles = StyleSheet.create({
   inputGroup: { width: "100%", gap: 6 },
   label: { fontSize: 13, fontFamily: "Inter_500Medium" },
   input: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, fontFamily: "Inter_400Regular" },
-  errorBox: { flexDirection: "row", alignItems: "center", gap: 8, padding: 12, borderRadius: 10, backgroundColor: "#FEF2F2" },
-  errorText: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#EF4444", flex: 1 },
+  errorBox: { flexDirection: "row", alignItems: "center", gap: 8, padding: 12, borderRadius: 10 },
+  errorText: { fontSize: 13, fontFamily: "Inter_400Regular", flex: 1 },
   visibilityLink: { alignSelf: "flex-start", minHeight: 44, justifyContent: "center", paddingHorizontal: 4 },
   visibilityText: { fontSize: 13, fontFamily: "Inter_500Medium" },
   confirmButton: { paddingVertical: 15, borderRadius: 12, alignItems: "center" },

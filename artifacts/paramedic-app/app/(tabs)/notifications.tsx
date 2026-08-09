@@ -17,22 +17,22 @@ import { useTopPad } from "@/hooks/useTopPad";
 import { GlassLoader } from "@/components/GlassLoader";
 import { appleCardStyle } from "@/components/AppleSurface";
 import { t } from "@/constants/i18n";
-import { getTheme, type ThemeColors, istDunklesThema } from "@/constants/theme";
+import { getTheme, type ThemeColors, istDunklesThema, withAlpha } from "@/constants/theme";
 import type { AppLanguage, NotificationItem, NotificationType } from "@/models";
 import ApiService from "@/services/ApiService";
 import { useAppStore } from "@/store/useAppStore";
 
 function notifConfig(type: NotificationType) {
-  const map: Record<string, { icon: React.ComponentProps<typeof Ionicons>["name"]; color: string; bg: string }> = {
-    mission_assigned: { icon: "flash", color: "#3B82F6", bg: "#EFF6FF" },
-    mission_cancelled: { icon: "flash-off", color: "#EF4444", bg: "#FEF2F2" },
-    mission_completed: { icon: "checkmark-circle", color: "#22C55E", bg: "#F0FDF4" },
-    mission_created: { icon: "flash", color: "#3B82F6", bg: "#EFF6FF" },
-    status_changed: { icon: "shield-checkmark", color: "#22C55E", bg: "#F0FDF4" },
-    news: { icon: "newspaper", color: "#8B5CF6", bg: "#F5F3FF" },
-    loa_update: { icon: "calendar", color: "#CA8A04", bg: "#FEF9C3" },
-    reminder: { icon: "alarm", color: "#F97316", bg: "#FFF7ED" },
-    high_priority_alert: { icon: "warning", color: "#EF4444", bg: "#FEF2F2" },
+  const map: Record<string, { icon: React.ComponentProps<typeof Ionicons>["name"]; color: string }> = {
+    mission_assigned: { icon: "flash", color: "#3B82F6" },
+    mission_cancelled: { icon: "flash-off", color: "#EF4444" },
+    mission_completed: { icon: "checkmark-circle", color: "#22C55E" },
+    mission_created: { icon: "flash", color: "#3B82F6" },
+    status_changed: { icon: "shield-checkmark", color: "#22C55E" },
+    news: { icon: "newspaper", color: "#8B5CF6" },
+    loa_update: { icon: "calendar", color: "#CA8A04" },
+    reminder: { icon: "alarm", color: "#F97316" },
+    high_priority_alert: { icon: "warning", color: "#EF4444" },
   };
   return map[type] ?? map["reminder"]!;
 }
@@ -73,7 +73,7 @@ function NotifCard({ item, theme, lang }: { item: NotificationItem; theme: Theme
   const conf = notifConfig(item.type);
   return (
     <View style={[styles.card, appleCardStyle(theme), { borderColor: !item.isRead ? theme.tint + "44" : theme.cardBorder }]}>
-      <View style={[styles.iconWrap, { backgroundColor: conf.bg }]}>
+      <View style={[styles.iconWrap, { backgroundColor: withAlpha(conf.color, 0.14) }]}>
         <Ionicons name={conf.icon as any} size={20} color={conf.color} />
       </View>
       <View style={styles.cardContent}>
@@ -158,13 +158,13 @@ export default function NotificationsScreen() {
             {loadError && (
               <View style={[styles.card, { backgroundColor: theme.danger + "20", borderColor: theme.danger }]}>
                 <Text style={{ color: theme.danger }}>{loadError}</Text>
-                <Pressable onPress={load}><Text style={{ color: theme.danger, textDecorationLine: "underline" }}>Retry</Text></Pressable>
+                <Pressable onPress={load}><Text style={{ color: theme.danger, textDecorationLine: "underline" }}>{t("common.retry", lang)}</Text></Pressable>
               </View>
             )}
             <View style={styles.headerRow}>
               <View>
                 <Text style={[styles.heading, { color: theme.text }]}>{t("notifications.title", lang)}</Text>
-                {unread > 0 && <Text style={[styles.unreadHint, { color: theme.tint }]}>{unread} ungelesen</Text>}
+                {unread > 0 && <Text style={[styles.unreadHint, { color: theme.tint }]}>{unread} {t("notifications.unread", lang)}</Text>}
               </View>
               {unread > 0 && (
                 <Pressable
@@ -207,15 +207,15 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 12 },
   heading: { fontSize: 28, fontFamily: "Inter_700Bold" },
   unreadHint: { fontSize: 13, fontFamily: "Inter_400Regular", marginTop: 2 },
-  markAllBtn: { paddingHorizontal: 12, paddingVertical: 11, backgroundColor: "#F0FDF4", borderRadius: 10, borderWidth: 1 },
+  markAllBtn: { paddingHorizontal: 12, paddingVertical: 11, borderRadius: 10, borderWidth: 1 },
   markAllText: { fontSize: 13, fontFamily: "Inter_500Medium" },
-  hpSection: { backgroundColor: "#FEF2F2", borderRadius: 14, padding: 14, marginBottom: 14, gap: 10, borderWidth: 1, borderColor: "#FECACA" },
+  hpSection: { borderRadius: 14, padding: 14, marginBottom: 14, gap: 10, borderWidth: 1 },
   hpHeader: { flexDirection: "row", alignItems: "center", gap: 6 },
-  hpTitle: { fontSize: 13, fontFamily: "Inter_700Bold", color: "#EF4444" },
+  hpTitle: { fontSize: 13, fontFamily: "Inter_700Bold" },
   hpCard: { flexDirection: "row", gap: 10, alignItems: "flex-start" },
-  hpDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#EF4444", marginTop: 5, flexShrink: 0 },
-  hpCardTitle: { fontSize: 13, fontFamily: "Inter_700Bold", color: "#991B1B" },
-  hpCardBody: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#DC2626", lineHeight: 16, marginTop: 2 },
+  hpDot: { width: 8, height: 8, borderRadius: 4, marginTop: 5, flexShrink: 0 },
+  hpCardTitle: { fontSize: 13, fontFamily: "Inter_700Bold" },
+  hpCardBody: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 16, marginTop: 2 },
   card: { flexDirection: "row", padding: 14, gap: 12, alignItems: "center" },
   iconWrap: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center", flexShrink: 0 },
   cardContent: { flex: 1, gap: 4 },

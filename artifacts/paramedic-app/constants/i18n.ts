@@ -260,6 +260,7 @@ const translations = {
     notifications: {
       title: "Benachrichtigungen",
       markAllRead: "Alle gelesen",
+      unread: "ungelesen",
       noNotifications: "Keine Benachrichtigungen",
       noNotificationsDesc: "Du bist auf dem neuesten Stand.",
       highPriority: "Wichtige Meldungen",
@@ -781,6 +782,7 @@ const translations = {
     notifications: {
       title: "Notifications",
       markAllRead: "Mark all read",
+      unread: "unread",
       noNotifications: "No Notifications",
       noNotificationsDesc: "You're all caught up.",
       highPriority: "Priority Alerts",
