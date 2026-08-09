@@ -29,6 +29,7 @@ export const PERMISSIONS = [
   { key: "notifications.view_all", description: "Alle Benachrichtigungen sehen, nicht nur eigene", essential: false, hiddenFromUi: false },
   { key: "reports.read_all", description: "Alle Einsatzprotokolle lesen, nicht nur eigene", essential: false, hiddenFromUi: false },
   { key: "reports.see_patient_info", description: "Patientendaten in Einsatzprotokollen sehen", essential: false, hiddenFromUi: false },
+  { key: "roster.manage", description: "Dienstplan bearbeiten (Schichten anlegen, aendern, loeschen)", essential: false, hiddenFromUi: false },
   { key: "roles.manage", description: "Rollen anlegen, umbenennen, loeschen und ihre Berechtigungen setzen", essential: true, hiddenFromUi: true },
 ] as const satisfies readonly PermissionDef[];
 
@@ -48,17 +49,17 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, readonly PermissionKey[]> 
     "news.moderate", "news.publish_direct", "loa.create", "loa.moderate",
     "missions.create", "missions.moderate", "missions.view_all",
     "activity.view", "notifications.view_all",
-    "reports.read_all", "reports.see_patient_info",
+    "reports.read_all", "reports.see_patient_info", "roster.manage",
   ],
   sanitaeter_leitung_admin: [
     "users.read_all", "users.assign_role",
     "loa.create", "loa.moderate",
     "missions.create", "missions.moderate", "missions.view_all", "missions.receive_alerts",
     "activity.view", "notifications.view_all",
-    "reports.read_all", "reports.see_patient_info",
+    "reports.read_all", "reports.see_patient_info", "roster.manage",
   ],
   sanitaeter_leitung: [
-    "loa.create", "loa.moderate",
+    "loa.create", "loa.moderate", "roster.manage",
     "missions.create", "missions.moderate", "missions.view_all", "missions.receive_alerts",
     "activity.view", "notifications.view_all",
     "reports.read_all", "reports.see_patient_info",
@@ -69,7 +70,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, readonly PermissionKey[]> 
     "loa.create", "loa.moderate",
     "missions.create", "missions.moderate", "missions.view_all",
     "activity.view",
-    "reports.see_patient_info",
+    "reports.see_patient_info", "roster.manage",
   ],
   sanitaeter: ["loa.create", "missions.receive_alerts"],
 };

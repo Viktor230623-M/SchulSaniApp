@@ -3,10 +3,12 @@ import * as Haptics from "expo-haptics";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import Animated, {
@@ -20,12 +22,252 @@ import { useTopPad } from "@/hooks/useTopPad";
 import { useRoles } from "@/hooks/useRoles";
 import { MedicalCross } from "@/components/MedicalCross";
 import { appleCardStyle } from "@/components/AppleSurface";
+import { DatePickerField } from "@/components/DatePickerField";
 import { t } from "@/constants/i18n";
 import { getTheme } from "@/constants/theme";
-import type { User } from "@/models";
+import type { AppLanguage, Shift, User } from "@/models";
 import { confirmAction, notify } from "@/lib/dialog";
 import ApiService from "@/services/ApiService";
 import { useAppStore } from "@/store/useAppStore";
+
+/** Montag der Woche, zu der das Datum gehoert (als lokaler Tagesanfang). */
+function mondayOf(d: Date): Date {
+  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const offset = (x.getDay() + 6) % 7;
+  x.setDate(x.getDate() - offset);
+  return x;
+}
+
+/** ISO-Kalenderwoche (Montag als Wochenstart), fuer die Wochenkennung im Plan. */
+function isoWeek(d: Date): number {
+  const x = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const dayNum = (x.getUTCDay() + 6) % 7;
+  x.setUTCDate(x.getUTCDate() - dayNum + 3);
+  const firstThursday = new Date(Date.UTC(x.getUTCFullYear(), 0, 4));
+  const firstDayNum = (firstThursday.getUTCDay() + 6) % 7;
+  firstThursday.setUTCDate(firstThursday.getUTCDate() - firstDayNum + 3);
+  return 1 + Math.round((x.getTime() - firstThursday.getTime()) / (7 * 24 * 3600 * 1000));
+}
+
+function fmtTime(d: Date): string {
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+function fmtDay(d: Date, lang: AppLanguage): string {
+  return d.toLocaleDateString(lang === "de" ? "de-DE" : "en-GB", {
+    weekday: "long",
+    day: "2-digit",
+    month: "2-digit",
+  });
+}
+
+function fmtShort(d: Date, lang: AppLanguage): string {
+  return d.toLocaleDateString(lang === "de" ? "de-DE" : "en-GB", { day: "2-digit", month: "2-digit" });
+}
+
+function dateWithTime(d: Date, time: string): Date {
+  const [h, m] = time.split(":").map(Number);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), h ?? 0, m ?? 0);
+}
+
+interface ShiftModalProps {
+  shift: Shift | null;
+  defaultDate: Date;
+  paramedics: User[];
+  lang: AppLanguage;
+  theme: ReturnType<typeof getTheme>;
+  onClose: () => void;
+  onSaved: () => void;
+  onDeleted: () => void;
+}
+
+function ShiftModal({ shift, defaultDate, paramedics, lang, theme, onClose, onSaved, onDeleted }: ShiftModalProps) {
+  const [title, setTitle] = useState(shift?.title ?? "");
+  const [location, setLocation] = useState(shift?.location ?? "");
+  const [date, setDate] = useState(() => (shift ? new Date(shift.startsAt) : defaultDate));
+  const [startTime, setStartTime] = useState(() => (shift ? fmtTime(new Date(shift.startsAt)) : "13:00"));
+  const [endTime, setEndTime] = useState(() => (shift ? fmtTime(new Date(shift.endsAt)) : "14:00"));
+  const [memberIds, setMemberIds] = useState<Set<string>>(() => new Set(shift?.members.map((m) => m.userId) ?? []));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const TIME_RE = /^([01]?\d|2[0-3]):[0-5]\d$/;
+  const displayName = (u: User) =>
+    u.firstName && u.lastName
+      ? `${u.firstName.charAt(0).toUpperCase() + u.firstName.slice(1).toLowerCase()} ${u.lastName.charAt(0).toUpperCase() + u.lastName.slice(1).toLowerCase()}`
+      : u.id.replace("iserv-", "");
+
+  function toggleMember(id: string) {
+    setMemberIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function save() {
+    if (!title.trim()) {
+      setError(t("duty.rosterTitleRequired", lang));
+      return;
+    }
+    if (!TIME_RE.test(startTime) || !TIME_RE.test(endTime)) {
+      setError(t("duty.rosterTimeInvalid", lang));
+      return;
+    }
+    const startsAt = dateWithTime(date, startTime);
+    const endsAt = dateWithTime(date, endTime);
+    if (endsAt <= startsAt) {
+      setError(t("duty.rosterTimeInvalid", lang));
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      if (shift) {
+        await ApiService.updateShift(shift.id, {
+          title: title.trim(),
+          location: location.trim() || null,
+          startsAt: startsAt.toISOString(),
+          endsAt: endsAt.toISOString(),
+        });
+      } else {
+        await ApiService.createShift({
+          title: title.trim(),
+          location: location.trim() || undefined,
+          startsAt: startsAt.toISOString(),
+          endsAt: endsAt.toISOString(),
+          memberIds: [...memberIds],
+        });
+      }
+      onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("duty.rosterCreateError", lang));
+      setSaving(false);
+    }
+  }
+
+  async function remove() {
+    if (!shift) return;
+    const ok = await confirmAction({
+      title: t("duty.rosterDelete", lang),
+      message: t("duty.rosterDeleteConfirm", lang),
+      confirmLabel: t("common.delete", lang),
+      destructive: true,
+    });
+    if (!ok) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await ApiService.deleteShift(shift.id);
+      onDeleted();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("duty.rosterDeleteError", lang));
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <View style={styles.modalBackdrop}>
+        <View style={[styles.modalCard, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
+          <Text style={[styles.modalTitle, { color: theme.text }]}>
+            {shift ? t("duty.rosterEditTitle", lang) : t("duty.rosterNewTitle", lang)}
+          </Text>
+          <ScrollView
+            style={{ maxHeight: 520 }}
+            contentContainerStyle={{ gap: 12 }}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={[styles.inputWrap, { backgroundColor: theme.inputBackground, borderColor: theme.inputBorder }]}>
+              <Text style={[styles.inputLabel, { color: theme.textTertiary }]}>{t("duty.rosterFieldTitle", lang)}</Text>
+              <TextInput
+                value={title}
+                onChangeText={setTitle}
+                placeholder={t("duty.rosterFieldTitlePlaceholder", lang)}
+                placeholderTextColor={theme.textTertiary}
+                style={[styles.inputText, { color: theme.text }]}
+              />
+            </View>
+            <View style={[styles.inputWrap, { backgroundColor: theme.inputBackground, borderColor: theme.inputBorder }]}>
+              <Text style={[styles.inputLabel, { color: theme.textTertiary }]}>{t("duty.rosterFieldLocation", lang)}</Text>
+              <TextInput
+                value={location}
+                onChangeText={setLocation}
+                placeholder={t("duty.rosterFieldLocationPlaceholder", lang)}
+                placeholderTextColor={theme.textTertiary}
+                style={[styles.inputText, { color: theme.text }]}
+              />
+            </View>
+            <DatePickerField value={date} onChange={setDate} label={t("duty.rosterFieldDate", lang)} />
+            <View style={styles.timeRow}>
+              <View style={[styles.inputWrap, { flex: 1, backgroundColor: theme.inputBackground, borderColor: theme.inputBorder }]}>
+                <Text style={[styles.inputLabel, { color: theme.textTertiary }]}>{t("duty.rosterFieldStart", lang)}</Text>
+                <TextInput
+                  value={startTime}
+                  onChangeText={setStartTime}
+                  placeholder="13:00"
+                  placeholderTextColor={theme.textTertiary}
+                  style={[styles.inputText, { color: theme.text }]}
+                  autoCapitalize="none"
+                />
+              </View>
+              <View style={[styles.inputWrap, { flex: 1, backgroundColor: theme.inputBackground, borderColor: theme.inputBorder }]}>
+                <Text style={[styles.inputLabel, { color: theme.textTertiary }]}>{t("duty.rosterFieldEnd", lang)}</Text>
+                <TextInput
+                  value={endTime}
+                  onChangeText={setEndTime}
+                  placeholder="14:00"
+                  placeholderTextColor={theme.textTertiary}
+                  style={[styles.inputText, { color: theme.text }]}
+                  autoCapitalize="none"
+                />
+              </View>
+            </View>
+            {paramedics.length > 0 && (
+              <View>
+                <Text style={[styles.inputLabel, { color: theme.textTertiary }]}>{t("duty.rosterFieldMembers", lang)}</Text>
+                <View style={styles.memberRow}>
+                  {paramedics.map((u) => {
+                    const active = memberIds.has(u.id);
+                    return (
+                      <Pressable
+                        key={u.id}
+                        onPress={() => toggleMember(u.id)}
+                        style={[
+                          styles.memberChip,
+                          {
+                            backgroundColor: active ? theme.tint : theme.inputBackground,
+                            borderColor: active ? theme.tint : theme.inputBorder,
+                          },
+                        ]}
+                      >
+                        <Text style={[styles.memberChipText, { color: active ? "#fff" : theme.text }]}>{displayName(u)}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+            {error && <Text style={[styles.modalError, { color: theme.danger }]}>{error}</Text>}
+            <Pressable onPress={save} disabled={saving} style={[styles.modalSave, { backgroundColor: theme.tint }]}>
+              {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.modalSaveText}>{t("duty.rosterSave", lang)}</Text>}
+            </Pressable>
+            {shift && (
+              <Pressable onPress={remove} disabled={saving} style={[styles.modalDelete, { borderColor: theme.cardBorder }]}>
+                <Text style={[styles.modalDeleteText, { color: theme.danger }]}>{t("duty.rosterDelete", lang)}</Text>
+              </Pressable>
+            )}
+          </ScrollView>
+          <Pressable onPress={onClose} style={[styles.modalCancel, { borderColor: theme.cardBorder }]}>
+            <Text style={[styles.modalCancelText, { color: theme.textSecondary }]}>{t("common.cancel", lang)}</Text>
+          </Pressable>
+        </View>
+      </View>
+    </Modal>
+  );
+}
 
 export default function DutyScreen() {
   const insets = useSafeAreaInsets();
@@ -42,9 +284,18 @@ export default function DutyScreen() {
   const [onDutyUsers, setOnDutyUsers] = useState<User[]>([]);
   const [listLoading, setListLoading] = useState(false);
 
+  const [weekStart, setWeekStart] = useState<Date>(() => mondayOf(new Date()));
+  const [shifts, setShifts] = useState<Shift[]>([]);
+  const [rosterLoading, setRosterLoading] = useState(false);
+  const [modal, setModal] = useState<{ shift: Shift | null } | null>(null);
+  const [users, setUsers] = useState<User[]>([]);
+
   const isOnDuty = dutyStatus === "on_duty";
   const scale = useSharedValue(1);
   const animatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+
+  const canManage = (user?.permissions ?? []).includes("roster.manage");
+  const paramedics = users.filter((u) => (u.role ?? "").startsWith("sanitaeter"));
 
   useEffect(() => {
     // sync own duty status from backend so it's correct after app reopen
@@ -61,20 +312,49 @@ export default function DutyScreen() {
       .finally(() => setListLoading(false));
   }, []);
 
+  useEffect(() => {
+    setRosterLoading(true);
+    const weekEnd = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + 7);
+    ApiService.getShifts(weekStart.toISOString(), weekEnd.toISOString())
+      .then(setShifts)
+      .catch((err) => {
+        console.error("Failed to load roster:", err);
+        notify(t("common.error", lang), t("duty.updateFailed", lang));
+      })
+      .finally(() => setRosterLoading(false));
+  }, [weekStart]);
+
+  function moveWeek(delta: number) {
+    setWeekStart((prev) => new Date(prev.getFullYear(), prev.getMonth(), prev.getDate() + 7 * delta));
+  }
+
+  function openModal(shift: Shift | null) {
+    setModal({ shift });
+    if (users.length === 0) {
+      ApiService.getAllUsers()
+        .then(setUsers)
+        .catch(() => {});
+    }
+  }
+
   async function handleToggle() {
     if (dutyLoading) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     scale.value = withSpring(0.93, {}, () => { scale.value = withSpring(1); });
     setDutyLoading(true);
     const newStatus = isOnDuty ? "off_duty" : "on_duty";
+    const previous = dutyStatus;
+    // Optimistisch: UI schaltet sofort um, Ruecksetzen erst bei Fehler.
+    setDutyStatus(newStatus);
     try {
       await ApiService.updateDutyStatus(newStatus);
-      setDutyStatus(newStatus);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      // Update on-duty list
       const updated = await ApiService.getOnDutyUsers();
       setOnDutyUsers(updated);
     } catch (err) {
+      // Rollback auf den vorherigen Zustand, damit der Nutzer nicht glaubt,
+      // der Wechsel sei durchgegangen.
+      setDutyStatus(previous);
       console.error("Failed to update duty status:", err);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       const message = err instanceof Error ? err.message : t("duty.updateFailed", lang);
@@ -85,6 +365,20 @@ export default function DutyScreen() {
   }
 
   const topPad = useTopPad();
+
+  const byDay = new Map<string, Shift[]>();
+  for (const s of shifts) {
+    const key = new Date(s.startsAt).toDateString();
+    const list = byDay.get(key) ?? [];
+    list.push(s);
+    byDay.set(key, list);
+  }
+  const dayKeys = [...byDay.keys()].sort();
+
+  const weekLast = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + 6);
+  const weekRange = t("duty.rosterWeekRange", lang)
+    .replace("{from}", fmtShort(weekStart, lang))
+    .replace("{to}", fmtShort(weekLast, lang));
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -144,6 +438,63 @@ export default function DutyScreen() {
         </View>
 
         <View style={[styles.section, appleCardStyle(theme)]}>
+          <View style={styles.rosterHeader}>
+            <Text style={[styles.sectionTitle, { color: theme.textTertiary }]}>{t("duty.rosterTitle", lang)}</Text>
+            {canManage && (
+              <Pressable onPress={() => openModal(null)} style={[styles.addBtn, { backgroundColor: theme.tint }]}>
+                <Ionicons name="add" size={18} color="#fff" />
+                <Text style={styles.addBtnText}>{t("duty.rosterAdd", lang)}</Text>
+              </Pressable>
+            )}
+          </View>
+          <View style={styles.rosterWeekRow}>
+            <Pressable onPress={() => moveWeek(-1)} hitSlop={10} style={styles.weekNav}>
+              <Ionicons name="chevron-back" size={20} color={theme.tint} />
+            </Pressable>
+            <Text style={[styles.rosterWeekLabel, { color: theme.text }]}>
+              {t("duty.rosterWeekShort", lang)} {isoWeek(weekStart)} · {weekRange}
+            </Text>
+            <Pressable onPress={() => moveWeek(1)} hitSlop={10} style={styles.weekNav}>
+              <Ionicons name="chevron-forward" size={20} color={theme.tint} />
+            </Pressable>
+          </View>
+          {rosterLoading ? (
+            <ActivityIndicator color={theme.tint} />
+          ) : dayKeys.length === 0 ? (
+            <View style={{ gap: 4 }}>
+              <Text style={[styles.noOne, { color: theme.textSecondary }]}>{t("duty.rosterNoShifts", lang)}</Text>
+              <Text style={[styles.hintText, { color: theme.textTertiary }]}>{t("duty.rosterNoShiftsDesc", lang)}</Text>
+            </View>
+          ) : (
+            dayKeys.map((k) => (
+              <View key={k} style={{ gap: 8 }}>
+                <Text style={[styles.rosterDay, { color: theme.textTertiary }]}>{fmtDay(new Date(k), lang)}</Text>
+                {(byDay.get(k) ?? []).map((s) => (
+                  <Pressable
+                    key={s.id}
+                    onPress={canManage ? () => openModal(s) : undefined}
+                    style={[styles.shiftCard, { backgroundColor: theme.backgroundTertiary }]}
+                  >
+                    <View style={styles.shiftTimeCol}>
+                      <Text style={[styles.shiftTime, { color: theme.tintDark }]}>{fmtTime(new Date(s.startsAt))}</Text>
+                      <Text style={[styles.shiftTimeEnd, { color: theme.textTertiary }]}>{fmtTime(new Date(s.endsAt))}</Text>
+                    </View>
+                    <View style={{ flex: 1, gap: 2 }}>
+                      <Text style={[styles.shiftTitle, { color: theme.text }]}>{s.title}</Text>
+                      {s.location ? <Text style={[styles.shiftLocation, { color: theme.textSecondary }]}>{s.location}</Text> : null}
+                      <Text style={[styles.shiftMembers, { color: theme.textTertiary }]}>
+                        {s.members.length > 0 ? s.members.map((m) => m.userName).join(", ") : t("duty.rosterNoMembers", lang)}
+                      </Text>
+                    </View>
+                    {canManage && <Ionicons name="pencil" size={16} color={theme.textTertiary} />}
+                  </Pressable>
+                ))}
+              </View>
+            ))
+          )}
+        </View>
+
+        <View style={[styles.section, appleCardStyle(theme)]}>
           <Text style={[styles.sectionTitle, { color: theme.textTertiary }]}>
             {t("duty.whoIsOnDuty", lang)}
           </Text>
@@ -185,6 +536,25 @@ export default function DutyScreen() {
           ))}
         </View>
       </ScrollView>
+
+      {modal && (
+        <ShiftModal
+          shift={modal.shift}
+          defaultDate={weekStart}
+          paramedics={paramedics}
+          lang={lang}
+          theme={theme}
+          onClose={() => setModal(null)}
+          onSaved={() => {
+            setModal(null);
+            moveWeek(0);
+          }}
+          onDeleted={() => {
+            setModal(null);
+            moveWeek(0);
+          }}
+        />
+      )}
     </View>
   );
 }
@@ -212,4 +582,38 @@ const styles = StyleSheet.create({
   onDutyPip: { width: 8, height: 8, borderRadius: 4 },
   hintRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
   hintText: { fontSize: 13, fontFamily: "Inter_400Regular", flex: 1, lineHeight: 18 },
+  rosterHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  addBtn: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999 },
+  addBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#fff" },
+  rosterWeekRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  weekNav: { padding: 6 },
+  rosterWeekLabel: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  rosterDay: { fontSize: 12, fontFamily: "Inter_600SemiBold", textTransform: "capitalize", marginTop: 4 },
+  shiftCard: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    padding: 12, borderRadius: 14,
+  },
+  shiftTimeCol: { alignItems: "flex-start", minWidth: 48 },
+  shiftTime: { fontSize: 15, fontFamily: "Inter_700Bold" },
+  shiftTimeEnd: { fontSize: 12, fontFamily: "Inter_400Regular" },
+  shiftTitle: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  shiftLocation: { fontSize: 13, fontFamily: "Inter_400Regular" },
+  shiftMembers: { fontSize: 12, fontFamily: "Inter_400Regular" },
+  modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center", padding: 20 },
+  modalCard: { width: "100%", maxWidth: 420, borderRadius: 20, padding: 20, borderWidth: 1, gap: 14 },
+  modalTitle: { fontSize: 18, fontFamily: "Inter_700Bold" },
+  inputWrap: { padding: 12, borderRadius: 12, borderWidth: 1 },
+  inputLabel: { fontSize: 12, fontFamily: "Inter_400Regular", marginBottom: 4 },
+  inputText: { fontSize: 15, fontFamily: "Inter_500Medium", padding: 0 },
+  timeRow: { flexDirection: "row", gap: 12 },
+  memberRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  memberChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, borderWidth: 1 },
+  memberChipText: { fontSize: 13, fontFamily: "Inter_500Medium" },
+  modalError: { fontSize: 13, fontFamily: "Inter_500Medium" },
+  modalSave: { paddingVertical: 14, borderRadius: 14, alignItems: "center" },
+  modalSaveText: { fontSize: 15, fontFamily: "Inter_700Bold", color: "#fff" },
+  modalDelete: { paddingVertical: 12, borderRadius: 14, alignItems: "center", borderWidth: 1 },
+  modalDeleteText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  modalCancel: { paddingVertical: 12, borderRadius: 14, alignItems: "center", borderWidth: 1 },
+  modalCancelText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
 });

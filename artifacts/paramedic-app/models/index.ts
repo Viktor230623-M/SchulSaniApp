@@ -134,6 +134,24 @@ export interface LOARequest {
   translationsJson?: string | null;
 }
 
+export interface ShiftMember {
+  userId: string;
+  userName: string;
+}
+
+/** Schicht aus dem Dienstplan (GET /roster) mit aufgeloesten Mitgliedern. */
+export interface Shift {
+  id: string;
+  schoolId: string;
+  title: string;
+  location: string | null;
+  startsAt: string;
+  endsAt: string;
+  createdAt: string;
+  updatedAt: string;
+  members: ShiftMember[];
+}
+
 export type ActivityType =
   | "login"
   | "logout"

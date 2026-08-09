@@ -170,6 +170,39 @@ export const loaTable = pgTable("loa", {
   translationsJson: text("translations_json"),
 });
 
+// Dienstplan (Schichten). Eine Schicht ist ein Zeitfenster (z. B. Pausen- oder
+// Nachmittagsdienst), dem Verantwortliche ein oder mehrere Mitglieder zuordnen.
+// Reine Planungsdaten ohne Gesundheitsbezug, trotzdem schulgebunden wie alle
+// anderen Tabellen.
+export const shiftsTable = pgTable("shifts", {
+  id: text("id").primaryKey(),
+  schoolId: text("school_id").notNull(),
+  title: text("title").notNull(),
+  location: text("location"),
+  startsAt: timestamp("starts_at").notNull(),
+  endsAt: timestamp("ends_at").notNull(),
+  createdBy: text("created_by").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => [
+  index("shifts_school_starts_idx").on(t.schoolId, t.startsAt),
+]);
+
+// Zuordnung Mitglied -> Schicht. Der Anzeigename wird beim Anlegen
+// denormalisiert abgelegt (wie loa.user_name), damit die Liste ohne Join auf
+// users auskommt und Umbenennungen den Plan nicht zerlegen.
+export const shiftMembersTable = pgTable("shift_members", {
+  id: text("id").primaryKey(),
+  schoolId: text("school_id").notNull(),
+  shiftId: text("shift_id").notNull().references(() => shiftsTable.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull(),
+  userName: text("user_name"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [
+  unique("shift_members_shift_user_key").on(t.shiftId, t.userId),
+  index("shift_members_user_idx").on(t.userId),
+]);
+
 // Mission activity log table (from BLOCK 2)
 export const missionActivityLogTable = pgTable("mission_activity_log", {
   id: text("id").primaryKey(),
@@ -401,3 +434,7 @@ export type RolePermission = typeof rolePermissionsTable.$inferSelect;
 
 export type Session = typeof sessionsTable.$inferSelect;
 export type NewSession = typeof sessionsTable.$inferInsert;
+export type Shift = typeof shiftsTable.$inferSelect;
+export type NewShift = typeof shiftsTable.$inferInsert;
+export type ShiftMember = typeof shiftMembersTable.$inferSelect;
+export type NewShiftMember = typeof shiftMembersTable.$inferInsert;

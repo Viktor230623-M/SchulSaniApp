@@ -10,6 +10,7 @@ import notificationsRouter from "./notifications";
 import activityRouter from "./activity";
 import incidentReportsRouter from "./incidentReports";
 import rolesRouter from "./roles";
+import rosterRouter from "./roster";
 import dbConsoleRouter from "./dbConsole";
 
 const router: IRouter = Router();
@@ -25,6 +26,7 @@ router.use("/notifications", notificationsRouter);
 router.use("/activity", activityRouter);
 router.use("/incident-reports", incidentReportsRouter);
 router.use("/roles", rolesRouter);
+router.use("/roster", rosterRouter);
 router.use("/db-console", dbConsoleRouter);
 
 export default router;

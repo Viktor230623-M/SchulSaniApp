@@ -10,6 +10,7 @@ import type {
   NewsItem,
   NotificationItem,
   RoleInfo,
+  Shift,
   User,
   SqlPreset,
   DbConsoleResult,
@@ -495,6 +496,69 @@ const ApiService = {
     if (!resp.ok) {
       const data = await resp.json().catch(() => ({}));
       throw new Error(data.error ?? "Abwesenheitsantrag konnte nicht eingelegt werden");
+    }
+    return resp.json();
+  },
+
+  async getShifts(from?: string, to?: string): Promise<Shift[]> {
+    const qs = from && to ? `?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}` : "";
+    const resp = await apiFetch(`${API_BASE}/roster${qs}`, { headers: headers() });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      throw new Error(data.error ?? "Dienstplan konnte nicht geladen werden");
+    }
+    return resp.json();
+  },
+
+  async createShift(input: {
+    title: string;
+    location?: string;
+    startsAt: string;
+    endsAt: string;
+    memberIds: string[];
+  }): Promise<Shift> {
+    const resp = await apiFetch(`${API_BASE}/roster`, { method: "POST", headers: headers(), body: JSON.stringify(input) });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      throw new Error(data.error ?? "Schicht konnte nicht angelegt werden");
+    }
+    return resp.json();
+  },
+
+  async updateShift(
+    id: string,
+    input: Partial<{ title: string; location: string | null; startsAt: string; endsAt: string }>,
+  ): Promise<Shift> {
+    const resp = await apiFetch(`${API_BASE}/roster/${id}`, { method: "PATCH", headers: headers(), body: JSON.stringify(input) });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      throw new Error(data.error ?? "Schicht konnte nicht geändert werden");
+    }
+    return resp.json();
+  },
+
+  async deleteShift(id: string): Promise<void> {
+    const resp = await apiFetch(`${API_BASE}/roster/${id}`, { method: "DELETE", headers: headers() });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      throw new Error(data.error ?? "Schicht konnte nicht gelöscht werden");
+    }
+  },
+
+  async addShiftMember(id: string, userId: string): Promise<Shift> {
+    const resp = await apiFetch(`${API_BASE}/roster/${id}/members`, { method: "POST", headers: headers(), body: JSON.stringify({ userId }) });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      throw new Error(data.error ?? "Mitglied konnte nicht hinzugefügt werden");
+    }
+    return resp.json();
+  },
+
+  async removeShiftMember(id: string, userId: string): Promise<Shift> {
+    const resp = await apiFetch(`${API_BASE}/roster/${id}/members/${encodeURIComponent(userId)}`, { method: "DELETE", headers: headers() });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      throw new Error(data.error ?? "Mitglied konnte nicht entfernt werden");
     }
     return resp.json();
   },
