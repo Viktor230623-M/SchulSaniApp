@@ -56,6 +56,9 @@ docs/superpowers/
 .claude/
 .playwright-mcp/
 
+# Marketing-Landing (demo.schulsaniapp.com) — kommt nicht auf GitHub
+landing-site/
+
 # graphify — lokale Artefakte, nicht committen
 .graphify/branch.json
 .graphify/worktree.json
