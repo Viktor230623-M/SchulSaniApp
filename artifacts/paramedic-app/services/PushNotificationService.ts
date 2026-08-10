@@ -1,8 +1,13 @@
 import * as Notifications from "expo-notifications";
 import * as Device from "expo-device";
-import Constants from "expo-constants";
 import { Platform } from "react-native";
 import ApiService from "./ApiService";
+
+// Native Benachrichtigungen laufen ueber die zentralen Konten des Anbieters:
+// APNs (iOS) bzw. FCM (Android). Der Client registriert nur noch das native
+// Device-Token -- es gibt keinen Expo-Push-Token und keine Abhaengigkeit vom
+// Expo-Push-Dienst mehr. Die Payloads sind inhaltsleer; den Inhalt laedt und
+// entschluesselt die App selbst nach.
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -14,7 +19,7 @@ Notifications.setNotificationHandler({
   }),
 });
 
-let expoPushToken: string | null = null;
+let deviceToken: string | null = null;
 
 export async function requestNotificationPermissions(): Promise<boolean> {
   if (!Device.isDevice) {
@@ -55,6 +60,21 @@ export async function requestNotificationPermissions(): Promise<boolean> {
   return true;
 }
 
+/**
+ * Native Device-Token holen. Auf iOS ist es das APNs-Token, auf Android das
+ * FCM-Token aus der Firebase-Konfiguration des Anbieters (google-services.json
+ * im nativen Build). `data` kann je nach Plattform/Version ein String oder ein
+ * Objekt `{ type, data }` sein -- beide Formen werden normalisiert.
+ */
+function normalizeToken(data: unknown): string | null {
+  if (typeof data === "string" && data.length > 0) return data;
+  if (data && typeof data === "object") {
+    const inner = (data as { data?: unknown }).data;
+    if (typeof inner === "string" && inner.length > 0) return inner;
+  }
+  return null;
+}
+
 export async function registerForPushNotificationsAsync(): Promise<string | null> {
   try {
     const hasPermission = await requestNotificationPermissions();
@@ -62,27 +82,20 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
       return null;
     }
 
-    const projectId =
-      Constants.expoConfig?.extra?.eas?.projectId ??
-      Constants.easConfig?.projectId;
-
-    if (!projectId) {
-      console.log("Push notifications: no EAS projectId configured, skipping token registration");
+    const { data } = await Notifications.getDevicePushTokenAsync();
+    const token = normalizeToken(data);
+    if (!token) {
+      console.log("Push notifications: no device token available");
       return null;
     }
 
-    const { data: token } = await Notifications.getExpoPushTokenAsync({ projectId });
+    deviceToken = token;
+    const platform: "ios" | "android" | "web" = Platform.OS === "ios" ? "ios" : "android";
 
-    if (token) {
-      expoPushToken = token;
-      
-      const platform: "ios" | "android" | "web" = Platform.OS === "ios" ? "ios" : "android";
-      
-      try {
-        await ApiService.registerDeviceToken(token, platform);
-      } catch (err) {
-        console.error("Failed to register token with backend:", err);
-      }
+    try {
+      await ApiService.registerDeviceToken(token, platform);
+    } catch (err) {
+      console.error("Failed to register token with backend:", err);
     }
 
     return token;
@@ -93,13 +106,13 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
 }
 
 export async function unregisterPushNotifications(): Promise<void> {
-  if (expoPushToken) {
+  if (deviceToken) {
     try {
-      await ApiService.unregisterDeviceToken(expoPushToken);
+      await ApiService.unregisterDeviceToken(deviceToken);
     } catch (err) {
       console.error("Failed to unregister token:", err);
     }
-    expoPushToken = null;
+    deviceToken = null;
   }
 }
 

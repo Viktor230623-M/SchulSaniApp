@@ -38,6 +38,10 @@ interface AppState {
   logout: () => void;
   setToken: (token: string | null) => void;
 
+  /** true, wenn ein Schluesselpaar existiert, der KEK aber noch nicht eingegeben wurde. */
+  cryptoLocked: boolean;
+  setCryptoLocked: (locked: boolean) => void;
+
   theme: AppTheme;
   language: AppLanguage;
   setTheme: (theme: AppTheme) => void;
@@ -94,6 +98,7 @@ export const useAppStore = create<AppState>()(
           user: null,
           authStatus: "anon",
           token: null,
+          cryptoLocked: false,
           theme: s.theme === "teal" ? "light" : s.theme,
           dutyStatus: "off_duty",
           missions: [],
@@ -102,6 +107,9 @@ export const useAppStore = create<AppState>()(
           notifications: [],
         })),
       setToken: (token) => set({ token }),
+
+      cryptoLocked: false,
+      setCryptoLocked: (cryptoLocked) => set({ cryptoLocked }),
 
       theme: "light",
       language: "de",
@@ -186,6 +194,7 @@ export const useAppStore = create<AppState>()(
       merge: (persistedState, currentState) => ({
         ...currentState,
         ...(persistedState as Partial<AppState>),
+        cryptoLocked: false,
       }),
     }
   )

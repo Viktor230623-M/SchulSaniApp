@@ -843,6 +843,22 @@ export default function SettingsScreen() {
             </Pressable>
           )}
 
+          {canExportData && (
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push("/admin/crypto");
+              }}
+              style={styles.sectionHeaderRow}
+            >
+              <View style={styles.adminHeaderLeft}>
+                <Ionicons name="shield-outline" size={13} color={theme.textTertiary} />
+                <Text style={[styles.sectionTitle, { color: theme.textTertiary }]}>{t("crypto.title", lang)}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={theme.textTertiary} />
+            </Pressable>
+          )}
+
           <Pressable
             onPress={() => {
               setShowAdmin((v) => !v);

@@ -3,7 +3,7 @@ import React, { useState } from "react";
 import { AuthButton, AuthField, AuthLink, AuthMessage, AuthShell } from "@/components/AuthSurface";
 import { getTheme } from "@/constants/theme";
 import { t } from "@/constants/i18n";
-import ApiService from "@/services/ApiService";
+import ApiService, { syncCryptoLockState } from "@/services/ApiService";
 import { useAppStore } from "@/store/useAppStore";
 
 /**
@@ -33,6 +33,9 @@ export default function SchulCodeScreen() {
       const restored = await ApiService.completeJoinCode(handoff, code.trim());
       setToken(restored.token);
       login(restored.user);
+      // OIDC-Konto: Sitzung ohne KEK -- der Entsperr-Screen uebernimmt, falls
+      // noch kein Schluesselpaar entsperrt ist.
+      await syncCryptoLockState();
       router.replace(
         restored.user.mustChangePassword
           ? "/passwort-wechseln"

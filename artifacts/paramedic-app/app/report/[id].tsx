@@ -32,6 +32,8 @@ import ChipTextField from "@/components/ChipTextField";
 import BodyMap, { BODY_REGION_KEYS } from "@/components/BodyMap";
 import { confirmAction, notify } from "@/lib/dialog";
 import ApiService from "@/services/ApiService";
+import { toBase64 } from "@/services/crypto/encoding";
+import { renderReportPdf, type DecryptedReport } from "@/services/reportPdfClient";
 import { has, useAppStore } from "@/store/useAppStore";
 
 
@@ -233,19 +235,15 @@ export default function ReportScreen() {
 
   async function handleSharePdf() {
     try {
-      const url = ApiService.getReportPdfUrl(report!.id, lang);
-      const filename = `Einsatzprotokoll-${report!.id.slice(0, 8)}.pdf`;
+      // Das PDF entsteht im Client aus dem bereits entschluesselten Inhalt --
+      // der Server sieht nur Chiffrat und kann keine PDFs mehr bauen.
+      const current = report ?? (await ApiService.getIncidentReport(id));
+      const bytes = await renderReportPdf(current as DecryptedReport, lang);
+      const filename = `Einsatzprotokoll-${current.id.slice(0, 8)}.pdf`;
 
       if (Platform.OS === "web") {
-        // Ueber einen Blob statt window.open: Der Abruf braucht den
-        // Authorization-Header, den ein blosser Fensteraufruf nicht mitschickt.
-        // Das `download`-Attribut oeffnet auf iOS das Teilen-Menue, waehrend
-        // ein neuer Tab mit blob:-URL dort haeufig blockiert wird.
-        const blob = await ApiService.fetchReportPdfBlob(report!.id, lang);
+        const blob = new Blob([bytes as unknown as BlobPart], { type: "application/pdf" });
         const objectUrl = URL.createObjectURL(blob);
-        // Der Timer wird sofort nach dem Erzeugen der Object-URL gesetzt, nicht
-        // erst nach Anhaengen/Klick/Entfernen. Wirft eine dieser Zeilen, ist das
-        // Aufraeumen trotzdem eingeplant und die URL leckt nicht.
         setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
         const anchor = document.createElement("a");
         anchor.href = objectUrl;
@@ -257,12 +255,15 @@ export default function ReportScreen() {
         return;
       }
 
+      // cacheDirectory ist app-privat und wird weder in iCloud gespiegelt
+      // noch mit anderen Geraeten synchronisiert. Das PDF verlaesst das Geraet
+      // nur ueber das Teilen-Menue und wird nie zum Server hochgeladen.
       const dest = `${FileSystem.cacheDirectory}${filename}`;
-      const { uri } = await FileSystem.downloadAsync(url, dest, {
-        headers: ApiService.getAuthHeaders(),
+      await FileSystem.writeAsStringAsync(dest, toBase64(bytes), {
+        encoding: FileSystem.EncodingType.Base64,
       });
       if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri, { mimeType: "application/pdf" });
+        await Sharing.shareAsync(dest, { mimeType: "application/pdf" });
       }
     } catch (e) {
       notify(t("common.error", lang), String(e));

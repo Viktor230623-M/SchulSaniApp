@@ -57,15 +57,20 @@
     "zod-validation-error": "^3.4.0"
   },
   "dependencies": {
-    "expo-device": "~7.0.2",
+    "expo": "~54.0.33",
     "expo-crypto": "~15.0.9",
+    "expo-device": "~7.0.2",
     "expo-file-system": "~17.0.1",
     "expo-modules-core": "~3.0.29",
     "expo-notifications": "~0.30.2",
-    "expo": "~54.0.33",
+    "expo-secure-store": "^15.0.8",
     "expo-sharing": "~13.0.1",
+    "libsodium-wrappers": "^0.7.16",
+    "libsodium-wrappers-sumo": "^0.8.4",
+    "pdf-lib": "^1.17.1",
     "react": "19.1.0",
     "react-native": "0.81.5",
+    "react-native-libsodium": "^1.7.0",
     "zustand": "^5.0.12"
   }
 }

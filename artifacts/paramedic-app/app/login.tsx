@@ -22,7 +22,7 @@ import { useTopPad } from "@/hooks/useTopPad";
 import { SCHOOL_NAME } from "@/constants/appConfig";
 import { t } from "@/constants/i18n";
 import { getTheme, istDunklesThema, withAlpha } from "@/constants/theme";
-import ApiService, { AuthError, type AuthProviderInfo } from "@/services/ApiService";
+import ApiService, { AuthError, syncCryptoLockState, type AuthProviderInfo } from "@/services/ApiService";
 import { useAppStore } from "@/store/useAppStore";
 
 async function createHandoffVerifier(): Promise<string> {
@@ -121,6 +121,9 @@ export default function LoginScreen() {
       });
       setToken(restored.token);
       login(restored.user);
+      // Apple/OIDC ist ohne Passwort: Die Verschluesselung muss separat
+      // entsperrt werden (Entsperr-Code) -- der Zustand entscheidet den Guard.
+      await syncCryptoLockState();
       router.replace(restored.user.profileConfirmedAt === null ? "/name-bestaetigen" : "/(tabs)/news");
     } catch (err) {
       if (err && typeof err === "object" && "code" in err && err.code === "ERR_REQUEST_CANCELED") {
@@ -195,6 +198,7 @@ export default function LoginScreen() {
 
       setToken(restored.token);
       login(restored.user);
+      await syncCryptoLockState();
       router.replace(restored.user.profileConfirmedAt === null ? "/name-bestaetigen" : "/(tabs)/news");
     } catch {
       setRedirecting(false);

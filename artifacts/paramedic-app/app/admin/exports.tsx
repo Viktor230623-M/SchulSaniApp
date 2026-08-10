@@ -12,6 +12,8 @@ import { getTheme } from "@/constants/theme";
 import { t } from "@/constants/i18n";
 import { notify } from "@/lib/dialog";
 import ApiService from "@/services/ApiService";
+import { toBase64 } from "@/services/crypto/encoding";
+import { renderReportBundlePdf, type DecryptedReport } from "@/services/reportPdfClient";
 import { has, useAppStore } from "@/store/useAppStore";
 
 type Interval = "semiannual" | "annual" | "five_years";
@@ -95,11 +97,15 @@ export default function ExportsScreen() {
     if (downloadingId) return;
     setDownloadingId(exp.id);
     try {
-      const url = ApiService.getExportPdfUrl(exp.id, lang);
+      // Das PDF-Buendel entsteht im Client aus dem entschluesselten Inhalt.
+      // Der Bundle-Abruf ist seitenwirkungsfrei; erst die Bestaetigung nach
+      // erfolgreichem Download loescht die exportierten Protokolle.
+      const bundle = await ApiService.getExportBundle(exp.id);
+      const bytes = await renderReportBundlePdf(bundle.reports as DecryptedReport[], lang);
       const filename = `SchulSani-Export-${exp.id.slice(0, 8)}.pdf`;
 
       if (Platform.OS === "web") {
-        const blob = await ApiService.fetchExportPdfBlob(exp.id, lang);
+        const blob = new Blob([bytes as unknown as BlobPart], { type: "application/pdf" });
         const objectUrl = URL.createObjectURL(blob);
         setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
         const anchor = document.createElement("a");
@@ -110,14 +116,18 @@ export default function ExportsScreen() {
         anchor.click();
         document.body.removeChild(anchor);
       } else {
+        // App-privater Cache, kein iCloud-/Geräte-Sync: Das Buendel verlässt
+        // das Geraet nur ueber das Teilen-Menue, nie ueber den Server.
         const dest = `${FileSystem.cacheDirectory}${filename}`;
-        const { uri } = await FileSystem.downloadAsync(url, dest, {
-          headers: ApiService.getAuthHeaders(),
+        await FileSystem.writeAsStringAsync(dest, toBase64(bytes), {
+          encoding: FileSystem.EncodingType.Base64,
         });
         if (await Sharing.isAvailableAsync()) {
-          await Sharing.shareAsync(uri, { mimeType: "application/pdf" });
+          await Sharing.shareAsync(dest, { mimeType: "application/pdf" });
         }
       }
+
+      await ApiService.confirmExport(exp.id);
       await load();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (err) {

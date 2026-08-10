@@ -33,6 +33,7 @@ function RootLayoutNav() {
   const setToken = useAppStore((s) => s.setToken);
   const theme = getTheme(useAppStore((s) => s.theme));
   const user = useAppStore((s) => s.user);
+  const cryptoLocked = useAppStore((s) => s.cryptoLocked);
   const profileConfirmedAt = user?.profileConfirmedAt;
   const needsProfileConfirmation = authStatus === "authed" && profileConfirmedAt === null;
   const needsPasswordChange = authStatus === "authed" && user?.mustChangePassword === true;
@@ -91,19 +92,24 @@ function RootLayoutNav() {
         contentStyle: { backgroundColor: theme.background },
       }}
     >
-      <Stack.Protected guard={authStatus === "authed" && !needsPasswordChange && !needsProfileConfirmation}>
+      <Stack.Protected guard={authStatus === "authed" && !needsPasswordChange && !cryptoLocked && !needsProfileConfirmation}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="report/index" options={{ headerShown: false }} />
         <Stack.Screen name="report/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="admin/database" options={{ headerShown: false }} />
         <Stack.Screen name="admin/sani-activity" options={{ headerShown: false }} />
         <Stack.Screen name="admin/roles" options={{ headerShown: false }} />
+        <Stack.Screen name="admin/exports" options={{ headerShown: false }} />
+        <Stack.Screen name="admin/crypto" options={{ headerShown: false }} />
         <Stack.Screen name="activity-log" />
       </Stack.Protected>
       <Stack.Protected guard={needsPasswordChange}>
         <Stack.Screen name="passwort-wechseln" options={{ headerShown: false }} />
       </Stack.Protected>
-      <Stack.Protected guard={needsProfileConfirmation && !needsPasswordChange}>
+      <Stack.Protected guard={cryptoLocked && !needsPasswordChange}>
+        <Stack.Screen name="entsperren" options={{ headerShown: false }} />
+      </Stack.Protected>
+      <Stack.Protected guard={needsProfileConfirmation && !needsPasswordChange && !cryptoLocked}>
         <Stack.Screen name="name-bestaetigen" options={{ headerShown: false }} />
       </Stack.Protected>
       <Stack.Protected guard={authStatus === "anon"}>
