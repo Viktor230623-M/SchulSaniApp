@@ -75,14 +75,18 @@ async function setStoreCryptoLocked(locked: boolean): Promise<void> {
 }
 
 /**
- * Gleicht den Entsperr-Zustand mit dem Server ab: Existiert ein Schluesselpaar
- * und der KEK ist in dieser Sitzung noch nicht eingegeben, ist die
- * Verschluesselung gesperrt und die App verlangt die Entsperrung.
+ * Gleicht den Entsperr-Zustand mit dem Server ab. Die App verlangt die
+ * Entsperrung, sobald der KEK dieser Sitzung fehlt -- auch wenn noch gar kein
+ * Schluesselpaar existiert (frisches OIDC-Konto): Dann zeigt der Entsperr-Screen
+ * den Einrichtungsmodus und erzeugt das Paar. Nur eine brauchbare Serverantwort
+ * entscheidet; bei Netzfehler bleibt der Zustand unveraendert, statt den Nutzer
+ * faelschlich zu sperren.
  */
 export async function syncCryptoLockState(): Promise<void> {
   const resp = await apiFetch(`${API_BASE}/crypto/key`, { headers: headers() });
   const data = await resp.json().catch(() => ({}));
-  await setStoreCryptoLocked(data.hasKeypair === true && !keyManager.isUnlocked());
+  const known = typeof data.hasKeypair === "boolean";
+  await setStoreCryptoLocked(known && !keyManager.isUnlocked());
 }
 
 interface DekWrap {
