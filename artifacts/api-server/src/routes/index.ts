@@ -12,6 +12,7 @@ import incidentReportsRouter from "./incidentReports";
 import rolesRouter from "./roles";
 import rosterRouter from "./roster";
 import dbConsoleRouter from "./dbConsole";
+import exportsRouter from "./exports";
 
 const router: IRouter = Router();
 
@@ -28,5 +29,6 @@ router.use("/incident-reports", incidentReportsRouter);
 router.use("/roles", rolesRouter);
 router.use("/roster", rosterRouter);
 router.use("/db-console", dbConsoleRouter);
+router.use("/exports", exportsRouter);
 
 export default router;

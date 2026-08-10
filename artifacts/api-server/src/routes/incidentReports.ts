@@ -7,6 +7,7 @@ import { notifyUser } from "../services/notifications";
 
 import { logReportAccess } from "../lib/reportAccessLog";
 import PDFDocument from "pdfkit";
+import { renderReportIntoDoc, type ReportForPdf } from "../lib/reportPdf";
 
 type Addendum = { authorId: string; authorName: string; text: string; createdAt: string };
 
@@ -370,9 +371,6 @@ router.get("/:id/pdf", requireAuth, async (req: AuthRequest, res) => {
     patientVisible: showPatient,
   });
 
-  const labels = LABELS[lang];
-  const outcomeLabel = (k: string) => labels.outcomes[k as keyof typeof labels.outcomes] ?? k;
-
   const doc = new PDFDocument({ size: "A4", margin: 50 });
 
   res.setHeader("Content-Type", "application/pdf");
@@ -382,203 +380,13 @@ router.get("/:id/pdf", requireAuth, async (req: AuthRequest, res) => {
   );
   doc.pipe(res);
 
-  // Header
-  doc.fontSize(20).font("Helvetica-Bold").text(labels.title, { align: "center" });
-  doc.moveDown(0.3);
-  doc.fontSize(10).font("Helvetica").fillColor("#666666")
-    .text(`${labels.id}: ${report.id.slice(0, 8).toUpperCase()}  |  ${report.status === "submitted" ? labels.submitted : labels.draft}`, { align: "center" });
-  doc.moveDown(0.5);
-  doc.moveTo(50, doc.y).lineTo(545, doc.y).strokeColor("#cccccc").stroke();
-  doc.moveDown(0.5);
-  doc.fillColor("#000000");
-
-  function section(title: string) {
-    doc.moveDown(0.4);
-    doc.fontSize(12).font("Helvetica-Bold").fillColor("#1a1a1a").text(title);
-    doc.moveDown(0.2);
-    doc.fontSize(10).font("Helvetica").fillColor("#333333");
-  }
-
-  function row(label: string, value: string | null | undefined) {
-    if (!value) return;
-    doc.text(`${label}: ${value}`);
-  }
-
-  // Incident section
-  section(labels.incident);
-  row(labels.date, report.incidentAt ? new Date(report.incidentAt).toLocaleDateString(lang === "de" ? "de-DE" : "en-US") : null);
-  row(labels.location, report.location);
-  if (report.careStartedAt && report.careEndedAt) {
-    const start = new Date(report.careStartedAt).toLocaleTimeString(lang === "de" ? "de-DE" : "en-US", { hour: "2-digit", minute: "2-digit" });
-    const end = new Date(report.careEndedAt).toLocaleTimeString(lang === "de" ? "de-DE" : "en-US", { hour: "2-digit", minute: "2-digit" });
-    row(labels.careTime, `${start} – ${end}`);
-  }
-  row(labels.category, report.category);
-  if (report.description) {
-    doc.text(`${labels.description}:`);
-    doc.text(report.description, { indent: 10 });
-  }
-  row(labels.injurySites, report.injurySites);
-
-  // Patient section
-  if (showPatient) {
-    section(labels.patient);
-    row(labels.patientType, report.patientType ? labels.patientTypes[report.patientType as keyof typeof labels.patientTypes] : null);
-    if (report.patientFirstName || report.patientLastName) {
-      row(labels.patientName, `${report.patientFirstName ?? ""} ${report.patientLastName ?? ""}`.trim());
-    }
-    row(labels.patientClass, report.patientClass);
-    row(labels.patientAge, report.patientAge !== null ? String(report.patientAge) : null);
-    if (report.emergencyContactName || report.emergencyContactPhone) {
-      row(
-        labels.emergencyContact,
-        [report.emergencyContactName, report.emergencyContactPhone].filter(Boolean).join(" · ")
-      );
-    }
-  }
-
-  // Vitals section (only if any recorded)
-  const hasVitals = report.pulseBpm || report.spo2 || report.respRate || report.bloodPressure || report.consciousnessAvpu || report.painScore !== null;
-  if (hasVitals) {
-    section(labels.vitals);
-    row("Puls / Pulse", report.pulseBpm ? `${report.pulseBpm} bpm` : null);
-    row("SpO2", report.spo2 ? `${report.spo2}%` : null);
-    row(labels.respRate, report.respRate ? `${report.respRate}/min` : null);
-    row(labels.bloodPressure, report.bloodPressure);
-    row("AVPU", report.consciousnessAvpu);
-    row(labels.pain, report.painScore !== null ? `${report.painScore}/10` : null);
-  }
-
-  // Treatment section
-  section(labels.treatment);
-  row(labels.measures_label, report.measures);
-  row(labels.treatmentNotes, report.treatmentNotes);
-
-  // Outcome section
-  section(labels.outcome);
-  row(labels.outcomeLabel, report.outcome ? outcomeLabel(report.outcome) : null);
-  row(labels.outcomeNotes, report.outcomeNotes);
-
-  // Responders section
-  section(labels.responders);
-  const responderIds = (report.responderIdsJson as string[] | null) ?? [];
-  if (responderIds.length > 0) {
-    const users = await db
-      .select({ id: usersTable.id, firstName: usersTable.firstName, lastName: usersTable.lastName })
-      .from(usersTable)
-      .where(eq(usersTable.schoolId, schoolId));
-    const names = responderIds
-      .map((id) => {
-        const u = users.find((u) => u.id === id);
-        return u ? `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim() : id;
-      })
-      .join(", ");
-    doc.text(names);
-  }
-  row(labels.witnesses, report.witnesses);
-
-  // Addenda
-  const addenda = (report.addendaJson as Addendum[] | null) ?? [];
-  if (addenda.length > 0) {
-    section(labels.addenda);
-    for (const a of addenda) {
-      doc.fontSize(9).font("Helvetica-Bold").text(`${a.authorName} — ${new Date(a.createdAt).toLocaleDateString()}`);
-      doc.fontSize(10).font("Helvetica").text(a.text, { indent: 10 });
-      doc.moveDown(0.3);
-    }
-  }
-
-  // Footer
-  doc.moveDown(1);
-  doc.moveTo(50, doc.y).lineTo(545, doc.y).strokeColor("#cccccc").stroke();
-  doc.moveDown(0.3);
-  doc.fontSize(8).fillColor("#999999")
-    .text(`${labels.generated}: ${new Date().toLocaleString(lang === "de" ? "de-DE" : "en-US")}  |  ${labels.confidential}`, { align: "center" });
+  renderReportIntoDoc(doc, report as ReportForPdf, {
+    lang,
+    showPatient,
+    userNameOf: (id) => id,
+  });
 
   doc.end();
 });
-
-const LABELS = {
-  de: {
-    title: "Einsatzprotokoll",
-    id: "ID",
-    submitted: "Eingereicht",
-    draft: "Entwurf",
-    incident: "Einsatzdetails",
-    date: "Datum",
-    location: "Ort",
-    careTime: "Behandlungszeit",
-    category: "Kategorie",
-    description: "Beschreibung",
-    patient: "Patient",
-    patientType: "Typ",
-    patientName: "Name",
-    patientClass: "Klasse",
-    patientAge: "Alter",
-    emergencyContact: "Notfallkontakt",
-    injurySites: "Verletzungsstellen",
-    patientTypes: { student: "Schüler/in", teacher: "Lehrkraft", visitor: "Besucher/in", other: "Sonstige" },
-    vitals: "Vitalzeichen",
-    respRate: "Atemfrequenz",
-    bloodPressure: "Blutdruck",
-    pain: "Schmerz (NRS)",
-    treatment: "Behandlung",
-    measures_label: "Maßnahmen",
-    treatmentNotes: "Anmerkungen",
-    outcome: "Ergebnis",
-    outcomeLabel: "Ausgang",
-    outcomeNotes: "Anmerkungen",
-    responders: "Einsatzkräfte",
-    witnesses: "Zeugen",
-    addenda: "Nachträge",
-    generated: "Erstellt",
-    confidential: "Vertraulich – nur für den Schulbetrieb",
-    outcomes: {
-      back_to_class: "Zurück in den Unterricht", rest_then_return: "Ausruhen, dann zurück",
-      sent_home: "Nach Hause geschickt", picked_up_by_parents: "Von Eltern abgeholt",
-      family_doctor: "Zum Arzt", ambulance_112: "Rettungsdienst (112)", hospital: "Krankenhaus", other: "Sonstiges",
-    },
-  },
-  en: {
-    title: "Incident Report",
-    id: "ID",
-    submitted: "Submitted",
-    draft: "Draft",
-    incident: "Incident Details",
-    date: "Date",
-    location: "Location",
-    careTime: "Care time",
-    category: "Category",
-    description: "Description",
-    patient: "Patient",
-    patientType: "Type",
-    patientName: "Name",
-    patientClass: "Class",
-    patientAge: "Age",
-    emergencyContact: "Emergency contact",
-    injurySites: "Injury sites",
-    patientTypes: { student: "Student", teacher: "Teacher", visitor: "Visitor", other: "Other" },
-    vitals: "Vital Signs",
-    respRate: "Resp. rate",
-    bloodPressure: "Blood pressure",
-    pain: "Pain (NRS)",
-    treatment: "Treatment",
-    measures_label: "Measures",
-    treatmentNotes: "Notes",
-    outcome: "Outcome",
-    outcomeLabel: "Outcome",
-    outcomeNotes: "Notes",
-    responders: "Responders",
-    witnesses: "Witnesses",
-    addenda: "Addenda",
-    generated: "Generated",
-    confidential: "Confidential – internal school use only",
-    outcomes: {
-      back_to_class: "Back to class", rest_then_return: "Rest then return",
-      sent_home: "Sent home", picked_up_by_parents: "Picked up by parents",
-      family_doctor: "Family doctor", ambulance_112: "Ambulance (112/999)", hospital: "Hospital", other: "Other",
-    },
-  },
-};
 
 export default router;
