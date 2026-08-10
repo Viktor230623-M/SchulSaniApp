@@ -265,22 +265,22 @@ describe("exports route", () => {
   });
 
   it("PATCH setzt das Intervall und GET liefert es zurueck", async () => {
-    const patch = await request(app).patch("/exports").set(auth()).send({ interval: "annual" });
+    const patch = await request(app).patch("/api/exports").set(auth()).send({ interval: "annual" });
     expect(patch.status).toBe(200);
     expect(patch.body.interval).toBe("annual");
 
-    const get = await request(app).get("/exports").set(auth());
+    const get = await request(app).get("/api/exports").set(auth());
     expect(get.status).toBe(200);
     expect(get.body.interval).toBe("annual");
   });
 
   it("PATCH lehnt ungueltige Intervalle ab", async () => {
-    const res = await request(app).patch("/exports").set(auth()).send({ interval: "monatlich" });
+    const res = await request(app).patch("/api/exports").set(auth()).send({ interval: "monatlich" });
     expect(res.status).toBe(400);
   });
 
   it("POST ohne eingereichte Protokolle schlaegt fehl", async () => {
-    const res = await request(app).post("/exports").set(auth());
+    const res = await request(app).post("/api/exports").set(auth());
     expect(res.status).toBe(400);
   });
 
@@ -290,7 +290,7 @@ describe("exports route", () => {
     fakeReports.push(makeReport("r2", "school-a", base));
     fakeReports.push(makeReport("r3", "school-b", base)); // andere Schule
 
-    const res = await request(app).post("/exports").set(auth());
+    const res = await request(app).post("/api/exports").set(auth());
     expect(res.status).toBe(201);
     expect(res.body.reportCount).toBe(2);
     expect(fakeExports.length).toBe(1);
@@ -302,12 +302,12 @@ describe("exports route", () => {
     const base = new Date("2026-01-01T10:00:00Z");
     fakeReports.push(makeReport("r1", "school-a", new Date(base.getTime() - 2000)));
     fakeReports.push(makeReport("r2", "school-a", new Date(base.getTime() - 1000)));
-    const created = await request(app).post("/exports").set(auth());
+    const created = await request(app).post("/api/exports").set(auth());
     expect(created.status).toBe(201);
     const exportId = created.body.id;
 
     expect(fakeReports.length).toBe(2);
-    const dl = await request(app).get(`/exports/${exportId}/download`).set(auth());
+    const dl = await request(app).get(`/api/exports/${exportId}/download`).set(auth());
     expect(dl.status).toBe(200);
     expect(dl.headers["content-type"]).toContain("application/pdf");
     expect(dl.body.length).toBeGreaterThan(500);
@@ -320,7 +320,7 @@ describe("exports route", () => {
     expect(fakeExports[0].downloadedBy).toBe("u1");
 
     // Zweiter Download wird abgelehnt
-    const again = await request(app).get(`/exports/${exportId}/download`).set(auth());
+    const again = await request(app).get(`/api/exports/${exportId}/download`).set(auth());
     expect(again.status).toBe(409);
   });
 });
