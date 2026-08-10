@@ -121,6 +121,13 @@ export function createOidcRedirectProvider(cfg: OidcRedirectProviderConfig): Red
   const normalizedIssuer = issuerUrl.replace(/\/$/, "");
   const isGoogle = normalizedIssuer === "https://accounts.google.com";
   const isApple = normalizedIssuer === "https://appleid.apple.com";
+  // Microsoft v2.0 kennt neben festen Tenants auch die uebergreifenden
+  // Authorities common/organizations/consumers. Deren Discovery-Dokument
+  // nennt den Issuer als Platzhalter "{tenantid}" -- das echte ID-Token
+  // traegt den konkreten Mandanten. Fuer diese Authorities wird der Issuer
+  // deshalb gegen das Mandanten-Muster statt gegen doc.issuer geprueft.
+  const isMicrosoftWildcard =
+    /^https:\/\/login\.microsoftonline\.com\/(common|organizations|consumers)\/v2\.0$/.test(normalizedIssuer);
   const usesAppleJwt = cfg.clientSecretMode === "apple-jwt";
   if (isApple && cfg.clientSecretMode !== "apple-jwt") {
     throw new Error(`Apple-Anmeldeweg "${key}" braucht clientSecretMode "apple-jwt".`);
@@ -297,9 +304,17 @@ export function createOidcRedirectProvider(cfg: OidcRedirectProviderConfig): Red
 
       const keySet = jwks(doc);
       const { payload } = await jwtVerify(tokenSet.id_token, keySet, {
-        issuer: doc.issuer,
+        // Microsoft-Wildcard-Authorities pruefen den Issuer unten gegen das
+        // Muster; der doc.issuer ist dort nur ein Platzhalter.
+        ...(isMicrosoftWildcard ? {} : { issuer: doc.issuer }),
         audience: clientId,
       });
+      if (isMicrosoftWildcard) {
+        const issuer = payload.iss;
+        if (typeof issuer !== "string" || !/^https:\/\/login\.microsoftonline\.com\/[0-9a-fA-F-]{36}\/v2\.0\/?$/.test(issuer)) {
+          throw new Error(`Token-Aussteller fuer Anmeldeweg "${key}" ist kein Microsoft-Mandant.`);
+        }
+      }
 
       if (payload["nonce"] !== pending.nonce) {
         throw new Error("Nonce im ID-Token stimmt nicht mit der Anfrage ueberein -- Anmeldung abgebrochen.");

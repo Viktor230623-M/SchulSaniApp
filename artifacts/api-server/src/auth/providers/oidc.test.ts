@@ -178,6 +178,54 @@ describe("oidc-provider-tests", () => {
     await expect(provider.completeRedirect({ state, code: "abc" })).rejects.toThrow(/Workspace-Domaene/);
   });
 
+  it.each(["common", "organizations"])("akzeptiert Microsoft %s mit konkretern Mandanten-Issuer", async (authority) => {
+    // Die uebergreifenden Authorities liefern im Discovery-Dokument den Issuer
+    // als {tenantid}-Platzhalter; das ID-Token nennt den echten Mandanten.
+    // Der Adapter prueft deshalb gegen das Mandanten-Muster statt gegen
+    // doc.issuer -- und haelt dabei die Zielgruppen-Pruefung aufrecht.
+    const provider = createOidcRedirectProvider({
+      key: "microsoft",
+      displayName: "Microsoft",
+      issuerUrl: `https://login.microsoftonline.com/${authority}/v2.0`,
+      clientId: "microsoft-client",
+      clientSecret: "geheim",
+      redirectUri: "https://app.example.test/api/auth/microsoft/callback",
+    });
+    const { state, nonce } = await redirectParams(provider);
+    jwtVerifyMock.mockResolvedValueOnce({
+      payload: {
+        sub: "microsoft-user",
+        nonce,
+        iss: "https://login.microsoftonline.com/9188040d-6c67-4c5b-b112-36a304b66dad/v2.0",
+        email: "person@example.test",
+        email_verified: true,
+      },
+    } as never);
+    const result = await provider.completeRedirect({ state, code: "abc" });
+    expect(result.subject).toBe("microsoft-user");
+    expect(jwtVerifyMock).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.anything(),
+      expect.objectContaining({ audience: "microsoft-client" }),
+    );
+  });
+
+  it("lehnt Microsoft common mit fremdem Aussteller ab", async () => {
+    const provider = createOidcRedirectProvider({
+      key: "microsoft",
+      displayName: "Microsoft",
+      issuerUrl: "https://login.microsoftonline.com/common/v2.0",
+      clientId: "microsoft-client",
+      clientSecret: "geheim",
+      redirectUri: "https://app.example.test/api/auth/microsoft/callback",
+    });
+    const { state, nonce } = await redirectParams(provider);
+    jwtVerifyMock.mockResolvedValueOnce({
+      payload: { sub: "microsoft-user", nonce, iss: "https://evil.example/issuer" },
+    } as never);
+    await expect(provider.completeRedirect({ state, code: "abc" })).rejects.toThrow(/Aussteller/);
+  });
+
   it("lehnt Apple mit statischem Client-Secret ab", () => {
     expect(() => createOidcRedirectProvider({
       key: "apple",
