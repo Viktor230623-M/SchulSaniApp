@@ -920,6 +920,66 @@ const ApiService = {
   },
   // --- Owner-only database console ---
 
+  // ── Datenexport der Schule ──
+
+  async getExportOverview(): Promise<{
+    interval: "semiannual" | "annual" | "five_years";
+    lastExportAt: string | null;
+    exports: {
+      id: string;
+      fromAt: string | null;
+      toAt: string;
+      reportCount: number;
+      status: "ready" | "downloaded";
+      downloadedAt: string | null;
+      createdAt: string;
+    }[];
+  }> {
+    const resp = await apiFetch(`${API_BASE}/exports`, { headers: headers() });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      throw new Error(data.error ?? "Export-Einstellungen konnten nicht geladen werden");
+    }
+    return resp.json();
+  },
+
+  async setExportInterval(interval: "semiannual" | "annual" | "five_years"): Promise<void> {
+    const resp = await apiFetch(`${API_BASE}/exports`, {
+      method: "PATCH",
+      headers: headers(),
+      body: JSON.stringify({ interval }),
+    });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      throw new Error(data.error ?? "Intervall konnte nicht gespeichert werden");
+    }
+  },
+
+  async createExport(): Promise<{ id: string; reportCount: number; status: string }> {
+    const resp = await apiFetch(`${API_BASE}/exports`, {
+      method: "POST",
+      headers: headers(),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error ?? "Export konnte nicht erstellt werden");
+    return data;
+  },
+
+  getExportPdfUrl(id: string, lang: "de" | "en" = "de"): string {
+    return `${API_BASE}/exports/${id}/download?lang=${lang}`;
+  },
+
+  async fetchExportPdfBlob(id: string, lang: "de" | "en" = "de"): Promise<Blob> {
+    const resp = await apiFetch(this.getExportPdfUrl(id, lang), {
+      headers: this.getAuthHeaders(),
+    });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      throw new Error(data.error ?? "Export konnte nicht heruntergeladen werden");
+    }
+    return resp.blob();
+  },
+
   async getDbPresets(): Promise<{ presets: SqlPreset[] }> {
     const resp = await apiFetch(`${API_BASE}/db-console/presets`, { headers: headers() });
     if (!resp.ok) throw new Error("Presets konnten nicht geladen werden");

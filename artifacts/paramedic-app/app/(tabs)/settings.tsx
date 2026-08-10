@@ -100,6 +100,7 @@ export default function SettingsScreen() {
   const canManageRoleCatalog = has("roles.manage");
   const canCorrectProfile = has("users.correct_profile");
   const canManageRoles = canAssignRole || canDeleteUsers || isAdmin || canManageRoleCatalog || canCorrectProfile;
+  const canExportData = has("reports.read_all") && has("reports.see_patient_info");
   const [showAdmin, setShowAdmin] = useState(false);
   const [pendingUsers, setPendingUsers] = useState<User[]>([]);
   const [loadingPending, setLoadingPending] = useState(false);
@@ -821,6 +822,22 @@ export default function SettingsScreen() {
               <View style={styles.adminHeaderLeft}>
                 <Ionicons name="key-outline" size={13} color={theme.textTertiary} />
                 <Text style={[styles.sectionTitle, { color: theme.textTertiary }]}>Rollen</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={theme.textTertiary} />
+            </Pressable>
+          )}
+
+          {canExportData && (
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push("/admin/exports");
+              }}
+              style={styles.sectionHeaderRow}
+            >
+              <View style={styles.adminHeaderLeft}>
+                <Ionicons name="archive-outline" size={13} color={theme.textTertiary} />
+                <Text style={[styles.sectionTitle, { color: theme.textTertiary }]}>{t("settings.dataExport", lang)}</Text>
               </View>
               <Ionicons name="chevron-forward" size={16} color={theme.textTertiary} />
             </Pressable>
