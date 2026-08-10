@@ -39,7 +39,17 @@ router.get("/on-duty", requireAuth, async (req: AuthRequest, res) => {
       return rest;
     })
   );
-  res.json(users.filter(Boolean));
+  // Alphabetisch nach Name: Dienst hat keine Rangfolge, eine stabile Liste
+  // verhindert, dass derselbe Name je nach Datenbankreihenfolge mal oben,
+  // mal unten auftaucht.
+  const sorted = users
+    .filter((u): u is NonNullable<typeof u> => Boolean(u))
+    .sort((a, b) => {
+      const na = `${a.firstName ?? ""} ${a.lastName ?? ""}`.trim().toLowerCase();
+      const nb = `${b.firstName ?? ""} ${b.lastName ?? ""}`.trim().toLowerCase();
+      return na.localeCompare(nb, "de");
+    });
+  res.json(sorted);
 });
 
 export default router;
