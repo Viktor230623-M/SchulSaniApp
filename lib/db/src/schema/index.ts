@@ -3,6 +3,8 @@ import { createInsertSchema } from "drizzle-zod";
 
 // Aufzaehlungstypen. Die Wertereihenfolge ist Teil der Typdefinition und
 // entspricht dem Stand der Produktionsdatenbank.
+export const exportIntervalEnum = pgEnum("export_interval", ["semiannual", "annual", "five_years"]);
+export const exportStatusEnum = pgEnum("export_status", ["ready", "downloaded"]);
 export const dutyStatusEnum = pgEnum("duty_status", ["on_duty", "off_duty"]);
 export const loaStatusEnum = pgEnum("loa_status", ["pending", "approved", "rejected", "appealed"]);
 export const missionPriorityEnum = pgEnum("mission_priority", ["high", "medium", "low"]);
@@ -380,6 +382,39 @@ export const sessionsTable = pgTable("sessions", {
   revokedAt: timestamp("revoked_at"),
 }, (t) => [index("sessions_user_id_idx").on(t.userId)]);
 
+// Vorgaben fuer den Datenexport der Schule. Eine Zeile je Schule, im
+// Installationsschritt oder ueber die Verwaltung angelegt. Das Intervall legt
+// fest, wie oft die Schule ihre abgeschlossenen Protokolle als PDF-Buendel
+// bezieht; nach dem bestaetigten Download werden die exportierten Protokolle
+// auf dem Server geloescht (Uebergabe an den Verantwortlichen).
+export const schoolSettingsTable = pgTable("school_settings", {
+  schoolId: text("school_id").primaryKey(),
+  exportInterval: exportIntervalEnum("export_interval").notNull().default("semiannual"),
+  // Zeitpunkt des letzten erzeugten Exports. Vor dem ersten Export null;
+  // faellig wird der naechste, sobald die Frist seit diesem Zeitpunkt
+  // abgelaufen ist.
+  lastExportAt: timestamp("last_export_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Ein erzeugtes, noch nicht heruntergeladenes PDF-Buendel. Der Zeitraum
+// fromAt..toAt markiert die enthaltenen Protokolle; erst der bestaetigte
+// Download gibt die Loeschung auf dem Server frei.
+export const schoolExportsTable = pgTable("school_exports", {
+  id: text("id").primaryKey(),
+  schoolId: text("school_id").notNull(),
+  fromAt: timestamp("from_at"),
+  toAt: timestamp("to_at").notNull(),
+  reportCount: integer("report_count").notNull().default(0),
+  status: exportStatusEnum("status").notNull().default("ready"),
+  downloadedAt: timestamp("downloaded_at"),
+  downloadedBy: text("downloaded_by"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [
+  index("school_exports_school_created_idx").on(t.schoolId, t.createdAt),
+]);
+
 // Export types
 export type UserRole = (typeof userRoleEnum.enumValues)[number];
 export type User = typeof usersTable.$inferSelect;
@@ -441,3 +476,7 @@ export type Shift = typeof shiftsTable.$inferSelect;
 export type NewShift = typeof shiftsTable.$inferInsert;
 export type ShiftMember = typeof shiftMembersTable.$inferSelect;
 export type NewShiftMember = typeof shiftMembersTable.$inferInsert;
+export type SchoolSetting = typeof schoolSettingsTable.$inferSelect;
+export type NewSchoolSetting = typeof schoolSettingsTable.$inferInsert;
+export type SchoolExport = typeof schoolExportsTable.$inferSelect;
+export type NewSchoolExport = typeof schoolExportsTable.$inferInsert;
