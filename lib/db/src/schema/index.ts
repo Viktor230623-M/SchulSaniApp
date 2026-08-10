@@ -235,6 +235,9 @@ export const incidentReportsTable = pgTable("incident_reports", {
   id: text("id").primaryKey(),
   schoolId: text("school_id").notNull(),
   missionId: text("mission_id"), // null = walk-in
+  // Eigener Name fuer Protokolle ohne Einsatz; bei Missions-Protokollen bleibt
+  // er leer, dort zaehlt der Missionstitel.
+  title: text("title"),
   authorId: text("author_id").notNull(),
   status: text("status").notNull().default("draft"), // draft | submitted
   // Patient (access-restricted)

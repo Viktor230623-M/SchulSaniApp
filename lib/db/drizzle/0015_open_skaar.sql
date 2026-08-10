@@ -1,0 +1,1 @@
+ALTER TABLE "incident_reports" ADD COLUMN "title" text;
