@@ -10,6 +10,10 @@ import { MissingSchoolContextError } from "./middlewares/auth";
 
 const app: Express = express();
 app.disable("x-powered-by");
+// API-Antworten sind personenbezogene Daten und duerfen nicht gecacht werden.
+// Ohne diese Middleware setzt Express ETags und beantwortet einen erneuten
+// GET mit 304 (leerer Body) -- der Client liest dann ein leeres resp.json().
+app.disable("etag");
 // Behind nginx — trust exactly one proxy hop so req.ip is the real client
 // address; without this every client shares nginx's IP and the rate
 // limiters throttle all users as one.
@@ -46,6 +50,10 @@ app.use(express.json({
 }));
 app.use(express.urlencoded({ extended: true, limit: "50kb" }));
 
+app.use("/api", (_req, res, next) => {
+  res.set("Cache-Control", "no-store");
+  next();
+});
 app.use("/api", router);
 
 // Error handler must be registered AFTER routes so it catches errors thrown within them.

@@ -179,7 +179,9 @@ async function apiFetch(url: string, init?: RequestInit): Promise<Response> {
   // App und API liegen beide unter EXPO_PUBLIC_DOMAIN, weshalb fetch das Cookie
   // schon im Standardmodus "same-origin" mitschickt. Explizit gesetzt, damit ein
   // spaeterer Umzug der API auf eine andere Domain nicht still die Sitzung bricht.
-  const resp = await fetch(url, { ...init, credentials: "include" });
+  // cache: no-store, damit der Browser nie eine 304-Antwort ohne Body liefert,
+  // die resp.json() nicht mehr lesen kann.
+  const resp = await fetch(url, { ...init, credentials: "include", cache: "no-store" });
   if (resp.status === 401) {
     const { useAppStore } = await import("@/store/useAppStore");
     useAppStore.getState().logout();
@@ -203,7 +205,7 @@ interface AuthParams {
 
 async function fetchAuthParams(providerKey: string, username: string): Promise<AuthParams> {
   const url = `${API_BASE}/auth/params?providerKey=${encodeURIComponent(providerKey)}&username=${encodeURIComponent(username)}`;
-  const resp = await fetch(url, { headers: { "ngrok-skip-browser-warning": "true" } });
+  const resp = await fetch(url, { headers: { "ngrok-skip-browser-warning": "true" }, cache: "no-store" });
   if (!resp.ok) throw new Error("Anmeldewege konnten nicht geladen werden");
   return resp.json();
 }
@@ -322,6 +324,7 @@ const ApiService = {
         method: "GET",
         headers: { "ngrok-skip-browser-warning": "true" },
         credentials: "include",
+        cache: "no-store",
         signal: controller.signal,
       });
       if (!resp.ok) return null;
@@ -528,6 +531,7 @@ async changePassword(currentPassword: string, newPassword: string): Promise<stri
     const timeout = setTimeout(() => controller.abort(), 8_000);
     try {
       const resp = await fetch(`${API_BASE}/auth/providers`, {
+        cache: "no-store",
         headers: { "ngrok-skip-browser-warning": "true" },
         signal: controller.signal,
       });
