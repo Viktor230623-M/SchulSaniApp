@@ -252,4 +252,63 @@ router.delete("/:id/members/:userId", requireAuth, requirePermission("roster.man
   res.json(await loadOneShift(schoolId, req.params.id as string));
 });
 
+// Selbst eintragen (Vertretung uebernehmen): jede:r aus der Schule darf das,
+// nicht nur Verwaltung. Das UNIQUE(shift_id, user_id) faengt Doppelbuchungen ab.
+router.post("/:id/join", requireAuth, async (req: AuthRequest, res) => {
+  const schoolId = schoolIdOf(req);
+  const shift = await loadOneShift(schoolId, req.params.id as string);
+  if (!shift) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+  if (shift.members.length >= MAX_MEMBERS) {
+    res.status(400).json({ error: "member limit reached" });
+    return;
+  }
+  const [user] = await db
+    .select({ id: usersTable.id, firstName: usersTable.firstName, lastName: usersTable.lastName })
+    .from(usersTable)
+    .where(and(eq(usersTable.id, req.user!.userId), eq(usersTable.schoolId, schoolId)))
+    .limit(1);
+  if (!user) {
+    res.status(400).json({ error: "user not found in this school" });
+    return;
+  }
+  await db
+    .insert(shiftMembersTable)
+    .values({
+      id: randomUUID(),
+      schoolId,
+      shiftId: shift.id,
+      userId: user.id,
+      userName: resolveName(user, user.id),
+      createdAt: new Date(),
+    })
+    .onConflictDoNothing();
+  res.status(201).json(await loadOneShift(schoolId, shift.id));
+});
+
+// Selbst austragen: nur wer eingetragen ist, kann die Schicht verlassen.
+router.post("/:id/leave", requireAuth, async (req: AuthRequest, res) => {
+  const schoolId = schoolIdOf(req);
+  const shift = await loadOneShift(schoolId, req.params.id as string);
+  if (!shift) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+  const deleted = await db
+    .delete(shiftMembersTable)
+    .where(and(
+      eq(shiftMembersTable.shiftId, shift.id),
+      eq(shiftMembersTable.userId, req.user!.userId),
+      eq(shiftMembersTable.schoolId, schoolId),
+    ))
+    .returning();
+  if (deleted.length === 0) {
+    res.status(404).json({ error: "Not a member" });
+    return;
+  }
+  res.json(await loadOneShift(schoolId, shift.id));
+});
+
 export default router;

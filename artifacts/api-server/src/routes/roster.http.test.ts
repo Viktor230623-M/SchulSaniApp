@@ -398,6 +398,69 @@ describe("Dienstplan (/api/roster) -- Schichten und Mitglieder", () => {
     expect(add.status).toBe(400);
   });
 
+  it("JOIN als Sanitaeter -> 201, eigene Id als Mitglied, doppelt kein Duplikat", async () => {
+    const create = await request(base(port))
+      .post("/")
+      .set("Authorization", "Bearer user-admin-1")
+      .send({ title: "Pausendienst", startsAt: "2026-09-01T11:00:00.000Z", endsAt: "2026-09-01T12:00:00.000Z" });
+    const id = create.body.id;
+
+    const join = await request(base(port)).post(`/${id}/join`).set("Authorization", "Bearer user-sani-1");
+    expect(join.status).toBe(201);
+    expect(join.body.members).toHaveLength(1);
+    expect(join.body.members[0].userId).toBe("user-sani-1");
+    expect(join.body.members[0].userName).toBe("Anna Meier");
+
+    const again = await request(base(port)).post(`/${id}/join`).set("Authorization", "Bearer user-sani-1");
+    expect(again.status).toBe(201);
+    expect(again.body.members).toHaveLength(1);
+  });
+
+  it("JOIN auf Schicht einer anderen Schule -> 404 (IDOR)", async () => {
+    const create = await request(base(port))
+      .post("/")
+      .set("Authorization", "Bearer user-admin-1")
+      .send({ title: "Pausendienst", startsAt: "2026-09-01T11:00:00.000Z", endsAt: "2026-09-01T12:00:00.000Z" });
+    const id = create.body.id;
+
+    const join = await request(base(port)).post(`/${id}/join`).set("Authorization", "Bearer user-fremd-1");
+    expect(join.status).toBe(404);
+  });
+
+  it("JOIN ohne Token -> 401", async () => {
+    const create = await request(base(port))
+      .post("/")
+      .set("Authorization", "Bearer user-admin-1")
+      .send({ title: "Pausendienst", startsAt: "2026-09-01T11:00:00.000Z", endsAt: "2026-09-01T12:00:00.000Z" });
+    const id = create.body.id;
+
+    const join = await request(base(port)).post(`/${id}/join`);
+    expect(join.status).toBe(401);
+  });
+
+  it("LEAVE als Mitglied -> 200, ausgetragen", async () => {
+    const create = await request(base(port))
+      .post("/")
+      .set("Authorization", "Bearer user-admin-1")
+      .send({ title: "Pausendienst", startsAt: "2026-09-01T11:00:00.000Z", endsAt: "2026-09-01T12:00:00.000Z", memberIds: ["user-sani-1"] });
+    const id = create.body.id;
+
+    const leave = await request(base(port)).post(`/${id}/leave`).set("Authorization", "Bearer user-sani-1");
+    expect(leave.status).toBe(200);
+    expect(leave.body.members).toHaveLength(0);
+  });
+
+  it("LEAVE ohne Mitgliedschaft -> 404", async () => {
+    const create = await request(base(port))
+      .post("/")
+      .set("Authorization", "Bearer user-admin-1")
+      .send({ title: "Pausendienst", startsAt: "2026-09-01T11:00:00.000Z", endsAt: "2026-09-01T12:00:00.000Z" });
+    const id = create.body.id;
+
+    const leave = await request(base(port)).post(`/${id}/leave`).set("Authorization", "Bearer user-sani-1");
+    expect(leave.status).toBe(404);
+  });
+
   it("GET mit from/to filtert", async () => {
     await request(base(port))
       .post("/")

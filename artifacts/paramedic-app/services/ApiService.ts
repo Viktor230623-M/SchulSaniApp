@@ -563,6 +563,26 @@ const ApiService = {
     return resp.json();
   },
 
+  /** Schicht selbst uebernehmen (POST /roster/:id/join). */
+  async joinShift(id: string): Promise<Shift> {
+    const resp = await apiFetch(`${API_BASE}/roster/${id}/join`, { method: "POST", headers: headers() });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      throw new Error(data.error ?? "Schicht konnte nicht übernommen werden");
+    }
+    return resp.json();
+  },
+
+  /** Schicht selbst verlassen (POST /roster/:id/leave). */
+  async leaveShift(id: string): Promise<Shift> {
+    const resp = await apiFetch(`${API_BASE}/roster/${id}/leave`, { method: "POST", headers: headers() });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      throw new Error(data.error ?? "Schicht konnte nicht verlassen werden");
+    }
+    return resp.json();
+  },
+
   async getNotifications(): Promise<NotificationItem[]> {
     const resp = await apiFetch(`${API_BASE}/notifications`, { headers: headers() });
     if (!resp.ok) {

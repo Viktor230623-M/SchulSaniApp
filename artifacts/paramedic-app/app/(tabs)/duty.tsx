@@ -289,6 +289,9 @@ export default function DutyScreen() {
   const [rosterLoading, setRosterLoading] = useState(false);
   const [modal, setModal] = useState<{ shift: Shift | null } | null>(null);
   const [users, setUsers] = useState<User[]>([]);
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [busyShiftId, setBusyShiftId] = useState<string | null>(null);
+  const userId = user?.id;
 
   const isOnDuty = dutyStatus === "on_duty";
   const scale = useSharedValue(1);
@@ -326,6 +329,34 @@ export default function DutyScreen() {
 
   function moveWeek(delta: number) {
     setWeekStart((prev) => new Date(prev.getFullYear(), prev.getMonth(), prev.getDate() + 7 * delta));
+  }
+
+  async function doJoin(shiftId: string) {
+    if (busyShiftId) return;
+    setBusyShiftId(shiftId);
+    try {
+      await ApiService.joinShift(shiftId);
+      notify(t("duty.joinedShift", lang), "");
+      moveWeek(0);
+    } catch (err) {
+      notify(t("common.error", lang), err instanceof Error ? err.message : t("duty.joinError", lang));
+    } finally {
+      setBusyShiftId(null);
+    }
+  }
+
+  async function doLeave(shiftId: string) {
+    if (busyShiftId) return;
+    setBusyShiftId(shiftId);
+    try {
+      await ApiService.leaveShift(shiftId);
+      notify(t("duty.leftShift", lang), "");
+      moveWeek(0);
+    } catch (err) {
+      notify(t("common.error", lang), err instanceof Error ? err.message : t("duty.leaveError", lang));
+    } finally {
+      setBusyShiftId(null);
+    }
   }
 
   function openModal(shift: Shift | null) {
@@ -379,6 +410,21 @@ export default function DutyScreen() {
   const weekRange = t("duty.rosterWeekRange", lang)
     .replace("{from}", fmtShort(weekStart, lang))
     .replace("{to}", fmtShort(weekLast, lang));
+
+  // Wochenuebersicht Mo–Fr wie auf der Landing-Demo: pro Tag die Vornamen der
+  // Eingetragenen, "Offen", wenn eine Schicht noch niemanden hat.
+  const weekDays = Array.from({ length: 5 }, (_, i) => {
+    const d = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + i);
+    const key = d.toDateString();
+    const dayShifts = byDay.get(key) ?? [];
+    const names = Array.from(
+      new Set(dayShifts.flatMap((s) => s.members.map((m) => m.userName.split(" ")[0]))),
+    );
+    return { d, key, names, open: dayShifts.some((s) => s.members.length === 0) };
+  });
+  const openShifts = shifts.filter((s) => s.members.length === 0);
+  const todayKey = new Date().toDateString();
+  const visibleDayKeys = selectedDay ? [selectedDay] : dayKeys;
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -458,6 +504,74 @@ export default function DutyScreen() {
               <Ionicons name="chevron-forward" size={20} color={theme.tint} />
             </Pressable>
           </View>
+
+          <View style={styles.weekRow}>
+            {weekDays.map((wd) => {
+              const selected = selectedDay === wd.key;
+              const today = wd.key === todayKey;
+              return (
+                <Pressable
+                  key={wd.key}
+                  onPress={() => setSelectedDay(selected ? null : wd.key)}
+                  style={[
+                    styles.weekCell,
+                    { borderColor: selected || today ? theme.tint : theme.cardBorder },
+                    today && { backgroundColor: theme.tintLight },
+                  ]}
+                >
+                  <Text style={[styles.weekCellDay, { color: theme.textSecondary }]}>
+                    {wd.d.toLocaleDateString(lang === "de" ? "de-DE" : "en-GB", { weekday: "short" }).replace(".", "")}
+                  </Text>
+                  <Text style={[styles.weekCellDate, { color: theme.text }]}>{wd.d.getDate()}</Text>
+                  {wd.open ? (
+                    <Text style={[styles.weekCellOpen, { color: theme.danger }]}>{t("duty.rosterOpen", lang)}</Text>
+                  ) : (
+                    <Text
+                      numberOfLines={2}
+                      style={[styles.weekCellNames, { color: wd.names.length ? theme.tintDark : theme.textTertiary }]}
+                    >
+                      {wd.names.length ? wd.names.join(" · ") : "—"}
+                    </Text>
+                  )}
+                </Pressable>
+              );
+            })}
+          </View>
+
+          {openShifts.length > 0 && (
+            <View style={[styles.vertretungCard, { borderColor: theme.danger }]}>
+              <Text style={[styles.vertretungTitle, { color: theme.danger }]}>{t("duty.vertretungTitle", lang)}</Text>
+              <Text style={[styles.vertretungDesc, { color: theme.textSecondary }]}>{t("duty.vertretungDesc", lang)}</Text>
+              {openShifts.map((s) => (
+                <View key={s.id} style={styles.vertretungRow}>
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text style={[styles.shiftTitle, { color: theme.text }]}>{s.title}</Text>
+                    <Text style={[styles.shiftMembers, { color: theme.textTertiary }]}>
+                      {fmtDay(new Date(s.startsAt), lang)} · {fmtTime(new Date(s.startsAt))}–{fmtTime(new Date(s.endsAt))}
+                    </Text>
+                  </View>
+                  <Pressable
+                    onPress={() => doJoin(s.id)}
+                    disabled={busyShiftId !== null}
+                    style={[styles.joinBtn, { backgroundColor: theme.tint }]}
+                  >
+                    {busyShiftId === s.id ? (
+                      <ActivityIndicator color="#fff" size="small" />
+                    ) : (
+                      <Text style={styles.joinBtnText}>{t("duty.joinShift", lang)}</Text>
+                    )}
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {selectedDay && (
+            <Pressable onPress={() => setSelectedDay(null)} hitSlop={6}>
+              <Text style={[styles.filterReset, { color: theme.tint }]}>{t("duty.rosterAllDays", lang)}</Text>
+            </Pressable>
+          )}
+
           {rosterLoading ? (
             <ActivityIndicator color={theme.tint} />
           ) : dayKeys.length === 0 ? (
@@ -465,30 +579,62 @@ export default function DutyScreen() {
               <Text style={[styles.noOne, { color: theme.textSecondary }]}>{t("duty.rosterNoShifts", lang)}</Text>
               <Text style={[styles.hintText, { color: theme.textTertiary }]}>{t("duty.rosterNoShiftsDesc", lang)}</Text>
             </View>
+          ) : visibleDayKeys.length === 0 ? (
+            <Text style={[styles.noOne, { color: theme.textSecondary }]}>{t("duty.rosterNoShiftsDay", lang)}</Text>
           ) : (
-            dayKeys.map((k) => (
+            visibleDayKeys.map((k) => (
               <View key={k} style={{ gap: 8 }}>
                 <Text style={[styles.rosterDay, { color: theme.textTertiary }]}>{fmtDay(new Date(k), lang)}</Text>
-                {(byDay.get(k) ?? []).map((s) => (
-                  <Pressable
-                    key={s.id}
-                    onPress={canManage ? () => openModal(s) : undefined}
-                    style={[styles.shiftCard, { backgroundColor: theme.backgroundTertiary }]}
-                  >
-                    <View style={styles.shiftTimeCol}>
-                      <Text style={[styles.shiftTime, { color: theme.tintDark }]}>{fmtTime(new Date(s.startsAt))}</Text>
-                      <Text style={[styles.shiftTimeEnd, { color: theme.textTertiary }]}>{fmtTime(new Date(s.endsAt))}</Text>
+                {(byDay.get(k) ?? []).map((s) => {
+                  const isMember = s.members.some((m) => m.userId === userId);
+                  return (
+                    <View key={s.id} style={[styles.shiftCard, { backgroundColor: theme.backgroundTertiary }]}>
+                      <Pressable
+                        onPress={canManage ? () => openModal(s) : undefined}
+                        style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 12 }}
+                      >
+                        <View style={styles.shiftTimeCol}>
+                          <Text style={[styles.shiftTime, { color: theme.tintDark }]}>{fmtTime(new Date(s.startsAt))}</Text>
+                          <Text style={[styles.shiftTimeEnd, { color: theme.textTertiary }]}>{fmtTime(new Date(s.endsAt))}</Text>
+                        </View>
+                        <View style={{ flex: 1, gap: 2 }}>
+                          <Text style={[styles.shiftTitle, { color: theme.text }]}>{s.title}</Text>
+                          {s.location ? <Text style={[styles.shiftLocation, { color: theme.textSecondary }]}>{s.location}</Text> : null}
+                          <Text style={[styles.shiftMembers, { color: theme.textTertiary }]}>
+                            {s.members.length > 0 ? s.members.map((m) => m.userName).join(", ") : t("duty.rosterNoMembers", lang)}
+                          </Text>
+                        </View>
+                      </Pressable>
+                      {!isMember && (
+                        <Pressable
+                          onPress={() => doJoin(s.id)}
+                          disabled={busyShiftId !== null}
+                          style={[styles.miniAction, { backgroundColor: theme.tintLight }]}
+                        >
+                          {busyShiftId === s.id ? (
+                            <ActivityIndicator color={theme.tintDark} size="small" />
+                          ) : (
+                            <Text style={[styles.miniActionText, { color: theme.tintDark }]}>{t("duty.joinShift", lang)}</Text>
+                          )}
+                        </Pressable>
+                      )}
+                      {isMember && (
+                        <Pressable
+                          onPress={() => doLeave(s.id)}
+                          disabled={busyShiftId !== null}
+                          style={[styles.miniAction, { borderColor: theme.cardBorder }]}
+                        >
+                          <Text style={[styles.miniActionText, { color: theme.textSecondary }]}>{t("duty.leaveShift", lang)}</Text>
+                        </Pressable>
+                      )}
+                      {canManage && (
+                        <Pressable onPress={() => openModal(s)} hitSlop={8}>
+                          <Ionicons name="pencil" size={16} color={theme.textTertiary} />
+                        </Pressable>
+                      )}
                     </View>
-                    <View style={{ flex: 1, gap: 2 }}>
-                      <Text style={[styles.shiftTitle, { color: theme.text }]}>{s.title}</Text>
-                      {s.location ? <Text style={[styles.shiftLocation, { color: theme.textSecondary }]}>{s.location}</Text> : null}
-                      <Text style={[styles.shiftMembers, { color: theme.textTertiary }]}>
-                        {s.members.length > 0 ? s.members.map((m) => m.userName).join(", ") : t("duty.rosterNoMembers", lang)}
-                      </Text>
-                    </View>
-                    {canManage && <Ionicons name="pencil" size={16} color={theme.textTertiary} />}
-                  </Pressable>
-                ))}
+                  );
+                })}
               </View>
             ))
           )}
@@ -589,6 +735,24 @@ const styles = StyleSheet.create({
   weekNav: { padding: 6 },
   rosterWeekLabel: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
   rosterDay: { fontSize: 12, fontFamily: "Inter_600SemiBold", textTransform: "capitalize", marginTop: 4 },
+  weekRow: { flexDirection: "row", gap: 8 },
+  weekCell: {
+    flex: 1, alignItems: "center", gap: 3,
+    paddingVertical: 10, borderRadius: 14, borderWidth: 1,
+  },
+  weekCellDay: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
+  weekCellDate: { fontSize: 16, fontFamily: "Inter_700Bold" },
+  weekCellNames: { fontSize: 9.5, fontFamily: "Inter_500Medium", textAlign: "center", paddingHorizontal: 3, lineHeight: 12 },
+  weekCellOpen: { fontSize: 9.5, fontFamily: "Inter_700Bold", textTransform: "uppercase", letterSpacing: 0.4 },
+  vertretungCard: { borderWidth: 1, borderRadius: 16, padding: 14, gap: 6 },
+  vertretungTitle: { fontSize: 14, fontFamily: "Inter_700Bold" },
+  vertretungDesc: { fontSize: 12.5, fontFamily: "Inter_400Regular" },
+  vertretungRow: { flexDirection: "row", alignItems: "center", gap: 12, marginTop: 6 },
+  joinBtn: { paddingHorizontal: 16, paddingVertical: 9, borderRadius: 999, minWidth: 110, alignItems: "center" },
+  joinBtnText: { fontSize: 13, fontFamily: "Inter_700Bold", color: "#fff" },
+  filterReset: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  miniAction: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, borderWidth: 1 },
+  miniActionText: { fontSize: 12.5, fontFamily: "Inter_600SemiBold" },
   shiftCard: {
     flexDirection: "row", alignItems: "center", gap: 12,
     padding: 12, borderRadius: 14,
