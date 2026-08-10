@@ -364,9 +364,18 @@ function validateConfig(body) {
       p.clientSecretMode = "static";
       p.responseMode = "query";
       const tenantId = trimOrEmpty(raw.tenantId);
+      // Persoenliche Microsoft-Konten (outlook.com, gmail etc.) laufen nur
+      // ueber die uebergreifende common-Authority; eine feste Tenant-ID
+      // schliesst sie aus. Organisationen bleiben bei organizations.
+      const allowPersonal = raw.allowPersonal === true;
+      if (allowPersonal && tenantId) {
+        errors.microsoftAllowPersonal = "Persoenliche Konten und feste Tenant-ID schliessen sich aus.";
+      }
       p.issuerUrl = tenantId
         ? `https://login.microsoftonline.com/${tenantId}/v2.0`
-        : "https://login.microsoftonline.com/organizations/v2.0";
+        : allowPersonal
+          ? "https://login.microsoftonline.com/common/v2.0"
+          : "https://login.microsoftonline.com/organizations/v2.0";
       p.clientId = trimOrEmpty(raw.clientId);
       p.clientSecret = typeof raw.clientSecret === "string" ? raw.clientSecret : "";
       if (p.clientSecret.length > 1000 || hasControlCharacter(p.clientSecret)) errors.microsoftClientSecret = "Microsoft Client-Secret ist ungueltig.";

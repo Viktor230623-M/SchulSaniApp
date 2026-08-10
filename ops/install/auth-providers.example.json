@@ -28,7 +28,7 @@
   },
   {
     "enabled": false,
-    "_hinweis": "Microsoft Entra ID: issuerUrl muss den konkreten Tenant enthalten, nicht /common/.",
+    "_hinweis": "Microsoft Entra ID: issuerUrl kann den konkreten Tenant enthalten; common laesst zusaetzlich persoenliche Konten zu, organizations nur Schul-/Arbeitskonten.",
     "key": "microsoft",
     "displayName": "Microsoft",
     "type": "oidc-redirect",

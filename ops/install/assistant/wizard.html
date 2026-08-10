@@ -401,6 +401,14 @@
           <textarea id="microsoftGroupToRoleMap" rows="3" placeholder="gruppe=rolle"></textarea>
           <div class="error"><span>—</span></div>
         </div>
+        <div class="field" data-field="microsoftAllowPersonal">
+          <label style="flex-direction:row;align-items:center;gap:8px;font-weight:500">
+            <input type="checkbox" id="microsoftAllowPersonal" style="width:18px;height:18px;accent-color:var(--tint)">
+            <span>Persoenliche Microsoft-Konten erlauben (outlook.com, gmail.com)</span>
+          </label>
+          <div class="helper">Nur ohne eigene Tenant-ID: laesst neben Schul-/Arbeitskonten auch private Microsoft-Konten zu (Authority common). Eine feste Tenant-ID schliesst persoenliche Konten aus.</div>
+          <div class="error"><span>—</span></div>
+        </div>
       </div>
 
       <div id="customFields" class="provider-block" data-option="custom" style="display:none">
@@ -654,6 +662,7 @@
     microsoftClientSecret: "Microsoft Client-Secret ist ungueltig.",
     microsoftGroupsClaim: "Gruppen-Claim ist ungueltig.",
     microsoftGroupToRoleMap: "Gruppen-Zuordnung ist ungueltig.",
+    microsoftAllowPersonal: "Persoenliche Konten und feste Tenant-ID schliessen sich aus.",
     joinCode: "Schul-Zugangscode muss 6 bis 200 Zeichen lang sein.",
     schoolName: "Bitte einen Namen angeben.",
     domain: 'Das ist keine gueltige Domain, ohne "https://".',
@@ -708,6 +717,7 @@
     googleGroupsClaim: function (v) { return v.trim() === "" || /^[A-Za-z][A-Za-z0-9_.-]{0,63}$/.test(v.trim()); },
     googleGroupToRoleMap: function (v) { return v.length <= 4000; },
     microsoftTenantId: function (v) { return v.trim() === "" || /^[0-9a-fA-F-]{36}$/.test(v.trim()); },
+    microsoftAllowPersonal: function () { return !(el("microsoftAllowPersonal").checked && el("microsoftTenantId").value.trim()); },
     microsoftClientId: function (v) { return v.trim() === "" || (v.trim().length <= 300 && v.trim().indexOf(" ") === -1); },
     microsoftClientSecret: function (v) { return v.trim().length <= 1000; },
     microsoftGroupsClaim: function (v) { return v.trim() === "" || /^[A-Za-z][A-Za-z0-9_.-]{0,63}$/.test(v.trim()); },
@@ -746,7 +756,7 @@
   };
 
   var pageFields = {
-    1: ["appleClientId", "appleTeamId", "appleKeyId", "applePrivateKeyPath", "googleClientId", "googleClientSecret", "googleAllowedHostedDomains", "googleGroupsClaim", "googleGroupToRoleMap", "microsoftTenantId", "microsoftClientId", "microsoftClientSecret", "microsoftGroupsClaim", "microsoftGroupToRoleMap", "providerKey", "providerDisplayName", "providerIssuerUrl", "providerClientId", "providerClientSecret", "providerScopes", "providerGroupsClaim", "providerGroupToRoleMap", "providerClientSecretMode", "providerResponseMode", "providerAppleTeamId", "providerAppleKeyId", "providerApplePrivateKeyPath", "smtpHost", "smtpPort", "smtpUser", "smtpPassword", "smtpSecure", "mailFrom", "mailFromName"],
+    1: ["appleClientId", "appleTeamId", "appleKeyId", "applePrivateKeyPath", "googleClientId", "googleClientSecret", "googleAllowedHostedDomains", "googleGroupsClaim", "googleGroupToRoleMap", "microsoftTenantId", "microsoftClientId", "microsoftClientSecret", "microsoftGroupsClaim", "microsoftGroupToRoleMap", "microsoftAllowPersonal", "providerKey", "providerDisplayName", "providerIssuerUrl", "providerClientId", "providerClientSecret", "providerScopes", "providerGroupsClaim", "providerGroupToRoleMap", "providerClientSecretMode", "providerResponseMode", "providerAppleTeamId", "providerAppleKeyId", "providerApplePrivateKeyPath", "smtpHost", "smtpPort", "smtpUser", "smtpPassword", "smtpSecure", "mailFrom", "mailFromName"],
     2: ["schoolId", "ownerUserId", "vapidSubject"],
     3: []
   };
@@ -811,7 +821,7 @@
   var optionFieldMap = {
     apple: ["appleClientId", "appleTeamId", "appleKeyId", "applePrivateKeyPath"],
     google: ["googleClientId", "googleClientSecret", "googleAllowedHostedDomains", "googleGroupsClaim", "googleGroupToRoleMap"],
-    microsoft: ["microsoftTenantId", "microsoftClientId", "microsoftClientSecret", "microsoftGroupsClaim", "microsoftGroupToRoleMap"],
+    microsoft: ["microsoftTenantId", "microsoftClientId", "microsoftClientSecret", "microsoftGroupsClaim", "microsoftGroupToRoleMap", "microsoftAllowPersonal"],
     custom: ["providerKey", "providerDisplayName", "providerIssuerUrl", "providerClientId", "providerClientSecret", "providerScopes", "providerGroupsClaim", "providerGroupToRoleMap", "providerClientSecretMode", "providerResponseMode", "providerAppleTeamId", "providerAppleKeyId", "providerApplePrivateKeyPath"]
   };
 
@@ -888,6 +898,7 @@
       addProvider(providerConfig("microsoft", "microsoft", "Microsoft", "https://login.microsoftonline.com/tenant/v2.0", {
         clientSecretMode: "static",
         responseMode: "query",
+        allowPersonal: el("microsoftAllowPersonal").checked,
       }));
     }
     if (opts.indexOf("custom") !== -1) {
@@ -938,7 +949,8 @@
     var cfg = collectConfig();
     var names = (cfg.loginOptions || []).map(function (o) { return OPTION_LABELS[o] || o; });
     var providerNames = (cfg.providers || []).map(function (p) {
-      return p.displayName + (p.clientId ? " (eigene ID)" : " (zentral)");
+      var personal = p.allowPersonal ? " + pers. Konten" : "";
+      return p.displayName + (p.clientId ? " (eigene ID)" : " (zentral)") + personal;
     });
     var rows = [
       ["Anmeldung", names.length ? names.join(", ") : "(keine)"],

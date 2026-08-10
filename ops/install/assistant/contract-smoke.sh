@@ -75,6 +75,23 @@ const post = async (pathname, payload) => {
   };
   const rejected = await fetch(`http://127.0.0.1:${port}/api/config`, { method: "POST", headers, body: JSON.stringify(missingSecrets) });
   if (rejected.status !== 422) throw new Error(`Konfiguration ohne Google-/Microsoft-Secret wurde mit ${rejected.status} akzeptiert.`);
+  // Persoenliche Konten und feste Tenant-ID gleichzeitig: muss abgelehnt werden.
+  const conflicting = await fetch(`http://127.0.0.1:${port}/api/config`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      ...body,
+      providers: [{ ...body.providers.find((p) => p.option === "microsoft"), allowPersonal: true }],
+    }),
+  });
+  if (conflicting.status !== 422) throw new Error(`Persoenliche Konten mit Tenant-ID wurde mit ${conflicting.status} akzeptiert.`);
+  // Ohne Tenant-ID, mit persoenlichen Konten: common-Issuer.
+  const personal = {
+    ...body,
+    providers: [{ ...body.providers.find((p) => p.option === "microsoft"), tenantId: "", allowPersonal: true }],
+  };
+  const personalOk = await fetch(`http://127.0.0.1:${port}/api/config`, { method: "POST", headers, body: JSON.stringify(personal) });
+  if (personalOk.status !== 200) throw new Error(`Persoenliche Konten ohne Tenant-ID wurde mit ${personalOk.status} abgelehnt.`);
   await post("/api/config", body);
   await post("/api/secrets", {});
 })().catch((error) => { console.error(error.message); process.exit(1); });
