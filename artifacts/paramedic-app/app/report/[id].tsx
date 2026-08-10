@@ -367,10 +367,10 @@ export default function ReportScreen() {
   };
 
   // Titel des Protokolls: bei Einsaetzen der Missionstitel, sonst der
-  // eingegebene Name oder der generische Platzhalter.
+  // eingegebene Name; ganz ohne Titel bleibt der generische Platzhalter.
   const displayTitle = missionId
     ? (report?.missionTitle ?? tReport("title"))
-    : (reportTitle.trim() || tReport("walkinTitle"));
+    : (reportTitle.trim() || null);
 
   const getOutcomeLabel = (o: IncidentOutcome) => t(`report.outcomes.${o}`, lang);
   const getPatientTypeLabel = (p: PatientType) => t(`report.patientTypes.${p}`, lang);
@@ -410,7 +410,7 @@ export default function ReportScreen() {
             <Ionicons name="chevron-back" size={28} color={theme.text} />
           </Pressable>
           <Text style={[styles.headerTitle, { color: theme.text }]} numberOfLines={1}>
-            {`${tReport("protocolPrefix")} ${displayTitle}`}
+            {displayTitle ? `${tReport("protocolPrefix")} ${displayTitle}` : tReport("walkinTitle")}
           </Text>
           {report && !isLocked && (
             <View style={[styles.statusBadge, { backgroundColor: theme.tintLight }]}>
