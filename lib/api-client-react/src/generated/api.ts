@@ -5,18 +5,36 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import type {
+  MutationFunction,
   QueryFunction,
   QueryKey,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult,
 } from "@tanstack/react-query";
 
-import type { HealthStatus } from "./api.schemas";
+import type {
+  DekGrant,
+  DekWrapPut,
+  DekWrapResult,
+  DekWraps,
+  EncryptedContentPut,
+  EncryptedReport,
+  EncryptedReportPut,
+  ExportBundle,
+  HealthStatus,
+  LegacyReportList,
+  Ok,
+  PublicKeyList,
+  UserCryptoKey,
+  UserCryptoKeyPut,
+} from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
-import type { ErrorType } from "../custom-fetch";
+import type { ErrorType, BodyType } from "../custom-fetch";
 
 type AwaitedInput<T> = PromiseLike<T> | T;
 
@@ -99,3 +117,1407 @@ export function useHealthCheck<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * Returns the user's own key material: public key, salt for the local key-derivation, and the private key encrypted with the locally derived key. The server can never open the private key.
+
+ * @summary Own key material
+ */
+export const getGetMyCryptoKeyUrl = () => {
+  return `/api/crypto/key`;
+};
+
+export const getMyCryptoKey = async (
+  options?: RequestInit,
+): Promise<UserCryptoKey> => {
+  return customFetch<UserCryptoKey>(getGetMyCryptoKeyUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetMyCryptoKeyQueryKey = () => {
+  return [`/api/crypto/key`] as const;
+};
+
+export const getGetMyCryptoKeyQueryOptions = <
+  TData = Awaited<ReturnType<typeof getMyCryptoKey>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getMyCryptoKey>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetMyCryptoKeyQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getMyCryptoKey>>> = ({
+    signal,
+  }) => getMyCryptoKey({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getMyCryptoKey>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetMyCryptoKeyQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getMyCryptoKey>>
+>;
+export type GetMyCryptoKeyQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Own key material
+ */
+
+export function useGetMyCryptoKey<
+  TData = Awaited<ReturnType<typeof getMyCryptoKey>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getMyCryptoKey>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetMyCryptoKeyQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Stores the user's public key and the private key encrypted with the locally derived key (KEK). The KEK itself never leaves the device.
+
+ * @summary Register or replace own keypair
+ */
+export const getPutMyCryptoKeyUrl = () => {
+  return `/api/crypto/key`;
+};
+
+export const putMyCryptoKey = async (
+  userCryptoKeyPut: UserCryptoKeyPut,
+  options?: RequestInit,
+): Promise<Ok> => {
+  return customFetch<Ok>(getPutMyCryptoKeyUrl(), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(userCryptoKeyPut),
+  });
+};
+
+export const getPutMyCryptoKeyMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof putMyCryptoKey>>,
+    TError,
+    { data: BodyType<UserCryptoKeyPut> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof putMyCryptoKey>>,
+  TError,
+  { data: BodyType<UserCryptoKeyPut> },
+  TContext
+> => {
+  const mutationKey = ["putMyCryptoKey"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof putMyCryptoKey>>,
+    { data: BodyType<UserCryptoKeyPut> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return putMyCryptoKey(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PutMyCryptoKeyMutationResult = NonNullable<
+  Awaited<ReturnType<typeof putMyCryptoKey>>
+>;
+export type PutMyCryptoKeyMutationBody = BodyType<UserCryptoKeyPut>;
+export type PutMyCryptoKeyMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Register or replace own keypair
+ */
+export const usePutMyCryptoKey = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof putMyCryptoKey>>,
+    TError,
+    { data: BodyType<UserCryptoKeyPut> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof putMyCryptoKey>>,
+  TError,
+  { data: BodyType<UserCryptoKeyPut> },
+  TContext
+> => {
+  return useMutation(getPutMyCryptoKeyMutationOptions(options));
+};
+
+/**
+ * Public keys of the users of the caller's school, needed to wrap the school data key for a recipient.
+ * @summary Public keys of school users
+ */
+export const getListSchoolPublicKeysUrl = () => {
+  return `/api/crypto/keys`;
+};
+
+export const listSchoolPublicKeys = async (
+  options?: RequestInit,
+): Promise<PublicKeyList> => {
+  return customFetch<PublicKeyList>(getListSchoolPublicKeysUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListSchoolPublicKeysQueryKey = () => {
+  return [`/api/crypto/keys`] as const;
+};
+
+export const getListSchoolPublicKeysQueryOptions = <
+  TData = Awaited<ReturnType<typeof listSchoolPublicKeys>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listSchoolPublicKeys>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListSchoolPublicKeysQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listSchoolPublicKeys>>
+  > = ({ signal }) => listSchoolPublicKeys({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listSchoolPublicKeys>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListSchoolPublicKeysQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listSchoolPublicKeys>>
+>;
+export type ListSchoolPublicKeysQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Public keys of school users
+ */
+
+export function useListSchoolPublicKeys<
+  TData = Awaited<ReturnType<typeof listSchoolPublicKeys>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listSchoolPublicKeys>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListSchoolPublicKeysQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Wrapped school data keys for the caller
+ */
+export const getGetMyDekWrapsUrl = () => {
+  return `/api/crypto/dek`;
+};
+
+export const getMyDekWraps = async (
+  options?: RequestInit,
+): Promise<DekWraps> => {
+  return customFetch<DekWraps>(getGetMyDekWrapsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetMyDekWrapsQueryKey = () => {
+  return [`/api/crypto/dek`] as const;
+};
+
+export const getGetMyDekWrapsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getMyDekWraps>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getMyDekWraps>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetMyDekWrapsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getMyDekWraps>>> = ({
+    signal,
+  }) => getMyDekWraps({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getMyDekWraps>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetMyDekWrapsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getMyDekWraps>>
+>;
+export type GetMyDekWrapsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Wrapped school data keys for the caller
+ */
+
+export function useGetMyDekWraps<
+  TData = Awaited<ReturnType<typeof getMyDekWraps>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getMyDekWraps>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetMyDekWrapsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Only called by a user with report/patient permissions. Registers a new DEK version and stores the caller's envelope (wrapped with the caller's public key, done client-side).
+
+ * @summary Create or rotate the school DEK and store the caller's wrap
+ */
+export const getStoreDekWrapForSelfUrl = () => {
+  return `/api/crypto/dek`;
+};
+
+export const storeDekWrapForSelf = async (
+  dekWrapPut: DekWrapPut,
+  options?: RequestInit,
+): Promise<DekWrapResult> => {
+  return customFetch<DekWrapResult>(getStoreDekWrapForSelfUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(dekWrapPut),
+  });
+};
+
+export const getStoreDekWrapForSelfMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof storeDekWrapForSelf>>,
+    TError,
+    { data: BodyType<DekWrapPut> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof storeDekWrapForSelf>>,
+  TError,
+  { data: BodyType<DekWrapPut> },
+  TContext
+> => {
+  const mutationKey = ["storeDekWrapForSelf"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof storeDekWrapForSelf>>,
+    { data: BodyType<DekWrapPut> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return storeDekWrapForSelf(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type StoreDekWrapForSelfMutationResult = NonNullable<
+  Awaited<ReturnType<typeof storeDekWrapForSelf>>
+>;
+export type StoreDekWrapForSelfMutationBody = BodyType<DekWrapPut>;
+export type StoreDekWrapForSelfMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Create or rotate the school DEK and store the caller's wrap
+ */
+export const useStoreDekWrapForSelf = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof storeDekWrapForSelf>>,
+    TError,
+    { data: BodyType<DekWrapPut> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof storeDekWrapForSelf>>,
+  TError,
+  { data: BodyType<DekWrapPut> },
+  TContext
+> => {
+  return useMutation(getStoreDekWrapForSelfMutationOptions(options));
+};
+
+/**
+ * The caller unwraps the DEK with their own key and re-wraps it for the target user's public key (both client-side), then stores the envelope. Logged for accountability (Art. 5 Abs. 2 DSGVO).
+
+ * @summary Store a DEK wrap for another user (grant or recovery)
+ */
+export const getGrantDekWrapUrl = () => {
+  return `/api/crypto/dek/grant`;
+};
+
+export const grantDekWrap = async (
+  dekGrant: DekGrant,
+  options?: RequestInit,
+): Promise<DekWrapResult> => {
+  return customFetch<DekWrapResult>(getGrantDekWrapUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(dekGrant),
+  });
+};
+
+export const getGrantDekWrapMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof grantDekWrap>>,
+    TError,
+    { data: BodyType<DekGrant> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof grantDekWrap>>,
+  TError,
+  { data: BodyType<DekGrant> },
+  TContext
+> => {
+  const mutationKey = ["grantDekWrap"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof grantDekWrap>>,
+    { data: BodyType<DekGrant> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return grantDekWrap(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type GrantDekWrapMutationResult = NonNullable<
+  Awaited<ReturnType<typeof grantDekWrap>>
+>;
+export type GrantDekWrapMutationBody = BodyType<DekGrant>;
+export type GrantDekWrapMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Store a DEK wrap for another user (grant or recovery)
+ */
+export const useGrantDekWrap = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof grantDekWrap>>,
+    TError,
+    { data: BodyType<DekGrant> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof grantDekWrap>>,
+  TError,
+  { data: BodyType<DekGrant> },
+  TContext
+> => {
+  return useMutation(getGrantDekWrapMutationOptions(options));
+};
+
+/**
+ * @summary Reports that still contain plaintext content
+ */
+export const getListLegacyReportsUrl = () => {
+  return `/api/crypto/legacy-reports`;
+};
+
+export const listLegacyReports = async (
+  options?: RequestInit,
+): Promise<LegacyReportList> => {
+  return customFetch<LegacyReportList>(getListLegacyReportsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListLegacyReportsQueryKey = () => {
+  return [`/api/crypto/legacy-reports`] as const;
+};
+
+export const getListLegacyReportsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listLegacyReports>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listLegacyReports>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListLegacyReportsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listLegacyReports>>
+  > = ({ signal }) => listLegacyReports({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listLegacyReports>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListLegacyReportsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listLegacyReports>>
+>;
+export type ListLegacyReportsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Reports that still contain plaintext content
+ */
+
+export function useListLegacyReports<
+  TData = Awaited<ReturnType<typeof listLegacyReports>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listLegacyReports>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListLegacyReportsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Temporarily returns the plaintext content so an admin client can encrypt it locally.
+ * @summary Plaintext of a legacy report (migration only)
+ */
+export const getGetLegacyReportPlaintextUrl = (id: string) => {
+  return `/api/crypto/legacy-reports/${id}`;
+};
+
+export const getLegacyReportPlaintext = async (
+  id: string,
+  options?: RequestInit,
+): Promise<EncryptedReport> => {
+  return customFetch<EncryptedReport>(getGetLegacyReportPlaintextUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetLegacyReportPlaintextQueryKey = (id: string) => {
+  return [`/api/crypto/legacy-reports/${id}`] as const;
+};
+
+export const getGetLegacyReportPlaintextQueryOptions = <
+  TData = Awaited<ReturnType<typeof getLegacyReportPlaintext>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getLegacyReportPlaintext>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetLegacyReportPlaintextQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getLegacyReportPlaintext>>
+  > = ({ signal }) =>
+    getLegacyReportPlaintext(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getLegacyReportPlaintext>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetLegacyReportPlaintextQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getLegacyReportPlaintext>>
+>;
+export type GetLegacyReportPlaintextQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Plaintext of a legacy report (migration only)
+ */
+
+export function useGetLegacyReportPlaintext<
+  TData = Awaited<ReturnType<typeof getLegacyReportPlaintext>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getLegacyReportPlaintext>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetLegacyReportPlaintextQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Replaces a legacy report's plaintext columns with the client-side encrypted blob.
+ * @summary Store encrypted content and clear the plaintext
+ */
+export const getPutLegacyReportEncryptedUrl = (id: string) => {
+  return `/api/crypto/legacy-reports/${id}`;
+};
+
+export const putLegacyReportEncrypted = async (
+  id: string,
+  encryptedContentPut: EncryptedContentPut,
+  options?: RequestInit,
+): Promise<Ok> => {
+  return customFetch<Ok>(getPutLegacyReportEncryptedUrl(id), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(encryptedContentPut),
+  });
+};
+
+export const getPutLegacyReportEncryptedMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof putLegacyReportEncrypted>>,
+    TError,
+    { id: string; data: BodyType<EncryptedContentPut> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof putLegacyReportEncrypted>>,
+  TError,
+  { id: string; data: BodyType<EncryptedContentPut> },
+  TContext
+> => {
+  const mutationKey = ["putLegacyReportEncrypted"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof putLegacyReportEncrypted>>,
+    { id: string; data: BodyType<EncryptedContentPut> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return putLegacyReportEncrypted(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PutLegacyReportEncryptedMutationResult = NonNullable<
+  Awaited<ReturnType<typeof putLegacyReportEncrypted>>
+>;
+export type PutLegacyReportEncryptedMutationBody =
+  BodyType<EncryptedContentPut>;
+export type PutLegacyReportEncryptedMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Store encrypted content and clear the plaintext
+ */
+export const usePutLegacyReportEncrypted = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof putLegacyReportEncrypted>>,
+    TError,
+    { id: string; data: BodyType<EncryptedContentPut> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof putLegacyReportEncrypted>>,
+  TError,
+  { id: string; data: BodyType<EncryptedContentPut> },
+  TContext
+> => {
+  return useMutation(getPutLegacyReportEncryptedMutationOptions(options));
+};
+
+/**
+ * @summary List incident reports (encrypted content)
+ */
+export const getListIncidentReportsUrl = () => {
+  return `/api/incident-reports`;
+};
+
+export const listIncidentReports = async (
+  options?: RequestInit,
+): Promise<EncryptedReport[]> => {
+  return customFetch<EncryptedReport[]>(getListIncidentReportsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListIncidentReportsQueryKey = () => {
+  return [`/api/incident-reports`] as const;
+};
+
+export const getListIncidentReportsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listIncidentReports>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listIncidentReports>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListIncidentReportsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listIncidentReports>>
+  > = ({ signal }) => listIncidentReports({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listIncidentReports>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListIncidentReportsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listIncidentReports>>
+>;
+export type ListIncidentReportsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List incident reports (encrypted content)
+ */
+
+export function useListIncidentReports<
+  TData = Awaited<ReturnType<typeof listIncidentReports>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listIncidentReports>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListIncidentReportsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create a report draft (encrypted content)
+ */
+export const getCreateIncidentReportUrl = () => {
+  return `/api/incident-reports`;
+};
+
+export const createIncidentReport = async (
+  encryptedReportPut: EncryptedReportPut,
+  options?: RequestInit,
+): Promise<EncryptedReport> => {
+  return customFetch<EncryptedReport>(getCreateIncidentReportUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(encryptedReportPut),
+  });
+};
+
+export const getCreateIncidentReportMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createIncidentReport>>,
+    TError,
+    { data: BodyType<EncryptedReportPut> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createIncidentReport>>,
+  TError,
+  { data: BodyType<EncryptedReportPut> },
+  TContext
+> => {
+  const mutationKey = ["createIncidentReport"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createIncidentReport>>,
+    { data: BodyType<EncryptedReportPut> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createIncidentReport(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateIncidentReportMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createIncidentReport>>
+>;
+export type CreateIncidentReportMutationBody = BodyType<EncryptedReportPut>;
+export type CreateIncidentReportMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Create a report draft (encrypted content)
+ */
+export const useCreateIncidentReport = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createIncidentReport>>,
+    TError,
+    { data: BodyType<EncryptedReportPut> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createIncidentReport>>,
+  TError,
+  { data: BodyType<EncryptedReportPut> },
+  TContext
+> => {
+  return useMutation(getCreateIncidentReportMutationOptions(options));
+};
+
+export const getGetIncidentReportUrl = (id: string) => {
+  return `/api/incident-reports/${id}`;
+};
+
+export const getIncidentReport = async (
+  id: string,
+  options?: RequestInit,
+): Promise<EncryptedReport> => {
+  return customFetch<EncryptedReport>(getGetIncidentReportUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetIncidentReportQueryKey = (id: string) => {
+  return [`/api/incident-reports/${id}`] as const;
+};
+
+export const getGetIncidentReportQueryOptions = <
+  TData = Awaited<ReturnType<typeof getIncidentReport>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getIncidentReport>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetIncidentReportQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getIncidentReport>>
+  > = ({ signal }) => getIncidentReport(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getIncidentReport>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetIncidentReportQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getIncidentReport>>
+>;
+export type GetIncidentReportQueryError = ErrorType<unknown>;
+
+export function useGetIncidentReport<
+  TData = Awaited<ReturnType<typeof getIncidentReport>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getIncidentReport>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetIncidentReportQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export const getUpdateIncidentReportUrl = (id: string) => {
+  return `/api/incident-reports/${id}`;
+};
+
+export const updateIncidentReport = async (
+  id: string,
+  encryptedReportPut: EncryptedReportPut,
+  options?: RequestInit,
+): Promise<EncryptedReport> => {
+  return customFetch<EncryptedReport>(getUpdateIncidentReportUrl(id), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(encryptedReportPut),
+  });
+};
+
+export const getUpdateIncidentReportMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateIncidentReport>>,
+    TError,
+    { id: string; data: BodyType<EncryptedReportPut> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateIncidentReport>>,
+  TError,
+  { id: string; data: BodyType<EncryptedReportPut> },
+  TContext
+> => {
+  const mutationKey = ["updateIncidentReport"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateIncidentReport>>,
+    { id: string; data: BodyType<EncryptedReportPut> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateIncidentReport(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateIncidentReportMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateIncidentReport>>
+>;
+export type UpdateIncidentReportMutationBody = BodyType<EncryptedReportPut>;
+export type UpdateIncidentReportMutationError = ErrorType<unknown>;
+
+export const useUpdateIncidentReport = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateIncidentReport>>,
+    TError,
+    { id: string; data: BodyType<EncryptedReportPut> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateIncidentReport>>,
+  TError,
+  { id: string; data: BodyType<EncryptedReportPut> },
+  TContext
+> => {
+  return useMutation(getUpdateIncidentReportMutationOptions(options));
+};
+
+export const getSubmitIncidentReportUrl = (id: string) => {
+  return `/api/incident-reports/${id}/submit`;
+};
+
+export const submitIncidentReport = async (
+  id: string,
+  options?: RequestInit,
+): Promise<EncryptedReport> => {
+  return customFetch<EncryptedReport>(getSubmitIncidentReportUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getSubmitIncidentReportMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof submitIncidentReport>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof submitIncidentReport>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["submitIncidentReport"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof submitIncidentReport>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return submitIncidentReport(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SubmitIncidentReportMutationResult = NonNullable<
+  Awaited<ReturnType<typeof submitIncidentReport>>
+>;
+
+export type SubmitIncidentReportMutationError = ErrorType<unknown>;
+
+export const useSubmitIncidentReport = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof submitIncidentReport>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof submitIncidentReport>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getSubmitIncidentReportMutationOptions(options));
+};
+
+/**
+ * @summary Append an addendum (client re-encrypts the whole content)
+ */
+export const getAddReportAddendumUrl = (id: string) => {
+  return `/api/incident-reports/${id}/addendum`;
+};
+
+export const addReportAddendum = async (
+  id: string,
+  encryptedContentPut: EncryptedContentPut,
+  options?: RequestInit,
+): Promise<EncryptedReport> => {
+  return customFetch<EncryptedReport>(getAddReportAddendumUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(encryptedContentPut),
+  });
+};
+
+export const getAddReportAddendumMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof addReportAddendum>>,
+    TError,
+    { id: string; data: BodyType<EncryptedContentPut> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof addReportAddendum>>,
+  TError,
+  { id: string; data: BodyType<EncryptedContentPut> },
+  TContext
+> => {
+  const mutationKey = ["addReportAddendum"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof addReportAddendum>>,
+    { id: string; data: BodyType<EncryptedContentPut> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return addReportAddendum(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AddReportAddendumMutationResult = NonNullable<
+  Awaited<ReturnType<typeof addReportAddendum>>
+>;
+export type AddReportAddendumMutationBody = BodyType<EncryptedContentPut>;
+export type AddReportAddendumMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Append an addendum (client re-encrypts the whole content)
+ */
+export const useAddReportAddendum = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof addReportAddendum>>,
+    TError,
+    { id: string; data: BodyType<EncryptedContentPut> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof addReportAddendum>>,
+  TError,
+  { id: string; data: BodyType<EncryptedContentPut> },
+  TContext
+> => {
+  return useMutation(getAddReportAddendumMutationOptions(options));
+};
+
+/**
+ * @summary Encrypted export bundle (no side effects)
+ */
+export const getGetExportBundleUrl = (id: string) => {
+  return `/api/exports/${id}/bundle`;
+};
+
+export const getExportBundle = async (
+  id: string,
+  options?: RequestInit,
+): Promise<ExportBundle> => {
+  return customFetch<ExportBundle>(getGetExportBundleUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetExportBundleQueryKey = (id: string) => {
+  return [`/api/exports/${id}/bundle`] as const;
+};
+
+export const getGetExportBundleQueryOptions = <
+  TData = Awaited<ReturnType<typeof getExportBundle>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getExportBundle>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetExportBundleQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getExportBundle>>> = ({
+    signal,
+  }) => getExportBundle(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getExportBundle>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetExportBundleQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getExportBundle>>
+>;
+export type GetExportBundleQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Encrypted export bundle (no side effects)
+ */
+
+export function useGetExportBundle<
+  TData = Awaited<ReturnType<typeof getExportBundle>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getExportBundle>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetExportBundleQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Mark export as delivered and delete the exported reports
+ */
+export const getConfirmExportDownloadUrl = (id: string) => {
+  return `/api/exports/${id}/confirm`;
+};
+
+export const confirmExportDownload = async (
+  id: string,
+  options?: RequestInit,
+): Promise<Ok> => {
+  return customFetch<Ok>(getConfirmExportDownloadUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getConfirmExportDownloadMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof confirmExportDownload>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof confirmExportDownload>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["confirmExportDownload"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof confirmExportDownload>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return confirmExportDownload(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ConfirmExportDownloadMutationResult = NonNullable<
+  Awaited<ReturnType<typeof confirmExportDownload>>
+>;
+
+export type ConfirmExportDownloadMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Mark export as delivered and delete the exported reports
+ */
+export const useConfirmExportDownload = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof confirmExportDownload>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof confirmExportDownload>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getConfirmExportDownloadMutationOptions(options));
+};

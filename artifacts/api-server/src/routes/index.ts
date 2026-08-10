@@ -13,6 +13,7 @@ import rolesRouter from "./roles";
 import rosterRouter from "./roster";
 import dbConsoleRouter from "./dbConsole";
 import exportsRouter from "./exports";
+import cryptoRouter from "./crypto";
 
 const router: IRouter = Router();
 
@@ -30,5 +31,6 @@ router.use("/roles", rolesRouter);
 router.use("/roster", rosterRouter);
 router.use("/db-console", dbConsoleRouter);
 router.use("/exports", exportsRouter);
+router.use("/crypto", cryptoRouter);
 
 export default router;

@@ -10,7 +10,9 @@ export interface ExportJobResult {
 
 /**
  * Erzeugt fuer jede Schule mit abgelaufenem Export-Intervall ein neues
- * PDF-Buendel ueber alle seit dem letzten Export eingereichten Protokolle.
+ * Export-Buendel ueber alle seit dem letzten Export eingereichten Protokolle.
+ * Das Buendel enthaelt nur Metadaten und Chiffrat; das PDF baut der Client
+ * nach der lokalen Entschluesselung (GET /exports/:id/bundle).
  *
  * Fristbeginn ist der Zeitpunkt des letzten erzeugten Exports; ist noch keiner
  * erfolgt, sind alle eingereichten Protokolle faellig. Der Scheduler laeuft

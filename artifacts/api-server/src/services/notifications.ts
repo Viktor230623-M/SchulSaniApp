@@ -2,7 +2,8 @@ import { randomUUID } from "crypto";
 import { eq, and, inArray } from "drizzle-orm";
 import { db, notificationsTable, deviceTokensTable, usersTable, dutyTable, type Notification, type NewNotification, type DeviceToken } from "@workspace/db";
 import { sendWebPush } from "../lib/webPush";
-import { config } from "../config";
+import { sendFcm } from "../lib/push/fcm";
+import { sendApns } from "../lib/push/apns";
 import { loadRolePermissions } from "../lib/rolePermissions";
 
 export type NotificationType =
@@ -181,15 +182,15 @@ async function sendPushNotification(notification: Notification): Promise<void> {
       return;
     }
 
-    // Web-Subscriptions sind JSON-Objekte mit eigenem Endpunkt und gehen nicht
-    // ueber exp.host. Getrennt behandeln, sonst verwirft Expo den ganzen Stapel.
+    // Web-Subscriptions sind JSON-Objekte mit eigenem Endpunkt. Web-Push
+    // (VAPID) bleibt bestehen, ebenfalls mit inhaltsleerem Signal.
     const webTokens = tokens.filter((t) => t.platform === "web");
     const nativeTokens = tokens.filter((t) => t.platform !== "web");
 
     for (const row of webTokens) {
       const result = await sendWebPush(row.token, {
-        title: notification.title ?? getDefaultTitle(notification.type),
-        body: notification.body,
+        title: "Neue Meldung",
+        body: "",
         url: "/",
         notificationId: notification.id,
       });
@@ -200,80 +201,34 @@ async function sendPushNotification(notification: Notification): Promise<void> {
 
     if (nativeTokens.length === 0) return;
 
-    const messages = nativeTokens.map((token) => ({
-      to: token.token,
-      title: notification.title ?? getDefaultTitle(notification.type),
-      body: notification.body,
-      data: {
-        notificationId: notification.id,
-        type: notification.type,
-        relatedId: notification.relatedId,
-      },
-      priority: notification.priority === "high" ? "high" : "default",
-      channelId: notification.priority === "high" ? "high-priority" : "default",
-      // Einsatz-Alarm: eigener Sound statt Systemsound, damit sich der
-      // Einsatz von normalen Benachrichtigungen abhebt.
-      sound: notification.priority === "high" ? "alarm.wav" : "default",
-    }));
+    // Native Geraete gehen ueber die zentralen FCM-/APNs-Konten des Anbieters.
+    // Payloads sind inhaltsleer (kein Personenbezug): nur technische
+    // Bezeichner, die App laedt und entschluesselt die Details selbst.
+    const data: Record<string, string> = {
+      notificationId: notification.id,
+      type: notification.type,
+      ...(notification.relatedId ? { relatedId: notification.relatedId } : {}),
+    };
+    const priority = notification.priority === "high" ? "high" : "normal";
+    const sound = notification.priority === "high" ? "alarm.wav" : "default";
 
-    await sendExpoPushMessages(messages);
+    for (const row of nativeTokens) {
+      let result: "ok" | "gone" | "error";
+      if (row.platform === "ios") {
+        result = await sendApns(row.token, { title: "Neue Meldung", data, priority, sound });
+      } else {
+        result = await sendFcm(row.token, { title: "Neue Meldung", data, priority, sound });
+      }
+      if (result === "gone") {
+        await db.delete(deviceTokensTable).where(eq(deviceTokensTable.id, row.id));
+      }
+    }
   } catch (err) {
     console.error("Failed to send push notification:", err);
   }
 }
 
-function getDefaultTitle(type: NotificationType): string {
-  const titles: Record<NotificationType, string> = {
-    mission_assigned: "Neue Mission zugewiesen",
-    mission_cancelled: "Mission abgesagt",
-    mission_completed: "Mission abgeschlossen",
-    mission_created: "Neue Mission",
-    status_changed: "Status aktualisiert",
-    news: "Neuigkeiten",
-    loa_update: "Abwesenheitsantrag aktualisiert",
-    reminder: "Erinnerung",
-    high_priority_alert: "WICHTIG",
-  };
-  return titles[type] ?? config.appName;
-}
 
-async function sendExpoPushMessages(messages: any[]): Promise<void> {
-  const EXPO_ACCESS_TOKEN = process.env["EXPO_ACCESS_TOKEN"];
-  
-  if (!EXPO_ACCESS_TOKEN) {
-    console.log("[push] EXPO_ACCESS_TOKEN not configured, skipping push");
-    return;
-  }
-
-  const chunks = [];
-  const chunkSize = 100;
-  
-  for (let i = 0; i < messages.length; i += chunkSize) {
-    chunks.push(messages.slice(i, i + chunkSize));
-  }
-
-  for (const chunk of chunks) {
-    try {
-      const response = await fetch("https://exp.host/--/api/v2/push/send", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-          Authorization: `Bearer ${EXPO_ACCESS_TOKEN}`,
-        },
-        body: JSON.stringify(chunk),
-      });
-
-      const result = await response.json() as any;
-      
-      if (result.errors) {
-        console.error("[push] Errors sending notifications:", result.errors);
-      }
-    } catch (err) {
-      console.error("[push] Failed to send chunk:", err);
-    }
-  }
-}
 
 export async function saveDeviceToken(userId: string, schoolId: string, token: string, platform: "ios" | "android" | "web", deviceId?: string): Promise<void> {
   if (typeof token !== "string" || token.length === 0 || token.length > 4096) {

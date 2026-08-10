@@ -6,4 +6,20 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from "./dekGrant";
+export * from "./dekWrapPut";
+export * from "./dekWrapResult";
+export * from "./dekWraps";
+export * from "./dekWrapsWrapsItem";
+export * from "./encryptedContentPut";
+export * from "./encryptedReport";
+export * from "./encryptedReportPut";
+export * from "./exportBundle";
 export * from "./healthStatus";
+export * from "./legacyReportList";
+export * from "./legacyReportListReportsItem";
+export * from "./ok";
+export * from "./publicKeyList";
+export * from "./publicKeyListKeysItem";
+export * from "./userCryptoKey";
+export * from "./userCryptoKeyPut";

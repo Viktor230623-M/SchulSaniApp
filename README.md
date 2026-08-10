@@ -63,7 +63,13 @@ Backend (`artifacts/api-server/.env`):
 | `VAPID_PUBLIC_KEY`   | Öffentlicher VAPID-Schlüssel für Web-Push                              |
 | `VAPID_PRIVATE_KEY`  | Privater VAPID-Schlüssel für Web-Push                                  |
 | `VAPID_SUBJECT`      | Kontaktangabe (mailto: oder URL) für Web-Push                          |
-| `EXPO_ACCESS_TOKEN`  | Optional: Token für Expo-Push-Benachrichtigungen                       |
+| `FCM_SERVICE_ACCOUNT_PATH` | Optional: Pfad zur Service-Account-JSON des Anbieters (FCM, Android)  |
+| `FCM_PROJECT_ID`     | Optional: Firebase-Projekt-ID des Anbieters (FCM)                       |
+| `APNS_KEY_PATH`      | Optional: Pfad zur .p8-Auth-Key-Datei des Anbieters (APNs, iOS)         |
+| `APNS_KEY_ID`        | Optional: Key-ID des .p8-Keys (APNs)                                    |
+| `APNS_TEAM_ID`       | Optional: Apple-Team-ID des Anbieters (APNs)                            |
+| `APNS_BUNDLE_ID`     | Optional: Bundle-ID der App (APNs)                                      |
+| `APNS_ENV`           | Optional: `production` oder `sandbox` (APNs)                            |
 | `LIBRETRANSLATE_URL` | Optional: URL einer LibreTranslate-Instanz für Übersetzungen           |
 
 App (`artifacts/paramedic-app/.env`):

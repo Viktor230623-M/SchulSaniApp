@@ -8,3 +8,105 @@
 export interface HealthStatus {
   status: string;
 }
+
+export interface Ok {
+  ok: boolean;
+}
+
+export interface UserCryptoKey {
+  hasKeypair: boolean;
+  publicKey?: string | null;
+  encryptedPrivateKey?: string | null;
+  saltEnc?: string | null;
+  keyVersion?: number | null;
+}
+
+export interface UserCryptoKeyPut {
+  publicKey: string;
+  encryptedPrivateKey: string;
+  saltEnc: string;
+}
+
+export type PublicKeyListKeysItem = {
+  userId: string;
+  publicKey: string;
+};
+
+export interface PublicKeyList {
+  keys: PublicKeyListKeysItem[];
+}
+
+export interface DekWrapPut {
+  wrappedDek: string;
+  dekVersion: number;
+}
+
+export interface DekWrapResult {
+  dekVersion: number;
+}
+
+export interface DekGrant {
+  targetUserId: string;
+  wrappedDek: string;
+  dekVersion: number;
+  /** true when this is an admin recovery after a lost key */
+  recover?: boolean;
+}
+
+export type DekWrapsWrapsItem = {
+  dekVersion: number;
+  wrappedDek: string;
+  createdAt?: string;
+};
+
+export interface DekWraps {
+  latestVersion?: number | null;
+  wraps: DekWrapsWrapsItem[];
+}
+
+export interface EncryptedContentPut {
+  contentEncrypted: string;
+  contentKeyVersion: number;
+}
+
+export interface EncryptedReport {
+  id: string;
+  schoolId?: string;
+  missionId?: string | null;
+  missionTitle?: string | null;
+  authorId: string;
+  status: string;
+  location?: string | null;
+  incidentAt?: string | null;
+  responderIds?: string[] | null;
+  contentEncrypted?: string | null;
+  contentKeyVersion?: number | null;
+  createdAt: string;
+  updatedAt: string;
+  submittedAt?: string | null;
+}
+
+export interface EncryptedReportPut {
+  missionId?: string | null;
+  title?: string | null;
+  location?: string | null;
+  incidentAt?: string | null;
+  responders?: string[] | null;
+  contentEncrypted: string;
+  contentKeyVersion: number;
+}
+
+export type LegacyReportListReportsItem = {
+  id: string;
+};
+
+export interface LegacyReportList {
+  reports: LegacyReportListReportsItem[];
+}
+
+export interface ExportBundle {
+  id: string;
+  fromAt?: string | null;
+  toAt: string;
+  reports: EncryptedReport[];
+}

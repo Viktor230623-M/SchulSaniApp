@@ -14,3 +14,316 @@ import * as zod from "zod";
 export const HealthCheckResponse = zod.object({
   status: zod.string(),
 });
+
+/**
+ * Returns the user's own key material: public key, salt for the local key-derivation, and the private key encrypted with the locally derived key. The server can never open the private key.
+
+ * @summary Own key material
+ */
+export const GetMyCryptoKeyResponse = zod.object({
+  hasKeypair: zod.boolean(),
+  publicKey: zod.string().nullish(),
+  encryptedPrivateKey: zod.string().nullish(),
+  saltEnc: zod.string().nullish(),
+  keyVersion: zod.number().nullish(),
+});
+
+/**
+ * Stores the user's public key and the private key encrypted with the locally derived key (KEK). The KEK itself never leaves the device.
+
+ * @summary Register or replace own keypair
+ */
+export const PutMyCryptoKeyBody = zod.object({
+  publicKey: zod.string(),
+  encryptedPrivateKey: zod.string(),
+  saltEnc: zod.string(),
+});
+
+export const PutMyCryptoKeyResponse = zod.object({
+  ok: zod.boolean(),
+});
+
+/**
+ * Public keys of the users of the caller's school, needed to wrap the school data key for a recipient.
+ * @summary Public keys of school users
+ */
+export const ListSchoolPublicKeysResponse = zod.object({
+  keys: zod.array(
+    zod.object({
+      userId: zod.string(),
+      publicKey: zod.string(),
+    }),
+  ),
+});
+
+/**
+ * @summary Wrapped school data keys for the caller
+ */
+export const GetMyDekWrapsResponse = zod.object({
+  latestVersion: zod.number().nullish(),
+  wraps: zod.array(
+    zod.object({
+      dekVersion: zod.number(),
+      wrappedDek: zod.string(),
+      createdAt: zod.date().optional(),
+    }),
+  ),
+});
+
+/**
+ * Only called by a user with report/patient permissions. Registers a new DEK version and stores the caller's envelope (wrapped with the caller's public key, done client-side).
+
+ * @summary Create or rotate the school DEK and store the caller's wrap
+ */
+export const StoreDekWrapForSelfBody = zod.object({
+  wrappedDek: zod.string(),
+  dekVersion: zod.number(),
+});
+
+/**
+ * The caller unwraps the DEK with their own key and re-wraps it for the target user's public key (both client-side), then stores the envelope. Logged for accountability (Art. 5 Abs. 2 DSGVO).
+
+ * @summary Store a DEK wrap for another user (grant or recovery)
+ */
+export const GrantDekWrapBody = zod.object({
+  targetUserId: zod.string(),
+  wrappedDek: zod.string(),
+  dekVersion: zod.number(),
+  recover: zod
+    .boolean()
+    .optional()
+    .describe("true when this is an admin recovery after a lost key"),
+});
+
+/**
+ * @summary Reports that still contain plaintext content
+ */
+export const ListLegacyReportsResponse = zod.object({
+  reports: zod.array(
+    zod.object({
+      id: zod.string(),
+    }),
+  ),
+});
+
+/**
+ * Temporarily returns the plaintext content so an admin client can encrypt it locally.
+ * @summary Plaintext of a legacy report (migration only)
+ */
+export const GetLegacyReportPlaintextParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetLegacyReportPlaintextResponse = zod.object({
+  id: zod.string(),
+  schoolId: zod.string().optional(),
+  missionId: zod.string().nullish(),
+  missionTitle: zod.string().nullish(),
+  authorId: zod.string(),
+  status: zod.string(),
+  location: zod.string().nullish(),
+  incidentAt: zod.date().nullish(),
+  responderIds: zod.array(zod.string()).nullish(),
+  contentEncrypted: zod.string().nullish(),
+  contentKeyVersion: zod.number().nullish(),
+  createdAt: zod.date(),
+  updatedAt: zod.date(),
+  submittedAt: zod.date().nullish(),
+});
+
+/**
+ * Replaces a legacy report's plaintext columns with the client-side encrypted blob.
+ * @summary Store encrypted content and clear the plaintext
+ */
+export const PutLegacyReportEncryptedParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const PutLegacyReportEncryptedBody = zod.object({
+  contentEncrypted: zod.string(),
+  contentKeyVersion: zod.number(),
+});
+
+export const PutLegacyReportEncryptedResponse = zod.object({
+  ok: zod.boolean(),
+});
+
+/**
+ * @summary List incident reports (encrypted content)
+ */
+export const ListIncidentReportsResponseItem = zod.object({
+  id: zod.string(),
+  schoolId: zod.string().optional(),
+  missionId: zod.string().nullish(),
+  missionTitle: zod.string().nullish(),
+  authorId: zod.string(),
+  status: zod.string(),
+  location: zod.string().nullish(),
+  incidentAt: zod.date().nullish(),
+  responderIds: zod.array(zod.string()).nullish(),
+  contentEncrypted: zod.string().nullish(),
+  contentKeyVersion: zod.number().nullish(),
+  createdAt: zod.date(),
+  updatedAt: zod.date(),
+  submittedAt: zod.date().nullish(),
+});
+export const ListIncidentReportsResponse = zod.array(
+  ListIncidentReportsResponseItem,
+);
+
+/**
+ * @summary Create a report draft (encrypted content)
+ */
+export const CreateIncidentReportBody = zod.object({
+  missionId: zod.string().nullish(),
+  title: zod.string().nullish(),
+  location: zod.string().nullish(),
+  incidentAt: zod.date().nullish(),
+  responders: zod.array(zod.string()).nullish(),
+  contentEncrypted: zod.string(),
+  contentKeyVersion: zod.number(),
+});
+
+export const GetIncidentReportParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetIncidentReportResponse = zod.object({
+  id: zod.string(),
+  schoolId: zod.string().optional(),
+  missionId: zod.string().nullish(),
+  missionTitle: zod.string().nullish(),
+  authorId: zod.string(),
+  status: zod.string(),
+  location: zod.string().nullish(),
+  incidentAt: zod.date().nullish(),
+  responderIds: zod.array(zod.string()).nullish(),
+  contentEncrypted: zod.string().nullish(),
+  contentKeyVersion: zod.number().nullish(),
+  createdAt: zod.date(),
+  updatedAt: zod.date(),
+  submittedAt: zod.date().nullish(),
+});
+
+export const UpdateIncidentReportParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdateIncidentReportBody = zod.object({
+  missionId: zod.string().nullish(),
+  title: zod.string().nullish(),
+  location: zod.string().nullish(),
+  incidentAt: zod.date().nullish(),
+  responders: zod.array(zod.string()).nullish(),
+  contentEncrypted: zod.string(),
+  contentKeyVersion: zod.number(),
+});
+
+export const UpdateIncidentReportResponse = zod.object({
+  id: zod.string(),
+  schoolId: zod.string().optional(),
+  missionId: zod.string().nullish(),
+  missionTitle: zod.string().nullish(),
+  authorId: zod.string(),
+  status: zod.string(),
+  location: zod.string().nullish(),
+  incidentAt: zod.date().nullish(),
+  responderIds: zod.array(zod.string()).nullish(),
+  contentEncrypted: zod.string().nullish(),
+  contentKeyVersion: zod.number().nullish(),
+  createdAt: zod.date(),
+  updatedAt: zod.date(),
+  submittedAt: zod.date().nullish(),
+});
+
+export const SubmitIncidentReportParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const SubmitIncidentReportResponse = zod.object({
+  id: zod.string(),
+  schoolId: zod.string().optional(),
+  missionId: zod.string().nullish(),
+  missionTitle: zod.string().nullish(),
+  authorId: zod.string(),
+  status: zod.string(),
+  location: zod.string().nullish(),
+  incidentAt: zod.date().nullish(),
+  responderIds: zod.array(zod.string()).nullish(),
+  contentEncrypted: zod.string().nullish(),
+  contentKeyVersion: zod.number().nullish(),
+  createdAt: zod.date(),
+  updatedAt: zod.date(),
+  submittedAt: zod.date().nullish(),
+});
+
+/**
+ * @summary Append an addendum (client re-encrypts the whole content)
+ */
+export const AddReportAddendumParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const AddReportAddendumBody = zod.object({
+  contentEncrypted: zod.string(),
+  contentKeyVersion: zod.number(),
+});
+
+export const AddReportAddendumResponse = zod.object({
+  id: zod.string(),
+  schoolId: zod.string().optional(),
+  missionId: zod.string().nullish(),
+  missionTitle: zod.string().nullish(),
+  authorId: zod.string(),
+  status: zod.string(),
+  location: zod.string().nullish(),
+  incidentAt: zod.date().nullish(),
+  responderIds: zod.array(zod.string()).nullish(),
+  contentEncrypted: zod.string().nullish(),
+  contentKeyVersion: zod.number().nullish(),
+  createdAt: zod.date(),
+  updatedAt: zod.date(),
+  submittedAt: zod.date().nullish(),
+});
+
+/**
+ * @summary Encrypted export bundle (no side effects)
+ */
+export const GetExportBundleParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetExportBundleResponse = zod.object({
+  id: zod.string(),
+  fromAt: zod.date().nullish(),
+  toAt: zod.date(),
+  reports: zod.array(
+    zod.object({
+      id: zod.string(),
+      schoolId: zod.string().optional(),
+      missionId: zod.string().nullish(),
+      missionTitle: zod.string().nullish(),
+      authorId: zod.string(),
+      status: zod.string(),
+      location: zod.string().nullish(),
+      incidentAt: zod.date().nullish(),
+      responderIds: zod.array(zod.string()).nullish(),
+      contentEncrypted: zod.string().nullish(),
+      contentKeyVersion: zod.number().nullish(),
+      createdAt: zod.date(),
+      updatedAt: zod.date(),
+      submittedAt: zod.date().nullish(),
+    }),
+  ),
+});
+
+/**
+ * @summary Mark export as delivered and delete the exported reports
+ */
+export const ConfirmExportDownloadParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ConfirmExportDownloadResponse = zod.object({
+  ok: zod.boolean(),
+});

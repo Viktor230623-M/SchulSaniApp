@@ -3,7 +3,7 @@ import { Router } from "express";
 import jwt from "jsonwebtoken";
 import rateLimit from "express-rate-limit";
 import { eq, and, or, isNull, gt, sql } from "drizzle-orm";
-import { db, authTokensTable, userIdentitiesTable, usersTable, rolesTable, sessionsTable, userRoleEnum, type UserRole } from "@workspace/db";
+import { db, authTokensTable, userIdentitiesTable, usersTable, rolesTable, sessionsTable, userRoleEnum, userCryptoKeysTable, type UserRole } from "@workspace/db";
 import { permissionsForRole } from "../lib/rolePermissions";
 import {
   requireAuth,
@@ -17,7 +17,8 @@ import { createSession, resolveSession, revokeSession, revokeAllSessionsForUser 
 import { config } from "../config";
 import { loadAuthProviders } from "../auth/registry";
 import type { AuthProfile, AuthProvider, AuthResult, PasswordAuthProvider, RedirectAuthProvider } from "../auth/types";
-import { hashPassword } from "../auth/providers/local";
+import { hashLoginProof, verifyLoginProof } from "../auth/providers/local";
+import { upsertUserCryptoKey } from "../lib/userCrypto";
 import { issueAuthToken, hashAuthToken } from "../lib/authTokens";
 import { assertMailerConfig, authLink, sendMail, verifyMailer } from "../services/mailer";
 import { validateProfileName } from "../lib/profileName";
@@ -82,8 +83,14 @@ const SESSION_COOKIE = "sani-session";
 const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const LINK_SESSION_FRESHNESS_MS = 15 * 60 * 1000;
 
-function validPassword(value: unknown): value is string {
-  return typeof value === "string" && value.length >= 10 && value.length <= 200;
+// Der Server sieht das Passwort nie -- nur den daraus abgeleiteten Proof und
+// den Ableitungs-Salt. Die Mindestlaenge des Passworts prueft der Client.
+function validProof(value: unknown): value is string {
+  return typeof value === "string" && value.length >= 20 && value.length <= 500;
+}
+
+function validLoginSalt(value: unknown): value is string {
+  return typeof value === "string" && value.length >= 8 && value.length <= 200 && /^[A-Za-z0-9+/=_-]+$/.test(value);
 }
 
 function normaliseUsername(value: unknown): string | null {
@@ -273,6 +280,58 @@ async function buildUserResponse(user: { id: string; firstName: string | null; l
   };
 }
 
+/**
+ * Ableitungs-Salts fuer die lokale Anmeldung, oeffentlich -- Salts sind keine
+ * Geheimnisse. Ein unbekannter Nutzername liefert dieselbe Antwort wie ein
+ * bekannter ohne Kryptoeintrag (Zufalls-Salts), damit die Route keine
+ * Konten verraet. Bestandskonten ohne login_salt (bcrypt-Altbestaende) fallen
+ * bewusst durch: fuer sie gilt der Passwort-Reset als einziger Weg.
+ */
+router.get("/params", authLimiter, async (req, res) => {
+  const providerKey = typeof req.query["providerKey"] === "string" ? req.query["providerKey"] : "";
+  const provider = authProviders.find((candidate) => candidate.key === providerKey);
+  if (!provider || provider.type !== "local") {
+    res.status(404).json({ error: "Anmeldeweg nicht gefunden." });
+    return;
+  }
+
+  const username = typeof req.query["username"] === "string" ? req.query["username"].trim().toLowerCase() : "";
+  const randomSalt = () => randomBytes(16).toString("base64");
+  let saltLogin = randomSalt();
+  let saltEnc = randomSalt();
+  let hasKeypair = false;
+
+  if (username && username.length <= 254) {
+    const [user] = await db
+      .select({ loginSalt: usersTable.loginSalt, id: usersTable.id })
+      .from(usersTable)
+      .where(and(
+        eq(usersTable.schoolId, requiredSchoolId()),
+        eq(usersTable.authProvider, provider.key),
+        or(
+          eq(usersTable.externalSubject, username),
+          eq(usersTable.email, username),
+          eq(usersTable.username, username),
+        ),
+      ))
+      .limit(1);
+    if (user) {
+      if (user.loginSalt) saltLogin = user.loginSalt;
+      const [cryptoKey] = await db
+        .select({ saltEnc: userCryptoKeysTable.saltEnc })
+        .from(userCryptoKeysTable)
+        .where(eq(userCryptoKeysTable.userId, user.id))
+        .limit(1);
+      if (cryptoKey) {
+        saltEnc = cryptoKey.saltEnc;
+        hasKeypair = true;
+      }
+    }
+  }
+
+  res.json({ saltLogin, saltEnc, hasKeypair });
+});
+
 router.post("/login", authLimiter, async (req, res) => {
   const providerKey = typeof req.body?.providerKey === "string" ? req.body.providerKey : "";
   const provider = authProviders.find((candidate) => candidate.key === providerKey);
@@ -282,14 +341,15 @@ router.post("/login", authLimiter, async (req, res) => {
   }
 
   const username = typeof req.body?.username === "string" ? req.body.username : "";
-  const password = typeof req.body?.password === "string" ? req.body.password : "";
-  if (!username || !password || username.length > 254 || password.length > 200) {
+  // Der Login-Proof ist der Argon2id-abgeleitete Wert, nie das Passwort.
+  const proof = typeof req.body?.proof === "string" ? req.body.proof : "";
+  if (!username || !validProof(proof) || username.length > 254) {
     res.status(400).json({ error: "Anmeldedaten sind ungueltig." });
     return;
   }
 
   try {
-    const result = await provider.authenticate({ username, password });
+    const result = await provider.authenticate({ username, password: proof });
     const schoolId = requiredSchoolId();
     const [user] = await db.select().from(usersTable).where(and(
         eq(usersTable.schoolId, schoolId),
@@ -341,12 +401,13 @@ function localAccountUnavailable(res: import("express").Response): boolean {
 router.post("/local/register", localAccountLimiter, async (req, res) => {
   if (localAccountUnavailable(res)) return;
   const email = normaliseEmail(req.body?.email);
-  const password = req.body?.password;
+  const proof = req.body?.proof;
+  const loginSalt = req.body?.loginSalt;
   const rawUsername = req.body?.username;
   const username = rawUsername === undefined || rawUsername === "" ? null : normaliseUsername(rawUsername);
   const firstName = typeof req.body?.firstName === "string" ? req.body.firstName.trim() : "";
   const lastName = typeof req.body?.lastName === "string" ? req.body.lastName.trim() : "";
-  if (!email || !validPassword(password) || (rawUsername !== undefined && rawUsername !== "" && !username) || firstName.length > 100 || lastName.length > 100) {
+  if (!email || !validProof(proof) || !validLoginSalt(loginSalt) || (rawUsername !== undefined && rawUsername !== "" && !username) || firstName.length > 100 || lastName.length > 100) {
     res.status(400).json({ error: "E-Mail und Passwort sind ungueltig." });
     return;
   }
@@ -389,6 +450,7 @@ router.post("/local/register", localAccountLimiter, async (req, res) => {
     userId: string;
     token: string;
     passwordHash: string;
+    loginSalt: string;
     email: string;
     username: string | null;
     firstName: string;
@@ -409,8 +471,8 @@ router.post("/local/register", localAccountLimiter, async (req, res) => {
     } else {
       const userId = randomUUID();
       const token = randomBytes(32).toString("base64url");
-      const passwordHash = await hashPassword(password);
-      pendingRegistration = { userId, token, passwordHash, email, username, firstName, lastName, schoolId };
+      const passwordHash = await hashLoginProof(proof);
+      pendingRegistration = { userId, token, passwordHash, loginSalt, email, username, firstName, lastName, schoolId };
       const text = `Bestaetige deine E-Mail-Adresse innerhalb von 24 Stunden:\n\n${authLink("email-bestaetigen", token)}\n\nWenn du diese Registrierung nicht gestartet hast, ignoriere diese E-Mail.`;
       mail = { to: email, subject: "E-Mail-Adresse bestaetigen", text, html: htmlMailText(text) };
     }
@@ -422,7 +484,7 @@ router.post("/local/register", localAccountLimiter, async (req, res) => {
   }
 
   if (pendingRegistration) {
-    const { userId, token, passwordHash, email: registrationEmail, username: registrationUsername, firstName: registrationFirstName, lastName: registrationLastName, schoolId: registrationSchoolId } = pendingRegistration;
+    const { userId, token, passwordHash, loginSalt, email: registrationEmail, username: registrationUsername, firstName: registrationFirstName, lastName: registrationLastName, schoolId: registrationSchoolId } = pendingRegistration;
     await db.transaction(async (tx) => {
       await tx.insert(usersTable).values({
         id: userId,
@@ -434,6 +496,7 @@ router.post("/local/register", localAccountLimiter, async (req, res) => {
         firstName: registrationFirstName,
         lastName: registrationLastName,
         passwordHash,
+        loginSalt,
         role: "sanitaeter",
         schoolId: registrationSchoolId,
         // Mit Schul-Zugangscode ist die Registrierung die Eintrittskarte: das
@@ -559,7 +622,7 @@ router.post("/local/password/forgot", resetIpLimiter, resetEmailLimiter, async (
     res.status(503).json({ error: "E-Mail-Versand ist derzeit nicht erreichbar." });
     return;
   }
-  await hashPassword(email);
+  await hashLoginProof(email);
   // Reset nur fuer bestaetigte Adressen. Eine unbestaetigte Adresse gehoert
   // moeglicherweise gar nicht dem Kontoinhaber (Verwalter-Korrektur, noch
   // nicht bestaetigt); eine Reset-Mail dorthin waere eine Uebernahmekette.
@@ -578,8 +641,9 @@ router.post("/local/password/forgot", resetIpLimiter, resetEmailLimiter, async (
 router.post("/local/password/reset", localAccountLimiter, async (req, res) => {
   if (localAccountUnavailable(res)) return;
   const token = typeof req.body?.token === "string" ? req.body.token : "";
-  const password = req.body?.password;
-  if (!token || token.length > 200 || !validPassword(password)) {
+  const proof = req.body?.proof;
+  const loginSalt = req.body?.loginSalt;
+  if (!token || token.length > 200 || !validProof(proof) || !validLoginSalt(loginSalt)) {
     res.status(400).json({ error: "Link oder Passwort ist ungueltig." });
     return;
   }
@@ -588,8 +652,8 @@ router.post("/local/password/reset", localAccountLimiter, async (req, res) => {
     if (!candidate) return false;
     const [consumed] = await tx.update(authTokensTable).set({ usedAt: new Date() }).where(and(eq(authTokensTable.id, candidate.id), isNull(authTokensTable.usedAt))).returning({ id: authTokensTable.id });
     if (!consumed) return false;
-    const passwordHash = await hashPassword(password);
-    const [changed] = await tx.update(usersTable).set({ passwordHash, passwordVersion: sql`${usersTable.passwordVersion} + 1`, mustChangePassword: false, oneTimePasswordExpiresAt: null, updatedAt: new Date() }).where(and(eq(usersTable.id, candidate.userId), eq(usersTable.authProvider, getLocalProvider().key))).returning({ id: usersTable.id });
+    const passwordHash = await hashLoginProof(proof);
+    const [changed] = await tx.update(usersTable).set({ passwordHash, loginSalt, passwordVersion: sql`${usersTable.passwordVersion} + 1`, mustChangePassword: false, oneTimePasswordExpiresAt: null, updatedAt: new Date() }).where(and(eq(usersTable.id, candidate.userId), eq(usersTable.authProvider, getLocalProvider().key))).returning({ id: usersTable.id });
     if (!changed) return false;
     await tx.update(authTokensTable).set({ usedAt: new Date() }).where(and(eq(authTokensTable.userId, candidate.userId), eq(authTokensTable.kind, "password_reset"), isNull(authTokensTable.usedAt)));
     await tx.update(sessionsTable).set({ revokedAt: new Date() }).where(and(eq(sessionsTable.userId, candidate.userId), isNull(sessionsTable.revokedAt)));
@@ -604,23 +668,45 @@ router.post("/local/password/reset", localAccountLimiter, async (req, res) => {
 });
 
 router.post("/password/change", passwordChangeLimiter, requireAuthForPasswordChange, async (req: AuthRequest, res) => {
-  const { currentPassword, newPassword } = req.body as { currentPassword?: unknown; newPassword?: unknown };
-  if (typeof currentPassword !== "string" || typeof newPassword !== "string" || newPassword.length < 10 || newPassword.length > 200 || currentPassword.length > 500 || currentPassword === newPassword) {
-    res.status(400).json({ error: "Aktuelles und neues Passwort sind ungueltig." });
+  const { currentProof, newProof, newLoginSalt, crypto } = req.body as {
+    currentProof?: unknown; newProof?: unknown; newLoginSalt?: unknown;
+    crypto?: { encryptedPrivateKey?: unknown; saltEnc?: unknown } | null;
+  };
+  if (!validProof(currentProof) || !validProof(newProof) || !validLoginSalt(newLoginSalt) || currentProof === newProof) {
+    res.status(400).json({ error: "Aktueller und neuer Proof sind ungueltig." });
+    return;
+  }
+  const cryptoValid =
+    !crypto ||
+    (typeof crypto.encryptedPrivateKey === "string" && crypto.encryptedPrivateKey.length > 0 && crypto.encryptedPrivateKey.length <= 8192 &&
+     typeof crypto.saltEnc === "string" && crypto.saltEnc.length >= 8 && crypto.saltEnc.length <= 8192);
+  if (!cryptoValid) {
+    res.status(400).json({ error: "Schluesselmaterial ist ungueltig." });
     return;
   }
   const [user] = await db.select({ passwordHash: usersTable.passwordHash, passwordVersion: usersTable.passwordVersion, role: usersTable.role, firstName: usersTable.firstName, lastName: usersTable.lastName, email: usersTable.email, username: usersTable.username, schoolId: usersTable.schoolId, profileConfirmedAt: usersTable.profileConfirmedAt }).from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
-  if (!user?.passwordHash) {
+  if (!user?.passwordHash || !verifyLoginProof(currentProof, user.passwordHash)) {
     res.status(401).json({ error: "Ungültige Zugangsdaten" });
     return;
   }
-  const bcrypt = await import("bcryptjs");
-  if (!(await bcrypt.default.compare(currentPassword, user.passwordHash))) {
-    res.status(401).json({ error: "Ungültige Zugangsdaten" });
-    return;
+  const passwordHash = await hashLoginProof(newProof);
+  const [updated] = await db.update(usersTable).set({ passwordHash, loginSalt: newLoginSalt, passwordVersion: sql`${usersTable.passwordVersion} + 1`, mustChangePassword: false, oneTimePasswordExpiresAt: null, updatedAt: new Date() }).where(eq(usersTable.id, req.user!.userId)).returning();
+  if (crypto) {
+    // Der oeffentliche Schluessel bleibt beim Passwortwechsel unveraendert;
+    // neu verschluesselt wird nur der private Teil (mit dem neuen KEK).
+    const [existing] = await db
+      .select({ publicKey: userCryptoKeysTable.publicKey })
+      .from(userCryptoKeysTable)
+      .where(eq(userCryptoKeysTable.userId, req.user!.userId))
+      .limit(1);
+    if (existing) {
+      await upsertUserCryptoKey(db, req.user!.userId, {
+        publicKey: existing.publicKey,
+        encryptedPrivateKey: crypto.encryptedPrivateKey as string,
+        saltEnc: crypto.saltEnc as string,
+      });
+    }
   }
-  const passwordHash = await hashPassword(newPassword);
-  const [updated] = await db.update(usersTable).set({ passwordHash, passwordVersion: sql`${usersTable.passwordVersion} + 1`, mustChangePassword: false, oneTimePasswordExpiresAt: null, updatedAt: new Date() }).where(eq(usersTable.id, req.user!.userId)).returning();
   await revokeAllSessionsForUser(req.user!.userId);
   const sessionToken = await createSession(req.user!.userId);
   res.cookie(SESSION_COOKIE, sessionToken, sessionCookieOptions());

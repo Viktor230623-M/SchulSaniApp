@@ -1,10 +1,29 @@
 import { randomUUID } from "crypto";
 import { Router } from "express";
-import { and, desc, eq, gte, lt, lte } from "drizzle-orm";
-import { db, incidentReportsTable, schoolExportsTable, schoolSettingsTable } from "@workspace/db";
+import { and, desc, eq, gte, inArray, lt, lte } from "drizzle-orm";
+import { db, incidentReportsTable, schoolExportsTable, schoolSettingsTable, missionsTable } from "@workspace/db";
 import { requireAuth, requirePermission, schoolIdOf, type AuthRequest } from "../middlewares/auth";
-import { renderReportBundlePdf } from "../lib/reportPdf";
 import { EXPORT_INTERVALS, type ExportInterval } from "../lib/exportIntervals";
+
+// Die PDF-Erzeugung liegt mit der Ende-zu-Ende-Verschluesselung beim Client:
+// Der Server kann die Inhalte nicht lesen und liefert deshalb nur das
+// verschluesselte Buendel aus. Erst der bestaetigte Download gibt die
+// Loeschung der exportierten Protokolle frei (Uebergabe an den
+// Verantwortlichen). Abgebrochene Downloads zaehlen nicht: die Protokolle
+// bleiben erhalten, der Export bleibt erneut ladbar.
+
+async function withMissionTitles(reports: typeof incidentReportsTable.$inferSelect[]) {
+  const missionIds = [...new Set(reports.map((r) => r.missionId).filter((m): m is string => !!m))];
+  const byId = new Map<string, string>();
+  if (missionIds.length > 0) {
+    const missions = await db
+      .select({ id: missionsTable.id, title: missionsTable.title })
+      .from(missionsTable)
+      .where(inArray(missionsTable.id, missionIds));
+    for (const m of missions) byId.set(m.id, m.title);
+  }
+  return reports.map((r) => ({ ...r, missionTitle: r.missionId ? byId.get(r.missionId) ?? null : null }));
+}
 
 const router = Router();
 const INTERVALS = EXPORT_INTERVALS;
@@ -102,14 +121,10 @@ router.post("/", requireAuth, EXPORT_PERMS, async (req: AuthRequest, res) => {
   res.status(201).json({ id, reportCount: reports.length, status: "ready" });
 });
 
-// GET /:id/download — PDF-Buendel herunterladen.
-// Erst der bestaetigte Download gibt die Loeschung der exportierten Protokolle
-// frei (Uebergabe an den Verantwortlichen). Abgebrochene Downloads zaehlen
-// nicht: die Protokolle bleiben erhalten, der Export bleibt erneut ladbar.
-router.get("/:id/download", requireAuth, EXPORT_PERMS, async (req: AuthRequest, res) => {
+// GET /:id/bundle — verschluesseltes Buendel, ohne Seiteneffekt. Der Client
+// entschluesselt lokal und erzeugt das PDF; erst danach bestaetigt er.
+router.get("/:id/bundle", requireAuth, EXPORT_PERMS, async (req: AuthRequest, res) => {
   const schoolId = schoolIdOf(req);
-  const { userId } = req.user!;
-  const lang = (req.query["lang"] === "en" ? "en" : "de") as "de" | "en";
 
   const [exp] = await db
     .select()
@@ -135,34 +150,46 @@ router.get("/:id/download", requireAuth, EXPORT_PERMS, async (req: AuthRequest, 
     return;
   }
 
-  res.setHeader("Content-Type", "application/pdf");
-  res.setHeader("Content-Disposition", `attachment; filename="schulsani-export-${exp.id.slice(0, 8)}.pdf"`);
-
-  const doc = await renderReportBundlePdf(reports, { lang, showPatient: true, schoolId });
-  doc.pipe(res);
-
-  // Erst nachdem die Response vollstaendig gesendet wurde, gilt der Export als
-  // uebergeben: Download bestaetigen und die Protokolle vom Server loeschen.
-  res.on("finish", () => {
-    void (async () => {
-      const now = new Date();
-      await db
-        .update(schoolExportsTable)
-        .set({ status: "downloaded", downloadedAt: now, downloadedBy: userId })
-        .where(eq(schoolExportsTable.id, exp.id));
-      await db
-        .delete(incidentReportsTable)
-        .where(and(
-          eq(incidentReportsTable.schoolId, schoolId),
-          eq(incidentReportsTable.status, "submitted"),
-          exp.fromAt ? gte(incidentReportsTable.createdAt, exp.fromAt) : undefined,
-          lte(incidentReportsTable.createdAt, exp.toAt),
-        ));
-      console.log(`[export] ${schoolId}: ${reports.length} Protokolle nach Download uebergeben und geloescht`);
-    })().catch((err) => {
-      console.error("[export] Nachbearbeitung nach Download fehlgeschlagen:", err instanceof Error ? err.message : err);
-    });
+  res.json({
+    id: exp.id,
+    fromAt: exp.fromAt?.toISOString() ?? null,
+    toAt: exp.toAt.toISOString(),
+    reports: await withMissionTitles(reports),
   });
+});
+
+// POST /:id/confirm — der Client hat das Buendel entschluesselt und das PDF
+// gespeichert. Erst jetzt gilt der Export als uebergeben und die Protokolle
+// werden vom Server geloescht.
+router.post("/:id/confirm", requireAuth, EXPORT_PERMS, async (req: AuthRequest, res) => {
+  const schoolId = schoolIdOf(req);
+  const { userId } = req.user!;
+
+  const [exp] = await db
+    .select()
+    .from(schoolExportsTable)
+    .where(and(eq(schoolExportsTable.id, (req.params.id as string)), eq(schoolExportsTable.schoolId, schoolId)));
+
+  if (!exp) { res.status(404).json({ error: "Not found" }); return; }
+  if (exp.status === "downloaded") { res.status(409).json({ error: "Export bereits heruntergeladen" }); return; }
+
+  const now = new Date();
+  await db.transaction(async (tx) => {
+    await tx.update(schoolExportsTable)
+      .set({ status: "downloaded", downloadedAt: now, downloadedBy: userId })
+      .where(eq(schoolExportsTable.id, exp.id));
+    const deleted = await tx.delete(incidentReportsTable)
+      .where(and(
+        eq(incidentReportsTable.schoolId, schoolId),
+        eq(incidentReportsTable.status, "submitted"),
+        exp.fromAt ? gte(incidentReportsTable.createdAt, exp.fromAt) : undefined,
+        lte(incidentReportsTable.createdAt, exp.toAt),
+      ))
+      .returning({ id: incidentReportsTable.id });
+    console.log(`[export] ${schoolId}: ${deleted.length} Protokolle nach bestaetigtem Download uebergeben und geloescht`);
+  });
+
+  res.json({ ok: true });
 });
 
 export default router;

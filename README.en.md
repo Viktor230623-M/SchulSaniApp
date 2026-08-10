@@ -62,7 +62,13 @@ Backend (`artifacts/api-server/.env`):
 | `VAPID_PUBLIC_KEY`   | Public VAPID key for web push                                         |
 | `VAPID_PRIVATE_KEY`  | Private VAPID key for web push                                        |
 | `VAPID_SUBJECT`      | Contact (mailto: or URL) for web push                                 |
-| `EXPO_ACCESS_TOKEN`  | Optional: token for Expo push notifications                           |
+| `FCM_SERVICE_ACCOUNT_PATH` | Optional: path to the provider's service account JSON (FCM, Android) |
+| `FCM_PROJECT_ID`     | Optional: provider's Firebase project ID (FCM)                          |
+| `APNS_KEY_PATH`      | Optional: path to the provider's .p8 auth key (APNs, iOS)               |
+| `APNS_KEY_ID`        | Optional: key ID of the .p8 key (APNs)                                  |
+| `APNS_TEAM_ID`       | Optional: provider's Apple team ID (APNs)                               |
+| `APNS_BUNDLE_ID`     | Optional: app bundle ID (APNs)                                          |
+| `APNS_ENV`           | Optional: `production` or `sandbox` (APNs)                              |
 | `LIBRETRANSLATE_URL` | Optional: URL of a LibreTranslate instance for translations           |
 
 App (`artifacts/paramedic-app/.env`):

@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: crypto
+    description: Key management and envelope encryption (E2E)
 paths:
   /healthz:
     get:
@@ -24,6 +26,329 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # --- Ende-zu-Ende-Verschluesselung: Schluesselverwaltung ---
+  /crypto/key:
+    get:
+      operationId: getMyCryptoKey
+      tags: [crypto]
+      summary: Own key material
+      description: >
+        Returns the user's own key material: public key, salt for the local
+        key-derivation, and the private key encrypted with the locally derived
+        key. The server can never open the private key.
+      responses:
+        "200":
+          description: Key material (or hasKeypair=false when not provisioned)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserCryptoKey"
+    put:
+      operationId: putMyCryptoKey
+      tags: [crypto]
+      summary: Register or replace own keypair
+      description: >
+        Stores the user's public key and the private key encrypted with the
+        locally derived key (KEK). The KEK itself never leaves the device.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserCryptoKeyPut"
+      responses:
+        "200":
+          description: Stored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Ok"
+
+  /crypto/keys:
+    get:
+      operationId: listSchoolPublicKeys
+      tags: [crypto]
+      summary: Public keys of school users
+      description: Public keys of the users of the caller's school, needed to wrap the school data key for a recipient.
+      responses:
+        "200":
+          description: Public keys
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicKeyList"
+
+  /crypto/dek:
+    get:
+      operationId: getMyDekWraps
+      tags: [crypto]
+      summary: Wrapped school data keys for the caller
+      responses:
+        "200":
+          description: Wrapped DEKs (envelopes) for the caller
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DekWraps"
+    post:
+      operationId: storeDekWrapForSelf
+      tags: [crypto]
+      summary: Create or rotate the school DEK and store the caller's wrap
+      description: >
+        Only called by a user with report/patient permissions. Registers a new
+        DEK version and stores the caller's envelope (wrapped with the
+        caller's public key, done client-side).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DekWrapPut"
+      responses:
+        "201":
+          description: Stored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DekWrapResult"
+
+  /crypto/dek/grant:
+    post:
+      operationId: grantDekWrap
+      tags: [crypto]
+      summary: Store a DEK wrap for another user (grant or recovery)
+      description: >
+        The caller unwraps the DEK with their own key and re-wraps it for the
+        target user's public key (both client-side), then stores the envelope.
+        Logged for accountability (Art. 5 Abs. 2 DSGVO).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DekGrant"
+      responses:
+        "201":
+          description: Stored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DekWrapResult"
+
+  # --- Migration von Alt-Protokollen (einmalig, admin-gesteuert) ---
+  /crypto/legacy-reports:
+    get:
+      operationId: listLegacyReports
+      tags: [crypto]
+      summary: Reports that still contain plaintext content
+      responses:
+        "200":
+          description: Report ids that still need encryption
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LegacyReportList"
+
+  /crypto/legacy-reports/{id}:
+    get:
+      operationId: getLegacyReportPlaintext
+      tags: [crypto]
+      summary: Plaintext of a legacy report (migration only)
+      description: Temporarily returns the plaintext content so an admin client can encrypt it locally.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Legacy report with plaintext content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EncryptedReport"
+    put:
+      operationId: putLegacyReportEncrypted
+      tags: [crypto]
+      summary: Store encrypted content and clear the plaintext
+      description: Replaces a legacy report's plaintext columns with the client-side encrypted blob.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EncryptedContentPut"
+      responses:
+        "200":
+          description: Stored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Ok"
+
+  # --- Einsatzprotokolle: nur noch Chiffrat ---
+  /incident-reports:
+    get:
+      operationId: listIncidentReports
+      tags: [crypto]
+      summary: List incident reports (encrypted content)
+      responses:
+        "200":
+          description: Report metadata with encrypted content blobs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EncryptedReport"
+    post:
+      operationId: createIncidentReport
+      tags: [crypto]
+      summary: Create a report draft (encrypted content)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EncryptedReportPut"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EncryptedReport"
+
+  /incident-reports/{id}:
+    get:
+      operationId: getIncidentReport
+      tags: [crypto]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Report metadata with encrypted content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EncryptedReport"
+    put:
+      operationId: updateIncidentReport
+      tags: [crypto]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EncryptedReportPut"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EncryptedReport"
+
+  /incident-reports/{id}/submit:
+    post:
+      operationId: submitIncidentReport
+      tags: [crypto]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Submitted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EncryptedReport"
+
+  /incident-reports/{id}/addendum:
+    post:
+      operationId: addReportAddendum
+      tags: [crypto]
+      summary: Append an addendum (client re-encrypts the whole content)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EncryptedContentPut"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EncryptedReport"
+
+  # --- Datenexport: verschluesseltes Buendel, Loeschung nach Bestaetigung ---
+  /exports/{id}/bundle:
+    get:
+      operationId: getExportBundle
+      tags: [crypto]
+      summary: Encrypted export bundle (no side effects)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Encrypted report bundle for client-side PDF rendering
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExportBundle"
+
+  /exports/{id}/confirm:
+    post:
+      operationId: confirmExportDownload
+      tags: [crypto]
+      summary: Mark export as delivered and delete the exported reports
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Confirmed and reports deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Ok"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +359,250 @@ components:
       required:
         - status
 
+    Ok:
+      type: object
+      properties:
+        ok:
+          type: boolean
+      required:
+        - ok
+
+    UserCryptoKey:
+      type: object
+      properties:
+        hasKeypair:
+          type: boolean
+        publicKey:
+          type: string
+          nullable: true
+        encryptedPrivateKey:
+          type: string
+          nullable: true
+        saltEnc:
+          type: string
+          nullable: true
+        keyVersion:
+          type: integer
+          nullable: true
+      required:
+        - hasKeypair
+
+    UserCryptoKeyPut:
+      type: object
+      properties:
+        publicKey:
+          type: string
+        encryptedPrivateKey:
+          type: string
+        saltEnc:
+          type: string
+      required:
+        - publicKey
+        - encryptedPrivateKey
+        - saltEnc
+
+    PublicKeyList:
+      type: object
+      properties:
+        keys:
+          type: array
+          items:
+            type: object
+            properties:
+              userId:
+                type: string
+              publicKey:
+                type: string
+            required:
+              - userId
+              - publicKey
+      required:
+        - keys
+
+    DekWrapPut:
+      type: object
+      properties:
+        wrappedDek:
+          type: string
+        dekVersion:
+          type: integer
+      required:
+        - wrappedDek
+        - dekVersion
+
+    DekWrapResult:
+      type: object
+      properties:
+        dekVersion:
+          type: integer
+      required:
+        - dekVersion
+
+    DekGrant:
+      type: object
+      properties:
+        targetUserId:
+          type: string
+        wrappedDek:
+          type: string
+        dekVersion:
+          type: integer
+        recover:
+          type: boolean
+          description: true when this is an admin recovery after a lost key
+      required:
+        - targetUserId
+        - wrappedDek
+        - dekVersion
+
+    DekWraps:
+      type: object
+      properties:
+        latestVersion:
+          type: integer
+          nullable: true
+        wraps:
+          type: array
+          items:
+            type: object
+            properties:
+              dekVersion:
+                type: integer
+              wrappedDek:
+                type: string
+              createdAt:
+                type: string
+                format: date-time
+            required:
+              - dekVersion
+              - wrappedDek
+      required:
+        - wraps
+
+    EncryptedContentPut:
+      type: object
+      properties:
+        contentEncrypted:
+          type: string
+        contentKeyVersion:
+          type: integer
+      required:
+        - contentEncrypted
+        - contentKeyVersion
+
+    EncryptedReport:
+      type: object
+      properties:
+        id:
+          type: string
+        schoolId:
+          type: string
+        missionId:
+          type: string
+          nullable: true
+        missionTitle:
+          type: string
+          nullable: true
+        authorId:
+          type: string
+        status:
+          type: string
+        location:
+          type: string
+          nullable: true
+        incidentAt:
+          type: string
+          format: date-time
+          nullable: true
+        responderIds:
+          type: array
+          items:
+            type: string
+          nullable: true
+        contentEncrypted:
+          type: string
+          nullable: true
+        contentKeyVersion:
+          type: integer
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        submittedAt:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+        - id
+        - authorId
+        - status
+        - createdAt
+        - updatedAt
+
+    EncryptedReportPut:
+      type: object
+      properties:
+        missionId:
+          type: string
+          nullable: true
+        title:
+          type: string
+          nullable: true
+        location:
+          type: string
+          nullable: true
+        incidentAt:
+          type: string
+          format: date-time
+          nullable: true
+        responders:
+          type: array
+          items:
+            type: string
+          nullable: true
+        contentEncrypted:
+          type: string
+        contentKeyVersion:
+          type: integer
+      required:
+        - contentEncrypted
+        - contentKeyVersion
+
+    LegacyReportList:
+      type: object
+      properties:
+        reports:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+            required:
+              - id
+      required:
+        - reports
+
+    ExportBundle:
+      type: object
+      properties:
+        id:
+          type: string
+        fromAt:
+          type: string
+          format: date-time
+          nullable: true
+        toAt:
+          type: string
+          format: date-time
+        reports:
+          type: array
+          items:
+            $ref: "#/components/schemas/EncryptedReport"
+      required:
+        - id
+        - toAt
+        - reports
