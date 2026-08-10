@@ -1,4 +1,4 @@
-import { pgTable, pgEnum, index, unique, text, timestamp, json, boolean, integer } from "drizzle-orm/pg-core";
+import { pgTable, pgEnum, index, unique, text, timestamp, json, boolean, integer, primaryKey } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 
 // Aufzaehlungstypen. Die Wertereihenfolge ist Teil der Typdefinition und
@@ -46,7 +46,12 @@ export const usersTable = pgTable("users", {
   phone: text("phone").default(""),
   role: userRoleEnum("role").default("sanitaeter").notNull(),
   schoolId: text("school_id"),
+  // Der Server sieht nie das Passwort: Der Client leitet daraus lokal zwei
+  // unabhaengige Argon2id-Keys ab. password_hash speichert nur noch den Hash
+  // des Login-Proofs (SHA-256), login_salt den dazugehoerigen Ableitungs-Salt.
+  // Der Salt fuer die Verschlüsselungs-Ableitung liegt in user_crypto_keys.
   passwordHash: text("password_hash").default(""),
+  loginSalt: text("login_salt"),
   passwordVersion: integer("password_version").default(0).notNull(),
   // Lokale Konten (R6, Schritt 6): erzwingt einen Passwortwechsel, solange das
   // aktuelle Passwort ein von einem Verwalter vergebenes Einmal-Passwort ist
@@ -276,6 +281,12 @@ export const incidentReportsTable = pgTable("incident_reports", {
   witnesses: text("witnesses"),
   // Record-keeping
   addendaJson: json("addenda_json"), // {authorId, authorName, text, createdAt}[]
+  // Ende-zu-Ende-Verschluesselung: Der komplette Gesundheitsinhalt liegt nur
+  // als Chiffrat (base64 nonce||ciphertext, crypto_secretbox) vor; die
+  // Klartextspalten oben bleiben fuer Alt-Daten erhalten und werden bei der
+  // Migration geleert. Der Server kann den Inhalt nie entschluesseln.
+  contentEncrypted: text("content_encrypted"),
+  contentKeyVersion: integer("content_key_version"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
   submittedAt: timestamp("submitted_at"),
@@ -364,6 +375,62 @@ export const reportAccessLogTable = pgTable("report_access_log", {
   resultCount: integer("result_count"),
   createdAt: timestamp("created_at").defaultNow(),
 }, (t) => [index("report_access_log_created_idx").on(t.createdAt)]);
+
+// Kryptografisches Material fuer die Ende-zu-Ende-Verschluesselung.
+//
+// Der Server lagert ausschliesslich Werte, mit denen er selbst nicht
+// entschluesseln kann: den oeffentlichen Schluessel, den mit dem lokal
+// abgeleiteten Key (KEK) verschluesselten privaten Schluessel sowie den Salt
+// fuer die KEK-Ableitung. Der KEK selbst existiert nur auf dem Endgeraet.
+export const userCryptoKeysTable = pgTable("user_crypto_keys", {
+  userId: text("user_id").primaryKey().references(() => usersTable.id, { onDelete: "cascade" }),
+  publicKey: text("public_key").notNull(),
+  encryptedPrivateKey: text("encrypted_private_key").notNull(),
+  // Salt fuer die Argon2id-Ableitung des KEK aus Passwort bzw. Entsperr-Code.
+  saltEnc: text("salt_enc").notNull(),
+  keyVersion: integer("key_version").notNull().default(1),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Ein symmetrischer Datenschluessel (DEK) pro Schule, versioniert. Der DEK
+// selbst existiert nur auf Endgeraeten; hier stehen nur seine Versionen.
+export const schoolDeksTable = pgTable("school_deks", {
+  schoolId: text("school_id").notNull(),
+  version: integer("version").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [
+  primaryKey({ columns: [t.schoolId, t.version] }),
+]);
+
+// Mit crypto_box_seal verpackte DEKs, je Empfaenger und Version. Der Server
+// kann die Umschlaege nicht oeffnen.
+export const schoolDekWrapsTable = pgTable("school_dek_wraps", {
+  id: text("id").primaryKey(),
+  schoolId: text("school_id").notNull(),
+  dekVersion: integer("dek_version").notNull(),
+  userId: text("user_id").notNull(),
+  wrappedDek: text("wrapped_dek").notNull(),
+  grantedBy: text("granted_by"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [
+  unique("school_dek_wraps_school_user_version_key").on(t.schoolId, t.userId, t.dekVersion),
+  index("school_dek_wraps_user_idx").on(t.userId),
+]);
+
+// Wer hat wann einen DEK-Umschlag erzeugt, neu verpackt oder wiederhergestellt
+// (Rechenschaftsnachweis nach Art. 5 Abs. 2 DSGVO, wie role_change_log).
+// Aufbewahrung 12 Monate.
+export const cryptoGrantLogTable = pgTable("crypto_grant_log", {
+  id: text("id").primaryKey(),
+  schoolId: text("school_id").notNull(),
+  actorId: text("actor_id").notNull(),
+  actorName: text("actor_name"),
+  targetUserId: text("target_user_id"),
+  action: text("action").notNull(), // init | grant | recover
+  dekVersion: integer("dek_version"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [index("crypto_grant_log_created_idx").on(t.createdAt)]);
 
 // Anmeldesitzungen fuer die Wiederherstellung nach einem Reload.
 //
@@ -480,3 +547,11 @@ export type SchoolSetting = typeof schoolSettingsTable.$inferSelect;
 export type NewSchoolSetting = typeof schoolSettingsTable.$inferInsert;
 export type SchoolExport = typeof schoolExportsTable.$inferSelect;
 export type NewSchoolExport = typeof schoolExportsTable.$inferInsert;
+export type UserCryptoKey = typeof userCryptoKeysTable.$inferSelect;
+export type NewUserCryptoKey = typeof userCryptoKeysTable.$inferInsert;
+export type SchoolDek = typeof schoolDeksTable.$inferSelect;
+export type NewSchoolDek = typeof schoolDeksTable.$inferInsert;
+export type SchoolDekWrap = typeof schoolDekWrapsTable.$inferSelect;
+export type NewSchoolDekWrap = typeof schoolDekWrapsTable.$inferInsert;
+export type CryptoGrantLog = typeof cryptoGrantLogTable.$inferSelect;
+export type NewCryptoGrantLog = typeof cryptoGrantLogTable.$inferInsert;
