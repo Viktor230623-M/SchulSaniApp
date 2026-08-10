@@ -249,6 +249,10 @@ export interface IncidentReport {
   id: string;
   schoolId?: string | null;
   missionId?: string | null;
+  /** Eigener Name fuer Protokolle ohne Einsatz; sonst leer. */
+  title?: string | null;
+  /** Vom Server mitgeliefert (nur bei Missions-Protokollen). */
+  missionTitle?: string | null;
   authorId: string;
   status: ReportStatus;
   // Patient (restricted)

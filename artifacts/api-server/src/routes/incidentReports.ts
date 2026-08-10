@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import { Router } from "express";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { db, incidentReportsTable, missionsTable, usersTable } from "@workspace/db";
 import { requireAuth, schoolIdOf, type AuthRequest } from "../middlewares/auth";
 import { notifyUser } from "../services/notifications";
@@ -41,6 +41,23 @@ function stripPatient(report: typeof incidentReportsTable.$inferSelect) {
   };
 }
 
+// Hangt den Missionstitel an, damit der Client "Protokoll <Einsatztitel>"
+// anzeigen kann, ohne die Mission separat laden zu muessen.
+type ReportLike = { missionId: string | null };
+async function withMissionTitles<T extends ReportLike>(
+  reports: T[]
+): Promise<(T & { missionTitle: string | null })[]> {
+  const missionIds = [...new Set(reports.map((r) => r.missionId).filter((m): m is string => !!m))];
+  if (missionIds.length === 0) return reports.map((r) => ({ ...r, missionTitle: null }));
+
+  const missions = await db
+    .select({ id: missionsTable.id, title: missionsTable.title })
+    .from(missionsTable)
+    .where(inArray(missionsTable.id, missionIds));
+  const byId = new Map(missions.map((m) => [m.id, m.title]));
+  return reports.map((r) => ({ ...r, missionTitle: r.missionId ? (byId.get(r.missionId) ?? null) : null }));
+}
+
 async function getAuthorName(userId: string): Promise<string> {
   const [user] = await db
     .select({ firstName: usersTable.firstName, lastName: usersTable.lastName })
@@ -73,11 +90,12 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
   });
 
   const showPatient = perms.includes("reports.see_patient_info");
-  const result = accessible.map((r) => {
+  const visible = accessible.map((r) => {
     const responders = (r.responderIdsJson as string[] | null) ?? [];
     const isAuthorOrResponder = r.authorId === userId || responders.includes(userId);
     return showPatient || isAuthorOrResponder ? r : stripPatient(r);
   });
+  const result = await withMissionTitles(visible);
 
   logReportAccess({
     schoolId,
@@ -115,7 +133,8 @@ router.get("/:id", requireAuth, async (req: AuthRequest, res) => {
     patientVisible: showPatient,
   });
 
-  res.json(showPatient ? report : stripPatient(report));
+  const [withTitle] = await withMissionTitles([report]);
+  res.json(showPatient ? withTitle : stripPatient(withTitle));
 });
 
 // POST / — create draft
@@ -139,6 +158,7 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
     id,
     schoolId,
     missionId,
+    title: typeof body["title"] === "string" ? body["title"].trim().slice(0, 120) || null : null,
     authorId: userId,
     status: "draft",
     patientType: VALID_PATIENT_TYPES.includes(body["patientType"] as any) ? body["patientType"] as string : null,
@@ -199,6 +219,7 @@ router.put("/:id", requireAuth, async (req: AuthRequest, res) => {
 
   const updates: Partial<typeof incidentReportsTable.$inferInsert> = { updatedAt: now };
 
+  if (body["title"] !== undefined) updates.title = typeof body["title"] === "string" ? body["title"].trim().slice(0, 120) || null : null;
   if (body["patientType"] !== undefined) updates.patientType = VALID_PATIENT_TYPES.includes(body["patientType"] as any) ? body["patientType"] as string : null;
   if (body["patientFirstName"] !== undefined) updates.patientFirstName = typeof body["patientFirstName"] === "string" ? body["patientFirstName"].slice(0, 100) : null;
   if (body["patientLastName"] !== undefined) updates.patientLastName = typeof body["patientLastName"] === "string" ? body["patientLastName"].slice(0, 100) : null;
@@ -232,7 +253,8 @@ router.put("/:id", requireAuth, async (req: AuthRequest, res) => {
     .where(and(eq(incidentReportsTable.id, (req.params.id as string)), eq(incidentReportsTable.schoolId, schoolId)))
     .returning();
 
-  res.json(updated);
+  const [withTitle] = await withMissionTitles([updated]);
+  res.json(withTitle);
 });
 
 // POST /:id/submit — submit and lock

@@ -72,6 +72,7 @@ export default function ReportScreen() {
   const [vitalsExpanded, setVitalsExpanded] = useState(false);
 
   // Form state
+  const [reportTitle, setReportTitle] = useState("");
   const [patientType, setPatientType] = useState<PatientType | null>(null);
   const [patientFirstName, setPatientFirstName] = useState("");
   const [patientLastName, setPatientLastName] = useState("");
@@ -108,6 +109,7 @@ export default function ReportScreen() {
     try {
       const r = await ApiService.getIncidentReport(id);
       setReport(r);
+      setReportTitle(r.title ?? "");
       setPatientType(r.patientType ?? null);
       setPatientFirstName(r.patientFirstName ?? "");
       setPatientLastName(r.patientLastName ?? "");
@@ -143,6 +145,7 @@ export default function ReportScreen() {
   function buildPayload() {
     return {
       missionId: missionId ?? undefined,
+      title: reportTitle.trim() || undefined,
       patientType: patientType ?? undefined,
       patientFirstName: patientFirstName.trim() || undefined,
       patientLastName: patientLastName.trim() || undefined,
@@ -363,6 +366,12 @@ export default function ReportScreen() {
     return val;
   };
 
+  // Titel des Protokolls: bei Einsaetzen der Missionstitel, sonst der
+  // eingegebene Name oder der generische Platzhalter.
+  const displayTitle = missionId
+    ? (report?.missionTitle ?? tReport("title"))
+    : (reportTitle.trim() || tReport("walkinTitle"));
+
   const getOutcomeLabel = (o: IncidentOutcome) => t(`report.outcomes.${o}`, lang);
   const getPatientTypeLabel = (p: PatientType) => t(`report.patientTypes.${p}`, lang);
   const getBodyRegionLabel = (key: string) => t(`report.bodyRegions.${key}`, lang);
@@ -393,17 +402,15 @@ export default function ReportScreen() {
         keyboardShouldPersistTaps="handled"
       >
         {/* Header */}
-        <View style={[styles.headerRow, { borderBottomColor: theme.cardBorder }]}>
+        <View style={styles.headerRow}>
           <Pressable
             onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.back(); }}
             style={styles.backBtn}
           >
             <Ionicons name="chevron-back" size={28} color={theme.text} />
           </Pressable>
-          <Text style={[styles.headerTitle, { color: theme.text }]}>
-            {isNew
-              ? (missionId ? tReport("title") : tReport("walkinTitle"))
-              : (report?.missionId ? tReport("title") : tReport("walkinTitle"))}
+          <Text style={[styles.headerTitle, { color: theme.text }]} numberOfLines={1}>
+            {`${tReport("protocolPrefix")} ${displayTitle}`}
           </Text>
           {report && !isLocked && (
             <View style={[styles.statusBadge, { backgroundColor: theme.tintLight }]}>
@@ -468,6 +475,15 @@ export default function ReportScreen() {
                 {addingAddendum ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.submitBtnText}>{t("common.save", lang)}</Text>}
               </Pressable>
             </View>
+          </View>
+        )}
+
+        {/* Name only for walk-in reports (no mission) */}
+        {!missionId && (
+          <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
+            {field(tReport("walkinName"), reportTitle, setReportTitle, {
+              placeholder: tReport("walkinNamePlaceholder"),
+            })}
           </View>
         )}
 
@@ -679,13 +695,11 @@ const styles = StyleSheet.create({
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingBottom: 12,
-    borderBottomWidth: 1,
+    paddingBottom: 8,
     gap: 8,
-    marginBottom: 8,
   },
   backBtn: { padding: 4, marginLeft: -4 },
-  headerTitle: { fontSize: 22, fontFamily: "Inter_700Bold", flex: 1 },
+  headerTitle: { fontSize: 20, fontFamily: "Inter_700Bold", flex: 1 },
   statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
   statusBadgeText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
   lockedBanner: {
