@@ -7,7 +7,8 @@
 // nur so lange, wie die Einrichtung dauert, und beendet sich danach selbst.
 //
 // Der Systemteil installiert den Workspace vor dem Assistenten, damit lokale
-// Konten beim Bootstrap denselben bcrypt-Adapter wie der Server verwenden.
+// Konten beim Bootstrap dieselbe Argon2id-Ableitung wie der Client verwenden
+// (libsodium-wrappers-sumo aus dem api-server-Baum).
 
 const http = require("node:http");
 const crypto = require("node:crypto");
@@ -119,13 +120,32 @@ const BRAND_APP_NAME = "SchulSani";
 const BRAND_THEME_COLOR = "#22C55E";
 const BRAND_BUNDLE_ID = "com.schulsani.app";
 
-function hashLocalPassword(password) {
+// Der Server speichert nie das Passwort, nur SHA-256 des lokal abgeleiteten
+// Argon2id-Proofs -- dieselben Parameter wie der Client (siehe
+// auth/providers/local.ts). libsodium-wrappers-sumo liegt im installierten
+// api-server-Baum, den der Systemteil vor dem Assistenten installiert; die
+// Sumo-Build ist noetig, weil crypto_pwhash (Argon2id) nur dort enthalten ist.
+async function deriveLocalProof(password, saltBase64) {
+  let sodium;
   try {
-    const bcrypt = require(path.join(APP_ROOT, "artifacts", "api-server", "node_modules", "bcryptjs"));
-    return bcrypt.hashSync(password, 12);
+    sodium = require(path.join(APP_ROOT, "artifacts", "api-server", "node_modules", "libsodium-wrappers-sumo"));
   } catch {
-    throw new Error("bcryptjs fehlt. Vor dem Assistenten muss pnpm install erfolgreich laufen.");
+    throw new Error("libsodium-wrappers-sumo fehlt. Vor dem Assistenten muss pnpm install erfolgreich laufen.");
   }
+  await sodium.ready;
+  const proof = sodium.crypto_pwhash(
+    32,
+    password,
+    Buffer.from(saltBase64, "base64"),
+    sodium.crypto_pwhash_OPSLIMIT_MODERATE,
+    sodium.crypto_pwhash_MEMLIMIT_MODERATE,
+    sodium.crypto_pwhash_ALG_ARGON2ID13,
+  );
+  return Buffer.from(proof).toString("base64");
+}
+
+function hashLoginProof(proofBase64) {
+  return crypto.createHash("sha256").update(proofBase64).digest("hex");
 }
 
 function envLine(name, value) {
@@ -622,7 +642,15 @@ function buildBackendEnv(cfg, secrets) {
     envLine("VAPID_PUBLIC_KEY", secrets.vapidPublicKey),
     envLine("VAPID_PRIVATE_KEY", secrets.vapidPrivateKey),
     envLine("VAPID_SUBJECT", cfg.vapidSubject),
-    "EXPO_ACCESS_TOKEN=",
+    // Native Push laeuft ueber die zentralen FCM-/APNs-Konten des Anbieters;
+    // die Werte traegt der Anbieter nach der Einrichtung ein (kein Repo-Inhalt).
+    "FCM_SERVICE_ACCOUNT_PATH=",
+    "FCM_PROJECT_ID=",
+    "APNS_KEY_PATH=",
+    "APNS_KEY_ID=",
+    "APNS_TEAM_ID=",
+    "APNS_BUNDLE_ID=",
+    "APNS_ENV=production",
     "LIBRETRANSLATE_URL=",
     "",
   ].join("\n");
@@ -685,7 +713,7 @@ function schoolIdTaken(schoolId, ownerAccountId, configuredSchoolId) {
 // Rolle "owner" ist die schulische Hoechstrolle (vormals "cto", siehe R5
 // Schritt 1 — der Enum-Wert "cto" bleibt in der Datenbank bestehen, wird
 // hier aber nicht mehr vergeben).
-function upsertOwner(externalSubject, cfg) {
+async function upsertOwner(externalSubject, cfg) {
   const id = cfg.ownerAccountId;
   const providerKey = cfg.ownerProviderKey || cfg.providerKey;
   const schoolIdSql = sqlQuote(cfg.schoolId || "school");
@@ -710,13 +738,17 @@ function upsertOwner(externalSubject, cfg) {
 
   const local = authModeIsLocal(cfg);
   const emailSql = local ? sqlQuote(pendingOwnerEmail) : "NULL";
-  const passwordSql = local ? sqlQuote(hashLocalPassword(pendingOwnerPassword)) : "DEFAULT";
+  const loginSalt = crypto.randomBytes(16).toString("base64");
+  const passwordSql = local
+    ? sqlQuote(hashLoginProof(await deriveLocalProof(pendingOwnerPassword, loginSalt)))
+    : "DEFAULT";
+  const loginSaltSql = local ? sqlQuote(loginSalt) : "NULL";
   const verifiedSql = local ? "now()" : "NULL";
   const userSql =
-    `INSERT INTO users (id, auth_provider, external_subject, email, email_verified_at, password_hash, first_name, last_name, role, school_id, is_approved, profile_confirmed_at, created_at, updated_at) ` +
-    `VALUES (${ownerIdSql}, ${providerSql}, ${subjectSql}, ${emailSql}, ${verifiedSql}, ${passwordSql}, 'Eigentuemer', 'Konto', 'owner', ${schoolIdSql}, true, NULL, now(), now()) ` +
+    `INSERT INTO users (id, auth_provider, external_subject, email, email_verified_at, password_hash, login_salt, first_name, last_name, role, school_id, is_approved, profile_confirmed_at, created_at, updated_at) ` +
+    `VALUES (${ownerIdSql}, ${providerSql}, ${subjectSql}, ${emailSql}, ${verifiedSql}, ${passwordSql}, ${loginSaltSql}, 'Eigentuemer', 'Konto', 'owner', ${schoolIdSql}, true, NULL, now(), now()) ` +
     `ON CONFLICT (id) DO UPDATE SET auth_provider = ${providerSql}, external_subject = ${subjectSql}, ` +
-    `email = ${emailSql}, email_verified_at = ${verifiedSql}, password_hash = ${passwordSql}, role = 'owner', is_approved = true, updated_at = now();`;
+    `email = ${emailSql}, email_verified_at = ${verifiedSql}, password_hash = ${passwordSql}, login_salt = ${loginSaltSql}, role = 'owner', is_approved = true, updated_at = now();`;
   execFileSync("psql", [DATABASE_URL, "-c", userSql], { encoding: "utf-8", timeout: 15000 });
   const identitySql =
     `INSERT INTO user_identities (id, user_id, school_id, auth_provider, external_subject, last_used_at) ` +
@@ -1057,7 +1089,7 @@ async function handleApi(req, res, pathname) {
             "Migrationen zuerst nachholen, dann diese Seite erneut aufrufen.",
         });
       }
-      upsertOwner(authModeIsLocal(state.config) ? out.ownerEmail : out.externalSubject, state.config);
+      await upsertOwner(authModeIsLocal(state.config) ? out.ownerEmail : out.externalSubject, state.config);
       state.admin = { created: true, username: authModeIsLocal(state.config) ? out.ownerEmail : out.externalSubject };
       saveState(state);
       logLine(`Eigentuemer-Konto angelegt/aktualisiert (Kennung im Protokoll nicht ausgeschrieben).`);
