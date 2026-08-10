@@ -64,6 +64,7 @@ allowBuilds:
   '@swc/core': true
   esbuild: true
   msw: true
+  react-native-libsodium: true
   unrs-resolver: true
 
 overrides:
@@ -91,4 +92,3 @@ overrides:
   "ws@>=8 <8.20.1": "^8.20.1"
   "yaml@>=1 <1.10.3": "^1.10.3"
   "yaml@>=2 <2.8.3": "^2.8.3"
-
