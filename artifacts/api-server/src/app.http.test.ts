@@ -1,5 +1,9 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeAll } from "vitest";
 import request from "supertest";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
+
+const hier = dirname(fileURLToPath(import.meta.url));
 
 // Der komplette Router-Baum (routes/index.ts) haengt beim Import von "../app"
 // mit im Graph, auch wenn ein einzelner Testfall nur eine Route anspricht --
@@ -50,7 +54,15 @@ vi.mock("@workspace/db", async () => {
   };
 });
 
-import app from "./app";
+// Der providers-Endpunkt liest die Anmeldewege beim Start. Damit der Test
+// deterministisch bleibt, zeigt AUTH_PROVIDERS_PATH auf die Test-Fixture statt
+// auf die echte Instanzkonfiguration (dort sind inzwischen weitere Anmeldewege
+// aktiviert).
+let app: import("express").Express;
+beforeAll(async () => {
+  process.env["AUTH_PROVIDERS_PATH"] = resolve(hier, "routes/fixtures/auth-providers.oidc-only.json");
+  app = (await import("./app")).default;
+});
 
 describe("HTTP-Grundgeruest", () => {
   it("GET /api/healthz meldet error, wenn die Datenbank nicht erreichbar ist", async () => {
