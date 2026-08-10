@@ -83,10 +83,15 @@ async function setStoreCryptoLocked(locked: boolean): Promise<void> {
  * faelschlich zu sperren.
  */
 export async function syncCryptoLockState(): Promise<void> {
-  const resp = await apiFetch(`${API_BASE}/crypto/key`, { headers: headers() });
-  const data = await resp.json().catch(() => ({}));
-  const known = typeof data.hasKeypair === "boolean";
-  await setStoreCryptoLocked(known && !keyManager.isUnlocked());
+  try {
+    const resp = await apiFetch(`${API_BASE}/crypto/key`, { headers: headers() });
+    const data = await resp.json().catch(() => ({}));
+    const known = typeof data.hasKeypair === "boolean";
+    await setStoreCryptoLocked(known && !keyManager.isUnlocked());
+  } catch {
+    // Netzfehler sperrt nicht: Ein erfolgreicher Login soll nicht wegen eines
+    // fehlgeschlagenen Krypto-Abrufs als Fehler enden.
+  }
 }
 
 interface DekWrap {
