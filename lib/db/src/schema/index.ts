@@ -1,4 +1,5 @@
-import { pgTable, pgEnum, index, unique, text, timestamp, json, boolean, integer, primaryKey } from "drizzle-orm/pg-core";
+import { pgTable, pgEnum, index, unique, uniqueIndex, text, timestamp, json, boolean, integer, primaryKey } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 
 // Aufzaehlungstypen. Die Wertereihenfolge ist Teil der Typdefinition und
@@ -40,7 +41,7 @@ export const usersTable = pgTable("users", {
   externalSubject: text("external_subject"),
   firstName: text("first_name"),
   lastName: text("last_name"),
-  email: text("email").unique(),
+  email: text("email"),
   emailVerifiedAt: timestamp("email_verified_at"),
   username: text("username"),
   phone: text("phone").default(""),
@@ -71,6 +72,10 @@ export const usersTable = pgTable("users", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (t) => [
   unique("users_school_id_username_key").on(t.schoolId, t.username),
+  // Ueber lower(), nicht ueber die Spalte: Microsoft lieferte dieselbe Adresse
+  // mit grossem Anfangsbuchstaben zurueck und legte damit ein zweites Konto an,
+  // das der einfache Unique-Index durchwinkte.
+  uniqueIndex("users_email_lower_unique").on(sql`lower(${t.email})`),
 ]);
 
 // Zweite und weitere Anmeldewege eines Kontos. Die primaere Identitaet bleibt
@@ -114,7 +119,6 @@ export const newsTable = pgTable("news", {
   publishedAt: timestamp("published_at").defaultNow().notNull(),
   author: text("author").notNull(),
   authorId: text("author_id").notNull(),
-  isRead: boolean("is_read").default(false).notNull(),
   rejectionReason: text("rejection_reason"),
   translationsJson: text("translations_json"),
 });
@@ -228,6 +232,20 @@ export const missionActivityLogTable = pgTable("mission_activity_log", {
   index("idx_mission_activity_user_week").on(t.userId, t.weekKey),
 ]);
 
+// Wer hat welche News gelesen. Eine Zeile je Nutzer je Beitrag; die fruehere
+// Spalte is_read auf der news-Zeile war geteilt und markierte einen Beitrag
+// fuer alle als gelesen.
+export const newsReadsTable = pgTable("news_reads", {
+  id: text("id").primaryKey(),
+  schoolId: text("school_id").notNull(),
+  userId: text("user_id").notNull(),
+  newsId: text("news_id").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [
+  unique("news_reads_user_news_key").on(t.userId, t.newsId),
+  index("news_reads_news_idx").on(t.newsId),
+]);
+
 // Mission dismissals (replaces dismissed-missions.json)
 export const missionDismissalsTable = pgTable("mission_dismissals", {
   id: text("id").primaryKey(),
@@ -303,20 +321,6 @@ export const deviceTokensTable = pgTable("device_tokens", {
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (t) => [index("device_tokens_user_id_idx").on(t.userId)]);
-
-// Audit trail for the owner-only SQL console. Every statement lands here,
-// successful or not, and rows are never deleted by the console itself.
-export const dbConsoleLogTable = pgTable("db_console_log", {
-  id: text("id").primaryKey(),
-  userId: text("user_id").notNull(),
-  userName: text("user_name"),
-  statement: text("statement").notNull(),
-  presetKey: text("preset_key"),
-  committed: boolean("committed").notNull().default(false),
-  rowsAffected: integer("rows_affected"),
-  error: text("error"),
-  createdAt: timestamp("created_at").defaultNow(),
-});
 
 // Wer hat wann welche Rolle oder welche Rollenberechtigung geaendert.
 // Erforderlich fuer den Rechenschaftsnachweis nach Art. 5 Abs. 2 DSGVO: eine
@@ -503,10 +507,10 @@ export type DeviceToken = typeof deviceTokensTable.$inferSelect;
 export type NewDeviceToken = typeof deviceTokensTable.$inferInsert;
 export type MissionDismissal = typeof missionDismissalsTable.$inferSelect;
 export type NewMissionDismissal = typeof missionDismissalsTable.$inferInsert;
+export type NewsRead = typeof newsReadsTable.$inferSelect;
+export type NewNewsRead = typeof newsReadsTable.$inferInsert;
 export type IncidentReport = typeof incidentReportsTable.$inferSelect;
 export type NewIncidentReport = typeof incidentReportsTable.$inferInsert;
-export type DbConsoleLog = typeof dbConsoleLogTable.$inferSelect;
-export type NewDbConsoleLog = typeof dbConsoleLogTable.$inferInsert;
 export type ReportAccessLog = typeof reportAccessLogTable.$inferSelect;
 export type NewReportAccessLog = typeof reportAccessLogTable.$inferInsert;
 export type ProfileChangeLog = typeof profileChangeLogTable.$inferSelect;

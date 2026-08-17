@@ -127,6 +127,20 @@
       "when": 1786392351217,
       "tag": "0017_calm_klaw",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1786730431371,
+      "tag": "0018_jittery_galactus",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1786932272532,
+      "tag": "0019_eminent_daredevil",
+      "breakpoints": true
     }
   ]
 }
