@@ -74,26 +74,6 @@ router.get("/:id", requireAuth, async (req: AuthRequest, res) => {
   res.json(safeUser(user));
 });
 
-router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
-  const requestingUser = req.user!;
-  const schoolId = schoolIdOf(req);
-  const requestedId = req.params["id"]!;
-  
-  // Users can only update their own profile
-  if (requestingUser.userId !== requestedId) {
-    res.status(403).json({ error: "Forbidden - can only update your own profile" });
-    return;
-  }
-  
-  const [existingUser] = await db.select().from(usersTable).where(and(eq(usersTable.id, requestedId), eq(usersTable.schoolId, schoolId)));
-  if (!existingUser) {
-    res.status(404).json({ error: "User not found" });
-    return;
-  }
-  
-  res.json(safeUser(existingUser));
-});
-
 // --- Admin endpoints ---
 
 router.patch("/:id/approve", requireAuth, requirePermission("users.approve"), async (req: AuthRequest, res) => {

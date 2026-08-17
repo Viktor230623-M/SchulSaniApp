@@ -1,7 +1,6 @@
 import { and, eq, lt, or, sql } from "drizzle-orm";
 import {
   db,
-  dbConsoleLogTable,
   identityChangeLogTable,
   incidentReportsTable,
   loaTable,
@@ -71,12 +70,6 @@ export async function runRetention(now: Date = new Date()): Promise<RetentionRes
     .where(lt(loaTable.createdAt, cutoffs.loa))
     .returning({ id: loaTable.id });
   results.push({ table: "loa", action: "deleted", count: loa.length });
-
-  const consoleLog = await db
-    .delete(dbConsoleLogTable)
-    .where(lt(dbConsoleLogTable.createdAt, cutoffs.consoleLog))
-    .returning({ id: dbConsoleLogTable.id });
-  results.push({ table: "db_console_log", action: "deleted", count: consoleLog.length });
 
   const accessLog = await db
     .delete(reportAccessLogTable)

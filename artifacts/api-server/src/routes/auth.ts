@@ -268,10 +268,9 @@ async function buildUserResponse(user: { id: string; firstName: string | null; l
   // der Nutzerzeile, nicht der globale Bereich -- sonst ueberschreibt eine
   // entzogene, schulgebundene Berechtigung nie die globale Voreinstellung.
   const permissions = await permissionsForRole(user.role, user.schoolId);
-  const isOwnerAccount = config.ownerUserId !== undefined && user.id === config.ownerUserId;
   return {
     user: {
-      id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email, username: user.username ?? null, role: user.role, isOwnerAccount,
+      id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email, username: user.username ?? null, role: user.role,
       profileConfirmedAt: user.profileConfirmedAt ? user.profileConfirmedAt.toISOString() : null,
       mustChangePassword: user.mustChangePassword ?? false,
     },

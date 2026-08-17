@@ -12,8 +12,6 @@ import type {
   RoleInfo,
   Shift,
   User,
-  SqlPreset,
-  DbConsoleResult,
   PermissionDef,
 } from "@/models";
 import * as keyManager from "./crypto/keyManager";
@@ -1080,19 +1078,6 @@ async changePassword(currentPassword: string, newPassword: string): Promise<stri
     }
   },
 
-  async updateProfile(userId: string, data: { avatarUrl?: string }): Promise<User> {
-    const resp = await apiFetch(`${API_BASE}/users/${userId}`, {
-      method: "PATCH",
-      headers: headers(),
-      body: JSON.stringify(data),
-    });
-    if (!resp.ok) {
-      const err = await resp.json().catch(() => ({}));
-      throw new Error(err.error ?? "Profil konnte nicht aktualisiert werden");
-    }
-    return resp.json();
-  },
-
   async registerDeviceToken(token: string, platform: "ios" | "android" | "web", deviceId?: string): Promise<void> {
     const resp = await apiFetch(`${API_BASE}/notifications/register-device`, {
       method: "POST",
@@ -1392,32 +1377,6 @@ async changePassword(currentPassword: string, newPassword: string): Promise<stri
     if (!resp.ok) throw new Error(data.error ?? "Alt-Protokoll konnte nicht verschluesselt werden");
   },
 
-  async getDbPresets(): Promise<{ presets: SqlPreset[] }> {
-    const resp = await apiFetch(`${API_BASE}/db-console/presets`, { headers: headers() });
-    if (!resp.ok) throw new Error("Presets konnten nicht geladen werden");
-    return resp.json();
-  },
-
-  async getDbTables(): Promise<{ tables: { table: string; approx_rows: number }[] }> {
-    const resp = await apiFetch(`${API_BASE}/db-console/tables`, { headers: headers() });
-    if (!resp.ok) throw new Error("Tabellen konnten nicht geladen werden");
-    return resp.json();
-  },
-
-  async runDbStatement(input: {
-    statement: string;
-    presetKey?: string | null;
-    confirm?: boolean;
-  }): Promise<DbConsoleResult> {
-    const resp = await apiFetch(`${API_BASE}/db-console/execute`, {
-      method: "POST",
-      headers: { ...headers(), "Content-Type": "application/json" },
-      body: JSON.stringify(input),
-    });
-    const data = await resp.json().catch(() => ({}));
-    if (!resp.ok) throw new Error(data.error ?? "Ausführung fehlgeschlagen");
-    return data;
-  },
 };
 
 export default ApiService;

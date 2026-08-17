@@ -1,12 +1,23 @@
 import { randomUUID } from "crypto";
 import { Router } from "express";
 import { and, desc, eq } from "drizzle-orm";
-import { db, newsTable, usersTable } from "@workspace/db";
+import { db, newsTable, newsReadsTable, usersTable } from "@workspace/db";
 import { requireAuth, requirePermission, schoolIdOf, type AuthRequest } from "../middlewares/auth";
 import { notifySanitaeters } from "../services/notifications";
 import { translateToLanguages } from "../services/translator";
 
 const router = Router();
+
+// Gelesen-Zustand ist je Nutzer, nicht je Beitrag: die fruehere Spalte is_read
+// auf der news-Zeile markierte einen Beitrag fuer alle als gelesen, sobald ihn
+// eine Person geoeffnet hatte. Hier traegt jede Person ihre eigene Zeile ein.
+async function geleseneNewsIds(userId: string, schoolId: string): Promise<Set<string>> {
+  const rows = await db
+    .select({ newsId: newsReadsTable.newsId })
+    .from(newsReadsTable)
+    .where(and(eq(newsReadsTable.userId, userId), eq(newsReadsTable.schoolId, schoolId)));
+  return new Set(rows.map((r) => r.newsId));
+}
 
 router.get("/", requireAuth, async (req: AuthRequest, res) => {
   const { userId } = req.user!;
@@ -18,7 +29,8 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
     if (n.status === "rejected") return false;
     return n.status === "approved" || n.authorId === userId;
   });
-  res.json(filtered);
+  const gelesen = await geleseneNewsIds(userId, schoolId);
+  res.json(filtered.map((n) => ({ ...n, isRead: gelesen.has(n.id) })));
 });
 
 router.post("/", requireAuth, async (req: AuthRequest, res) => {
@@ -46,7 +58,6 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
     publishedAt: new Date(),
     author: authorName,
     authorId: userId,
-    isRead: false,
     rejectionReason: null,
   };
   await db.insert(newsTable).values(newItem);
@@ -57,14 +68,14 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
     newItem.translationsJson = JSON.stringify(t);
   }
 
-  res.status(201).json(newItem);
+  res.status(201).json({ ...newItem, isRead: false });
 });
 
 router.post("/:id/approve", requireAuth, requirePermission("news.moderate"), async (req: AuthRequest, res) => {
   const schoolId = schoolIdOf(req);
   const [item] = await db.update(newsTable).set({ status: "approved" }).where(and(eq(newsTable.id, req.params.id as string), eq(newsTable.schoolId, schoolId))).returning();
   if (!item) { res.status(404).json({ error: "Not found" }); return; }
-  
+
   notifySanitaeters({
     schoolId,
     type: "news",
@@ -72,7 +83,7 @@ router.post("/:id/approve", requireAuth, requirePermission("news.moderate"), asy
     body: item.summary ?? "Neue Nachricht veröffentlicht",
     relatedId: item.id,
   }).catch(console.error);
-  
+
   res.json(item);
 });
 
@@ -122,16 +133,36 @@ router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
   res.json(updated);
 });
 
-router.post("/:id/read", requireAuth, async (req, res) => {
+router.post("/:id/read", requireAuth, async (req: AuthRequest, res) => {
+  const { userId } = req.user!;
   const schoolId = schoolIdOf(req);
-  await db.update(newsTable).set({ isRead: true }).where(and(eq(newsTable.id, req.params.id as string), eq(newsTable.schoolId, schoolId)));
+  await db.insert(newsReadsTable).values({
+    id: randomUUID(),
+    schoolId,
+    userId,
+    newsId: req.params.id as string,
+    createdAt: new Date(),
+  }).onConflictDoNothing();
   res.json({ ok: true });
 });
 
 router.post("/read-all", requireAuth, async (req: AuthRequest, res) => {
-  const userId = req.user!.userId;
+  const { userId } = req.user!;
   const schoolId = schoolIdOf(req);
-  await db.update(newsTable).set({ isRead: true }).where(and(eq(newsTable.authorId, userId), eq(newsTable.schoolId, schoolId)));
+  // Nur veroeffentlichte Beitraege haben einen Gelesen-Zustand; eigene
+  // Entwuerfe und Ablehnungen laufen nicht unter "ungelesen".
+  const approved = await db.select({ id: newsTable.id }).from(newsTable).where(and(eq(newsTable.schoolId, schoolId), eq(newsTable.status, "approved")));
+  if (approved.length > 0) {
+    await db.insert(newsReadsTable).values(
+      approved.map((n) => ({
+        id: randomUUID(),
+        schoolId,
+        userId,
+        newsId: n.id,
+        createdAt: new Date(),
+      })),
+    ).onConflictDoNothing();
+  }
   res.json({ ok: true });
 });
 

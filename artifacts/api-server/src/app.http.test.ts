@@ -45,7 +45,6 @@ vi.mock("@workspace/db", async () => {
     deviceTokensTable: createMockTable("device_tokens"),
     statusTable: createMockTable("status"),
     dutyTable: createMockTable("duty"),
-    dbConsoleLogTable: createMockTable("db_console_log"),
     rolesTable: createMockTable("roles"),
     rolePermissionsTable: createMockTable("role_permissions"),
     sessionsTable: createMockTable("sessions"),

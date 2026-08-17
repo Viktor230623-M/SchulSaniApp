@@ -11,7 +11,6 @@ import activityRouter from "./activity";
 import incidentReportsRouter from "./incidentReports";
 import rolesRouter from "./roles";
 import rosterRouter from "./roster";
-import dbConsoleRouter from "./dbConsole";
 import exportsRouter from "./exports";
 import cryptoRouter from "./crypto";
 
@@ -29,7 +28,6 @@ router.use("/activity", activityRouter);
 router.use("/incident-reports", incidentReportsRouter);
 router.use("/roles", rolesRouter);
 router.use("/roster", rosterRouter);
-router.use("/db-console", dbConsoleRouter);
 router.use("/exports", exportsRouter);
 router.use("/crypto", cryptoRouter);
 

@@ -95,12 +95,6 @@ export const config = {
     "Anzeigename der Anwendung dieser Instanz",
   ),
   /**
-   * Konto mit Zugriff auf die SQL-Konsole. Bewusst optional: ist nichts
-   * gesetzt, bleibt die Konsole fuer alle gesperrt. Ein Vorgabewert waere hier
-   * eine fremde Kennung mit Vollzugriff auf die Datenbank.
-   */
-  ownerUserId: lies("OWNER_USER_ID"),
-  /**
    * Gemeinsames Eintrittskarte der Schule. Ist sie gesetzt, braucht jedes
    * neue Konto (E-Mail-Registrierung und OIDC-Erst-Login) diesen Code —
    * verhindert, dass sich Fremde auf einer fremden Instanz anmelden.

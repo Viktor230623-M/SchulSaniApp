@@ -17,14 +17,11 @@ export interface User {
   role: UserRole;
   schoolId: string;
   isApproved?: boolean;
-  /** Serverseitig berechnet: Konto mit Zugriff auf die SQL-Konsole. */
-  isOwnerAccount?: boolean;
   /** Vom Server mit der Anmeldeantwort geliefert; einzige Quelle fuer Sichtbarkeit im Client. */
   permissions?: string[];
   /** `null`: Name noch nicht bestaetigt, Sperre aktiv. Zeitstempel: bestaetigt. */
   profileConfirmedAt: string | null;
   mustChangePassword?: boolean;
-  avatarUri?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -292,27 +289,4 @@ export interface IncidentReport {
   createdAt: string;
   updatedAt: string;
   submittedAt?: string | null;
-}
-
-// --- Owner-only database console ---
-
-export interface SqlPreset {
-  key: string;
-  group: string;
-  label: string;
-  description: string;
-  sql: string;
-  destructive: boolean;
-}
-
-export interface DbConsoleResult {
-  kind: "read" | "write";
-  unbounded: boolean;
-  committed: boolean;
-  /** True when a write ran but was rolled back, so the count is a forecast. */
-  preview: boolean;
-  rowsAffected: number;
-  fields: string[];
-  rows: Record<string, unknown>[];
-  truncated: boolean;
 }

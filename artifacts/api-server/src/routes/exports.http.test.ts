@@ -212,7 +212,6 @@ vi.mock("@workspace/db", async () => {
     deviceTokensTable: createMockTable("device_tokens"),
     statusTable: createMockTable("status"),
     dutyTable: createMockTable("duty"),
-    dbConsoleLogTable: createMockTable("db_console_log"),
     rolesTable: createMockTable("roles"),
     rolePermissionsTable: createMockTable("role_permissions"),
     sessionsTable: createMockTable("sessions"),
@@ -298,7 +297,7 @@ describe("exports route", () => {
     expect(fakeSettings[0].lastExportAt).toBeInstanceOf(Date);
   });
 
-  it("Download liefert PDF und loescht die Protokolle nach bestaetigtem Empfang", async () => {
+  it("Bundel liefert die Protokolle und erst der bestaetigte Empfang loescht sie", async () => {
     const base = new Date("2026-01-01T10:00:00Z");
     fakeReports.push(makeReport("r1", "school-a", new Date(base.getTime() - 2000)));
     fakeReports.push(makeReport("r2", "school-a", new Date(base.getTime() - 1000)));
@@ -306,21 +305,22 @@ describe("exports route", () => {
     expect(created.status).toBe(201);
     const exportId = created.body.id;
 
+    // Das Buendel ist nur das verschluesselte Paket — das PDF entsteht
+    // clientseitig. Ein reiner Abruf darf deshalb noch nichts loeschen.
+    const bundle = await request(app).get(`/api/exports/${exportId}/bundle`).set(auth());
+    expect(bundle.status).toBe(200);
+    expect(bundle.body.reports.length).toBe(2);
     expect(fakeReports.length).toBe(2);
-    const dl = await request(app).get(`/api/exports/${exportId}/download`).set(auth());
-    expect(dl.status).toBe(200);
-    expect(dl.headers["content-type"]).toContain("application/pdf");
-    expect(dl.body.length).toBeGreaterThan(500);
 
-    // Nachbearbeitung laeuft nach dem finish-Event asynchron
-    await new Promise((r) => setTimeout(r, 100));
-
+    // Erst die Bestaetigung gibt die Loeschung der Protokolle frei.
+    const confirm = await request(app).post(`/api/exports/${exportId}/confirm`).set(auth());
+    expect(confirm.status).toBe(200);
     expect(fakeReports.length).toBe(0);
     expect(fakeExports[0].status).toBe("downloaded");
     expect(fakeExports[0].downloadedBy).toBe("u1");
 
-    // Zweiter Download wird abgelehnt
-    const again = await request(app).get(`/api/exports/${exportId}/download`).set(auth());
+    // Ein bereits uebergebener Export ist nicht erneut abrufbar.
+    const again = await request(app).get(`/api/exports/${exportId}/bundle`).set(auth());
     expect(again.status).toBe(409);
   });
 });

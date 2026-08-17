@@ -82,6 +82,7 @@ vi.mock("@workspace/db", async () => {
     pool: { query: () => Promise.resolve({ rows: [] }) },
     usersTable: createMockTable("users"),
     newsTable: createMockTable("news"),
+    newsReadsTable: createMockTable("news_reads"),
     loaTable: createMockTable("loa"),
     missionsTable: createMockTable("missions"),
     statusTable: createMockTable("status"),
@@ -205,6 +206,8 @@ vi.mock("../middlewares/auth", async () => {
       next();
     }),
     invalidateUserCache: vi.fn(),
+    schoolIdOf: () => "school-a",
+    requireSchool: (_req: any, _res: any, next: any) => next(),
   };
 });
 

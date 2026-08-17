@@ -93,8 +93,6 @@ export default function SettingsScreen() {
   const [loadingSaniActivity, setLoadingSaniActivity] = useState(false);
 
   const isAdmin = has("users.read_pending");
-  // The database console is bound to one account, not to a role.
-  const isOwner = user?.isOwnerAccount ?? false;
   const canAssignRole = has("users.assign_role");
   const canDeleteUsers = has("users.delete");
   const canManageRoleCatalog = has("roles.manage");
@@ -795,22 +793,6 @@ export default function SettingsScreen() {
       {canManageRoles && (
         <View style={[styles.section, appleCardStyle(theme)]}>
           {/* ── Section Header (collapsible) ── */}
-          {isOwner && (
-            <Pressable
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                router.push("/admin/database");
-              }}
-              style={styles.sectionHeaderRow}
-            >
-              <View style={styles.adminHeaderLeft}>
-                <Ionicons name="server-outline" size={13} color="#EF4444" />
-                <Text style={[styles.sectionTitle, { color: "#EF4444" }]}>Datenbank</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color={theme.textTertiary} />
-            </Pressable>
-          )}
-
           {canManageRoleCatalog && (
             <Pressable
               onPress={() => {
