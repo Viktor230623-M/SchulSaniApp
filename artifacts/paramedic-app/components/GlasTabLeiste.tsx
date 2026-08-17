@@ -87,7 +87,7 @@ export function GlasTabLeiste({
       pointerEvents="box-none"
       style={[styles.rahmen, { paddingBottom: Math.max(insets.bottom, 12) }]}
     >
-      <Glasflaeche theme={theme} dunkel={dunkel} radius={HOEHE / 2} intensity={dunkel ? 70 : 60} style={styles.pille}>
+      <Glasflaeche theme={theme} dunkel={dunkel} radius={HOEHE / 2} intensity={dunkel ? 70 : 60} style={styles.hauptPille}>
         {hauptRouten.map((route) => (
           <Feld
             key={route.key}
@@ -285,9 +285,9 @@ function Feld({
     ],
   }));
 
-  const hofStil = useAnimatedStyle(() => ({
+  const pilleStil = useAnimatedStyle(() => ({
     opacity: hebung.value,
-    transform: [{ scale: 0.8 + hebung.value * 0.2 }],
+    transform: [{ scale: 0.92 + hebung.value * 0.08 }],
   }));
 
   function beiDruck() {
@@ -308,17 +308,25 @@ function Feld({
       onPress={beiDruck}
       onPressIn={() => (druck.value = withTiming(1, { duration: 90 }))}
       onPressOut={() => (druck.value = withTiming(0, { duration: 140 }))}
-      style={[styles.feld, fuellendeBreite ? styles.feldVoll : styles.feldAnteilig]}
+      style={[styles.feld, fuellendeBreite ? styles.feldVoll : null]}
     >
+      {/* Die aktive Pille liegt als Hintergrund unter Icon und Label.
+          Waere sie deren Eltern, wuerden inaktive Tabs unsichtbar, weil die
+          Pille mit Opacity 0 ausblendet. */}
       <Animated.View
         pointerEvents="none"
-        style={[styles.hof, { backgroundColor: `${theme.tabBarActive}22` }, hofStil]}
+        style={[StyleSheet.absoluteFill, styles.aktivePille, { backgroundColor: `${theme.tabBarActive}22` }, pilleStil]}
       />
-      <Animated.View style={stil}>
+      <Animated.View style={[styles.inhalt, stil]}>
         {options.tabBarIcon?.({ color: farbe, focused: aktiv, size: 22 })}
       </Animated.View>
       {label && (
-        <Animated.Text style={[styles.label, { color: farbe }]} numberOfLines={1}>
+        <Animated.Text
+          style={[styles.label, styles.inhalt, { color: farbe }]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.8}
+        >
           {label}
         </Animated.Text>
       )}
@@ -348,7 +356,7 @@ const styles = StyleSheet.create({
     shadowRadius: 24,
     elevation: 10,
   },
-  pille: {
+  hauptPille: {
     flex: 1,
     height: HOEHE,
     flexDirection: "row",
@@ -358,22 +366,35 @@ const styles = StyleSheet.create({
   knopf: {
     width: HOEHE,
     height: HOEHE,
+    // Ohne das schrumpft der Knopf im Web auf ein Viertel seiner Breite,
+    // sobald die Labels in der Pille lang sind -- das Zahnrad wird dann vom
+    // eigenen Rand abgeschnitten.
+    flexShrink: 0,
     alignItems: "center",
     justifyContent: "center",
   },
   feld: {
+    flex: 1,
     alignItems: "center",
     justifyContent: "center",
     height: HOEHE - 8,
-    gap: 2,
+    paddingHorizontal: 2,
+    // Ueber Weichzeichner, Toenung und Schein. Ohne feste Reihenfolge malt
+    // WebKit die Glasschichten teils ueber Symbol und Beschriftung; sichtbar
+    // wird der Tab dann erst, wenn ihn eine Beruehrung neu zeichnen laesst.
+    zIndex: 1,
   },
-  feldAnteilig: { flex: 1 },
-  feldVoll: { width: "100%" },
-  hof: {
-    position: "absolute",
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+  feldVoll: { paddingHorizontal: 0 },
+  // Die aktive Pille liegt als Hintergrund unter Icon und Label und nimmt
+  // die volle Feldbreite: So sitzt sie bei kurzen Labels wie "News" genauso
+  // sauber wie bei langen wie "Abwesenheit". Icon und Label bleiben immer
+  // sichtbar; nur die Pille blendet bei inaktiven Tabs aus.
+  aktivePille: {
+    borderRadius: 18,
+  },
+  /** Symbol und Beschriftung liegen ueber der aktiven Pille, nicht darunter. */
+  inhalt: {
+    zIndex: 1,
   },
   label: {
     maxWidth: "100%",
