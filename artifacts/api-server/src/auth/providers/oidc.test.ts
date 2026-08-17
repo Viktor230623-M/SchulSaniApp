@@ -162,6 +162,39 @@ describe("oidc-provider-tests", () => {
     expect(result.profile.email).toBe("");
   });
 
+  it("meldet die Adresse ohne email_verified als ungeprueft", async () => {
+    const provider = createOidcRedirectProvider({
+      key: "microsoft",
+      displayName: "Microsoft",
+      issuerUrl: "https://login.microsoftonline.com/9188040d-6c67-4c5b-b112-36a304b66dad/v2.0",
+      clientId: "microsoft-client",
+      redirectUri: "https://app.example.test/api/auth/microsoft/callback",
+    });
+    const { state, nonce } = await redirectParams(provider);
+    jwtVerifyMock.mockResolvedValueOnce({
+      payload: { sub: "microsoft-user", nonce, email: "person@example.test" },
+    } as never);
+    const result = await provider.completeRedirect({ state, code: "abc" });
+    expect(result.profile.email).toBe("person@example.test");
+    expect(result.profile.emailVerified).toBe(false);
+  });
+
+  it("nimmt xms_edov als Nachweis des Mandanten", async () => {
+    const provider = createOidcRedirectProvider({
+      key: "microsoft",
+      displayName: "Microsoft",
+      issuerUrl: "https://login.microsoftonline.com/9188040d-6c67-4c5b-b112-36a304b66dad/v2.0",
+      clientId: "microsoft-client",
+      redirectUri: "https://app.example.test/api/auth/microsoft/callback",
+    });
+    const { state, nonce } = await redirectParams(provider);
+    jwtVerifyMock.mockResolvedValueOnce({
+      payload: { sub: "microsoft-user", nonce, email: "person@schule.example", xms_edov: true },
+    } as never);
+    const result = await provider.completeRedirect({ state, code: "abc" });
+    expect(result.profile.emailVerified).toBe(true);
+  });
+
   it("lehnt Google ausserhalb der erlaubten Workspace-Domaene ab", async () => {
     const provider = createOidcRedirectProvider({
       key: "google",
@@ -357,5 +390,31 @@ describe("oidc-provider-tests", () => {
     });
     expect(result.profile.firstName).toBe("Ada");
     expect(result.profile.lastName).toBe("Lovelace");
+  });
+
+  it("traut der Adresse aus Apples Namensrumpf nicht", async () => {
+    const provider = createOidcRedirectProvider({
+      key: "apple",
+      displayName: "Apple",
+      issuerUrl: "https://appleid.apple.com",
+      clientId: "com.example.service",
+      redirectUri: "https://app.example.test/auth/apple/callback",
+      clientSecretMode: "apple-jwt",
+      appleTeamId: "TEAMID1234",
+      appleKeyId: "KEYID12345",
+      applePrivateKeyPath: "/tmp/apple-signin-test.p8",
+      responseMode: "form_post",
+    });
+    const { state, nonce } = await redirectParams(provider);
+    jwtVerifyMock.mockResolvedValueOnce({
+      payload: { sub: "apple-user", nonce, email_verified: "true" },
+    } as never);
+    const result = await provider.completeRedirect({
+      state,
+      code: "abc",
+      user: JSON.stringify({ email: "opfer@schule.example" }),
+    });
+    expect(result.profile.email).toBe("opfer@schule.example");
+    expect(result.profile.emailVerified).toBe(false);
   });
 });

@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as AppleAuthentication from "expo-apple-authentication";
 import * as Crypto from "expo-crypto";
 import * as Linking from "expo-linking";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import React, { useEffect, useState } from "react";
 import {
@@ -60,9 +60,16 @@ export default function LoginScreen() {
   const [selectedProvider, setSelectedProvider] = useState<AuthProviderInfo | null>(null);
   const [redirecting, setRedirecting] = useState(false);
   const [redirectError, setRedirectError] = useState("");
+  // Der OIDC-Rueckweg landet ohne Sitzung wieder hier, wenn die Adresse zu
+  // einem anderen Konto gehoert -- der Grund reist als Parameter mit.
+  const { fehler } = useLocalSearchParams<{ fehler?: string }>();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+
+  useEffect(() => {
+    if (fehler === "email-konflikt") setRedirectError(t("auth.emailKonflikt", lang));
+  }, [fehler, lang]);
 
   useEffect(() => {
     let cancelled = false;
@@ -184,6 +191,10 @@ export default function LoginScreen() {
       const code = typeof callback?.queryParams?.code === "string" ? callback.queryParams.code : null;
       const joinCodeHandoff = typeof callback?.queryParams?.handoff === "string" ? callback.queryParams.handoff : null;
       setRedirecting(false);
+      if (callback?.queryParams?.fehler === "email-konflikt") {
+        setRedirectError(t("auth.emailKonflikt", lang));
+        return;
+      }
       if (joinCodeHandoff) {
         // Neues Konto auf einer Instanz mit Schul-Zugangscode: die App zeigt
         // den Schul-Code-Screen, der den einmaligen Handoff einloest.

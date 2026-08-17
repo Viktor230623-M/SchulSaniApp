@@ -84,6 +84,12 @@ export interface OidcRedirectProviderConfig {
   appleNativeClientId?: string;
   /** Apple kann den Ruecksprung als application/x-www-form-urlencoded senden. */
   responseMode?: "query" | "form_post";
+  /**
+   * Fuer Aussteller, die keinen email_verified-Anspruch senden, deren Adressen
+   * aber aus dem eigenen Verzeichnis stammen (IServ, Keycloak einer Schule).
+   * Nur setzen, wenn der Aussteller die Domaene selbst verwaltet.
+   */
+  emailsAreVerified?: boolean;
 }
 
 function generateCodeVerifier(): string {
@@ -325,7 +331,13 @@ export function createOidcRedirectProvider(cfg: OidcRedirectProviderConfig): Red
         throw new Error("ID-Token enthaelt keinen sub-Claim.");
       }
 
-      const verifiedEmail = payload["email_verified"] === true;
+      // Apple schickt den Anspruch als Zeichenkette, Entra ID gar nicht -- dort
+      // sagt xms_edov aus, dass der Mandant die Domaene nachgewiesen hat.
+      const verifiedEmail =
+        payload["email_verified"] === true ||
+        payload["email_verified"] === "true" ||
+        payload["xms_edov"] === true ||
+        cfg.emailsAreVerified === true;
       const hostedDomain = typeof payload["hd"] === "string" ? payload["hd"].trim().toLowerCase() : "";
       const allowedHostedDomains = (cfg.allowedHostedDomains ?? []).map((domain) => domain.trim().toLowerCase()).filter(Boolean);
       if (isGoogle && allowedHostedDomains.length > 0 && !allowedHostedDomains.includes(hostedDomain)) {
@@ -333,6 +345,9 @@ export function createOidcRedirectProvider(cfg: OidcRedirectProviderConfig): Red
       }
 
       let email = typeof payload["email"] === "string" && (!isGoogle || verifiedEmail) ? payload["email"] : "";
+      // Nur die Adresse aus dem signierten Token zaehlt als geprueft. Der
+      // Apple-Rumpf unten kommt ueber den Browser und ist manipulierbar.
+      let emailVerified = Boolean(email) && verifiedEmail;
       let firstName = typeof payload["given_name"] === "string" ? payload["given_name"] : "";
       let lastName = typeof payload["family_name"] === "string" ? payload["family_name"] : "";
 
@@ -344,7 +359,10 @@ export function createOidcRedirectProvider(cfg: OidcRedirectProviderConfig): Red
             email?: unknown;
             name?: { firstName?: unknown; lastName?: unknown };
           };
-          if (!email && typeof appleUser.email === "string") email = appleUser.email;
+          if (!email && typeof appleUser.email === "string") {
+            email = appleUser.email;
+            emailVerified = false;
+          }
           if (!firstName && typeof appleUser.name?.firstName === "string") firstName = appleUser.name.firstName;
           if (!lastName && typeof appleUser.name?.lastName === "string") lastName = appleUser.name.lastName;
         } catch {
@@ -363,7 +381,7 @@ export function createOidcRedirectProvider(cfg: OidcRedirectProviderConfig): Red
 
       return {
         subject: sub,
-        profile: { firstName, lastName, email, phone: "", groups },
+        profile: { firstName, lastName, email, emailVerified, phone: "", groups },
         returnTo: pending.returnTo,
         handoffChallenge: pending.handoffChallenge,
         linkUserId: pending.linkUserId,
@@ -396,13 +414,19 @@ export function createOidcRedirectProvider(cfg: OidcRedirectProviderConfig): Red
       // der schickt sie nur mit, weil Apple sie beim Erst-Login ausserhalb des
       // Tokens zurueckgibt. Ein manipulierter Client darf sie nicht setzen.
       let email = typeof payload["email"] === "string" ? payload["email"] : "";
-      if (!email && typeof claimedEmail === "string") email = claimedEmail;
+      let emailVerified =
+        Boolean(email) && (payload["email_verified"] === true || payload["email_verified"] === "true");
+      if (!email && typeof claimedEmail === "string") {
+        email = claimedEmail;
+        emailVerified = false;
+      }
       return {
         subject: sub,
         profile: {
           firstName: fullName?.givenName ?? "",
           lastName: fullName?.familyName ?? "",
           email,
+          emailVerified,
           phone: "",
         },
       };

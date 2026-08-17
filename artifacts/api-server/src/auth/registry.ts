@@ -36,6 +36,8 @@ interface RawOidcRedirectProviderConfig {
   /** Bundle-ID des nativen iOS-Clients (audience des nativen Identity-Tokens). */
   appleNativeClientId?: string;
   responseMode?: "query" | "form_post";
+  /** Aussteller ohne email_verified, dessen Adressen aus dem eigenen Verzeichnis stammen. */
+  emailsAreVerified?: boolean;
   /** Gruppe-zu-Rolle-Abbildung dieses Anbieters. */
   groupToRoleMap?: Record<string, string>;
 }
@@ -105,6 +107,7 @@ function buildProvider(raw: RawLocalProviderConfig | RawOidcRedirectProviderConf
       applePrivateKeyPath: raw.applePrivateKeyPath,
       appleNativeClientId: raw.appleNativeClientId,
       responseMode: raw.responseMode,
+      emailsAreVerified: raw.emailsAreVerified,
     }),
     groupToRoleMap: raw.groupToRoleMap ?? {},
   };

@@ -71,6 +71,8 @@ const translations = {
       joinCodeExpired: "Die Anmeldung ist abgelaufen. Bitte melde dich erneut an.",
       redirecting: "Weiterleitung läuft...",
       redirectFailed: "Weiterleitung fehlgeschlagen. Bitte erneut versuchen.",
+      emailKonflikt:
+        "Zu dieser E-Mail-Adresse gibt es schon ein Konto, dessen Adresse nie bestätigt wurde. Bestätige sie über den Link aus der Registrierungsmail oder wende dich an die Betreuung.",
       backToProviders: "Zurück zur Auswahl",
       email: "E-Mail",
       emailRequired: "E-Mail erforderlich",
@@ -664,6 +666,8 @@ const translations = {
       joinCodeExpired: "Your sign-in expired. Please sign in again.",
       redirecting: "Redirecting...",
       redirectFailed: "Redirect failed. Please try again.",
+      emailKonflikt:
+        "An account with this email already exists, but its address was never confirmed. Confirm it via the link in the registration email or contact your supervisor.",
       backToProviders: "Back to selection",
       email: "Email",
       emailRequired: "Email required",

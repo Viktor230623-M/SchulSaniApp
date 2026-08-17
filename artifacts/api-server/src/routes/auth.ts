@@ -2,7 +2,7 @@ import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypt
 import { Router } from "express";
 import jwt from "jsonwebtoken";
 import rateLimit from "express-rate-limit";
-import { eq, and, or, isNull, gt, sql } from "drizzle-orm";
+import { eq, and, or, isNull, isNotNull, gt, sql } from "drizzle-orm";
 import { db, authTokensTable, userIdentitiesTable, usersTable, rolesTable, sessionsTable, userRoleEnum, userCryptoKeysTable, type UserRole } from "@workspace/db";
 import { permissionsForRole } from "../lib/rolePermissions";
 import {
@@ -1145,12 +1145,28 @@ function isAllowedNativeReturnUrl(value: string): boolean {
 }
 
 /**
+ * Ein Konto mit derselben Adresse besteht, taugt aber nicht zur Verknuepfung:
+ * die Adresse ist dort nie bestaetigt worden. Zwei Konten mit einer Adresse
+ * legt die Datenbank nicht an, also endet die Anmeldung hier.
+ */
+class EmailBelongsToOtherAccount extends Error {}
+
+/** Kennung dieses Falls im Ruecksprung; der Anmeldebildschirm textet ihn aus. */
+const EMAIL_CONFLICT_PARAM = "email-konflikt";
+const EMAIL_CONFLICT_MESSAGE =
+  "Zu dieser E-Mail-Adresse gibt es bereits ein Konto, dessen Adresse nie bestaetigt wurde. Bestaetige sie zuerst ueber den Link in der Registrierungsmail oder wende dich an die Betreuung.";
+
+/**
  * Findet oder legt das Konto fuer eine verifizierte externe Identitaet an.
  *
- * Wiedererkennung ueber das Tripel (Schule, Anbieter, Subjekt) -- nie ueber
- * die E-Mail-Adresse. Derselbe Ablauf dient dem OIDC-Rueckweg und dem nativen
- * Apple-Login; beide liefern eine verifizierte Identitaet, die sich nur im
- * Weg unterscheidet.
+ * Wiedererkennung zuerst ueber das Tripel (Schule, Anbieter, Subjekt). Greift
+ * das nicht, zaehlt die E-Mail-Adresse -- aber nur, wenn beide Seiten sie
+ * bestaetigt haben: der Anbieter im Token und das bestehende Konto in
+ * email_verified_at. Sonst genuegte ein Konto mit fremder Adresse, um deren
+ * naechste Anmeldung ueber einen anderen Weg abzufangen.
+ *
+ * Derselbe Ablauf dient dem OIDC-Rueckweg und dem nativen Apple-Login; beide
+ * liefern eine verifizierte Identitaet, die sich nur im Weg unterscheidet.
  */
 async function reconcileAccount(
   providerKey: string,
@@ -1158,16 +1174,18 @@ async function reconcileAccount(
   profile: AuthProfile,
   schoolId: string,
 ): Promise<{ userId: string; role: UserRole; isApproved: boolean; firstName: string; lastName: string; email: string | null }> {
+  const kontoSpalten = {
+    id: usersTable.id,
+    role: usersTable.role,
+    isApproved: usersTable.isApproved,
+    firstName: usersTable.firstName,
+    lastName: usersTable.lastName,
+    email: usersTable.email,
+    emailVerifiedAt: usersTable.emailVerifiedAt,
+  };
+
   const [existing] = await db
-    .select({
-      identityId: userIdentitiesTable.id,
-      id: usersTable.id,
-      role: usersTable.role,
-      isApproved: usersTable.isApproved,
-      firstName: usersTable.firstName,
-      lastName: usersTable.lastName,
-      email: usersTable.email,
-    })
+    .select({ identityId: userIdentitiesTable.id, ...kontoSpalten })
     .from(userIdentitiesTable)
     .innerJoin(usersTable, eq(usersTable.id, userIdentitiesTable.userId))
     .where(
@@ -1179,7 +1197,23 @@ async function reconcileAccount(
     )
     .limit(1);
 
-  const userId = existing?.id ?? crypto.randomUUID();
+  const claimEmail = normaliseEmail(profile.email);
+  // Bestandskonten tragen die Adresse teils in der Schreibweise des Anbieters;
+  // verglichen wird deshalb kleingeschrieben, geschrieben normalisiert.
+  const [sameEmail] = existing || !claimEmail
+    ? []
+    : await db
+        .select(kontoSpalten)
+        .from(usersTable)
+        .where(and(eq(usersTable.schoolId, schoolId), sql`lower(${usersTable.email}) = ${claimEmail}`))
+        .limit(1);
+
+  if (sameEmail && !(profile.emailVerified === true && sameEmail.emailVerifiedAt)) {
+    throw new EmailBelongsToOtherAccount(sameEmail.id);
+  }
+
+  const account = existing ?? sameEmail;
+  const userId = account?.id ?? crypto.randomUUID();
 
   // Erster Login ohne freigeschalteten Eigentuemer: die Installation ist frisch
   // und der Anmeldende ist der Eigentuemer. Der Web-Installer legt den
@@ -1189,9 +1223,9 @@ async function reconcileAccount(
   // Apple-Login, nie fuer ein ungeprueftes lokales Konto.
   let role: UserRole;
   let isApproved: boolean;
-  if (existing) {
-    role = existing.role;
-    isApproved = existing.isApproved;
+  if (account) {
+    role = account.role;
+    isApproved = account.isApproved;
   } else {
     const [approvedOwner] = await db
       .select({ id: usersTable.id })
@@ -1208,12 +1242,23 @@ async function reconcileAccount(
   }
 
   // Apple liefert den Namen nur beim ersten Login. Vorhandene Profildaten
-  // duerfen bei einem spaeteren Ruecksprung nicht durch leere Claims ersetzt werden.
-  const firstName = profile.firstName || existing?.firstName || subject;
-  const lastName = profile.lastName || existing?.lastName || "";
+  // duerfen bei einem spaeteren Ruecksprung nicht durch leere Claims ersetzt
+  // werden. Beim Verknuepfen zaehlt der Name des bestehenden Kontos zuerst --
+  // der ist unter Umstaenden schon bestaetigt worden.
+  let firstName: string;
+  let lastName: string;
+  if (sameEmail) {
+    firstName = sameEmail.firstName || profile.firstName || subject;
+    lastName = sameEmail.lastName || profile.lastName || "";
+  } else {
+    firstName = profile.firstName || existing?.firstName || subject;
+    lastName = profile.lastName || existing?.lastName || "";
+  }
   // Unbestaetigte Google-Adressen bleiben leer. Eine bestehende Adresse bleibt
   // erhalten, wenn ein spaeterer Ruecksprung keinen verifizierten Claim liefert.
-  const email = profile.email || existing?.email || null;
+  const email = claimEmail ?? account?.email ?? null;
+  const emailVerifiedAt =
+    claimEmail && profile.emailVerified === true ? new Date() : account?.emailVerifiedAt ?? null;
   const phone = profile.phone;
 
   await db.transaction(async (tx) => {
@@ -1224,6 +1269,7 @@ async function reconcileAccount(
       firstName,
       lastName,
       email,
+      emailVerifiedAt,
       phone,
       role,
       isApproved,
@@ -1233,23 +1279,29 @@ async function reconcileAccount(
     })
     .onConflictDoUpdate({
       target: usersTable.id,
-      set: { firstName, lastName, email, updatedAt: new Date() },
+      set: { firstName, lastName, email, emailVerifiedAt, updatedAt: new Date() },
     });
 
     if (existing?.identityId) {
       await tx.update(userIdentitiesTable)
         .set({ lastUsedAt: new Date() })
         .where(eq(userIdentitiesTable.id, existing.identityId));
-    } else {
-      await tx.insert(userIdentitiesTable).values({
-        id: `primary-${userId}`,
-        userId,
-        schoolId,
-        authProvider: providerKey,
-        externalSubject: subject,
-        emailAtLink: email,
-        lastUsedAt: new Date(),
-      });
+      return;
+    }
+
+    await tx.insert(userIdentitiesTable).values({
+      // Das verknuepfte Konto hat seine primaere Identitaet schon; die zweite
+      // braucht einen eigenen Schluessel.
+      id: sameEmail ? `identity-${crypto.randomUUID()}` : `primary-${userId}`,
+      userId,
+      schoolId,
+      authProvider: providerKey,
+      externalSubject: subject,
+      emailAtLink: email,
+      lastUsedAt: new Date(),
+    });
+    if (sameEmail) {
+      await logIdentityChangeTx(tx, { userId, providerKey, action: "link" });
     }
   });
 
@@ -1413,6 +1465,17 @@ async function completeOidcCallback(req: import("express").Request, res: import(
     res.cookie(SESSION_COOKIE, sessionToken, sessionCookieOptions());
     res.redirect(config.allowedOrigins[0] ?? "/");
   } catch (err) {
+    if (err instanceof EmailBelongsToOtherAccount) {
+      if (authResult.returnTo) {
+        const landingUrl = new URL(authResult.returnTo);
+        landingUrl.searchParams.set("fehler", EMAIL_CONFLICT_PARAM);
+        res.redirect(landingUrl.toString());
+        return;
+      }
+      const landing = new URL(`/login?fehler=${EMAIL_CONFLICT_PARAM}`, config.allowedOrigins[0] ?? "http://localhost");
+      res.redirect(landing.toString());
+      return;
+    }
     console.error("OIDC-Anmeldung: Kontoabgleich fehlgeschlagen:", err);
     res.status(500).json({ error: "Anmeldung fehlgeschlagen." });
   }
@@ -1533,6 +1596,10 @@ router.post("/apple/native/complete", authLimiter, async (req, res) => {
       })),
     });
   } catch (err) {
+    if (err instanceof EmailBelongsToOtherAccount) {
+      res.status(409).json({ error: EMAIL_CONFLICT_MESSAGE, code: "EMAIL_IN_USE" });
+      return;
+    }
     console.error("Apple-Anmeldung: Kontoabgleich fehlgeschlagen:", err);
     res.status(500).json({ error: "Anmeldung fehlgeschlagen." });
   }
