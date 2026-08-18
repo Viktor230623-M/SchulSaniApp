@@ -16,6 +16,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { GlassLoader } from "@/components/GlassLoader";
+import { recordCrash } from "@/services/crashReporter";
 import { getTheme, istDunklesThema } from "@/constants/theme";
 import ApiService, { setAuthToken } from "@/services/ApiService";
 import {
@@ -199,7 +200,7 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <ErrorBoundary>
+      <ErrorBoundary onError={(error, stack) => recordCrash(error, stack)}>
         <QueryClientProvider client={queryClient}>
           <GestureHandlerRootView style={{ flex: 1 }}>
             <KeyboardProvider>

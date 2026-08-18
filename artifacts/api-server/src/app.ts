@@ -1,4 +1,5 @@
-import express, { type Express } from "express";
+import { randomUUID } from "node:crypto";
+import express, { type Express, type Request, type Response } from "express";
 import compression from "compression";
 import cors from "cors";
 import cookieParser from "cookie-parser";
@@ -7,6 +8,7 @@ import rateLimit from "express-rate-limit";
 import router from "./routes";
 import { config } from "./config";
 import { MissingSchoolContextError } from "./middlewares/auth";
+import { log } from "./lib/logger";
 
 const app: Express = express();
 app.disable("x-powered-by");
@@ -54,10 +56,32 @@ app.use("/api", (_req, res, next) => {
   res.set("Cache-Control", "no-store");
   next();
 });
+// Request-Id fuer die Korrelation von Logzeilen mit einer Anfrage. Der Pfad
+// ohne Query-Parameter ist bewusst alles, was protokolliert wird — in einer
+// Query koennte irgendwann Personenbezug landen, im Pfad nie.
+app.use((req, res, next) => {
+  const requestId = randomUUID();
+  res.set("X-Request-Id", requestId);
+  res.locals.requestId = requestId;
+  const started = Date.now();
+  res.on("finish", () => {
+    if (res.statusCode >= 500) {
+      log("error", "request failed", {
+        requestId,
+        method: req.method,
+        path: req.path,
+        status: res.statusCode,
+        ms: Date.now() - started,
+      });
+    }
+  });
+  next();
+});
+
 app.use("/api", router);
 
 // Error handler must be registered AFTER routes so it catches errors thrown within them.
-app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+app.use((err: Error, req: Request, res: Response, _next: express.NextFunction) => {
   if (err instanceof MissingSchoolContextError || err.name === "MissingSchoolContextError") {
     res.status(403).json({ error: "Schulkontext fehlt" });
     return;
@@ -66,7 +90,12 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
     res.status(400).json({ error: "Invalid JSON in request body" });
     return;
   }
-  console.error("Unhandled error:", err);
+  log("error", "unhandled error", {
+    requestId: res.locals.requestId,
+    method: req.method,
+    path: req.path,
+    message: err.message,
+  });
   res.status(500).json({ error: "Internal server error" });
 });
 
