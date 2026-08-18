@@ -641,6 +641,20 @@ async changePassword(currentPassword: string, newPassword: string): Promise<stri
     clearDekCache();
   },
 
+  /** Loescht das eigene Konto (POST /auth/account/delete) und raeumt lokal auf. */
+  async deleteAccount(): Promise<void> {
+    const resp = await apiFetch(`${API_BASE}/auth/account/delete`, {
+      method: "POST",
+      headers: headers(),
+      credentials: "include",
+    });
+    if (!resp.ok && resp.status !== 204) {
+      const data = await resp.json().catch(() => ({}));
+      throw new Error(data.error ?? "Konto konnte nicht geloescht werden");
+    }
+    await this.logout();
+  },
+
   async getNews(): Promise<NewsItem[]> {
     const resp = await apiFetch(`${API_BASE}/news`, { headers: headers() });
     if (!resp.ok) {

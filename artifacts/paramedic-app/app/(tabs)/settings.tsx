@@ -397,6 +397,25 @@ export default function SettingsScreen() {
     router.replace("/login");
   }
 
+  async function handleDeleteAccount() {
+    const confirmed = await confirmAction({
+      title: t("settings.deleteAccount", lang),
+      message: t("settings.deleteAccountConfirm", lang),
+      confirmLabel: t("settings.deleteAccount", lang),
+      cancelLabel: t("common.cancel", lang),
+      destructive: true,
+    });
+    if (!confirmed) return;
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    try {
+      await ApiService.deleteAccount();
+      logout();
+      router.replace("/login");
+    } catch (err) {
+      notify(t("settings.deleteAccountFailed", lang), err instanceof Error ? err.message : undefined);
+    }
+  }
+
   const baseThemes: { key: AppTheme; label: string; color: string; border: string }[] = [
     { key: "light", label: t("settings.themeLight", lang), color: "#F9FAFB", border: "#E5E7EB" },
     { key: "dark", label: t("settings.themeDark", lang), color: "#1A1A1A", border: "#374151" },
@@ -1093,6 +1112,17 @@ export default function SettingsScreen() {
       >
         <Ionicons name="log-out-outline" size={20} color="#EF4444" />
         <Text style={styles.logoutText}>{t("settings.logout", lang)}</Text>
+      </Pressable>
+
+      <Pressable
+        onPress={handleDeleteAccount}
+        style={({ pressed }) => [
+          styles.logoutBtn,
+          { borderWidth: 1, borderColor: withAlpha(theme.danger, 0.35), opacity: pressed ? 0.8 : 1 },
+        ]}
+      >
+        <Ionicons name="trash-outline" size={20} color="#EF4444" />
+        <Text style={styles.logoutText}>{t("settings.deleteAccount", lang)}</Text>
       </Pressable>
 
       <Text style={[styles.version, { color: theme.textTertiary }]}>

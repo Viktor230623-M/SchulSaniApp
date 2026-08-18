@@ -3,7 +3,35 @@ import { Router } from "express";
 import jwt from "jsonwebtoken";
 import rateLimit from "express-rate-limit";
 import { eq, and, or, isNull, isNotNull, gt, sql } from "drizzle-orm";
-import { db, authTokensTable, userIdentitiesTable, usersTable, rolesTable, sessionsTable, userRoleEnum, userCryptoKeysTable, type UserRole } from "@workspace/db";
+import {
+  db,
+  authTokensTable,
+  userIdentitiesTable,
+  usersTable,
+  rolesTable,
+  sessionsTable,
+  userRoleEnum,
+  userCryptoKeysTable,
+  deviceTokensTable,
+  notificationsTable,
+  dutyTable,
+  loaTable,
+  shiftMembersTable,
+  newsReadsTable,
+  missionDismissalsTable,
+  schoolDekWrapsTable,
+  incidentReportsTable,
+  newsTable,
+  shiftsTable,
+  missionActivityLogTable,
+  reportAccessLogTable,
+  roleChangeLogTable,
+  profileChangeLogTable,
+  identityChangeLogTable,
+  cryptoGrantLogTable,
+  missionsTable,
+  type UserRole,
+} from "@workspace/db";
 import { permissionsForRole } from "../lib/rolePermissions";
 import {
   requireAuth,
@@ -11,8 +39,10 @@ import {
   requireAuthForPasswordChange,
   requireAuthForLogout,
   invalidateUserCache,
+  schoolIdOf,
   type AuthRequest,
 } from "../middlewares/auth";
+import { logRoleChangeTx } from "../lib/roleChangeLog";
 import { createSession, resolveSession, revokeSession, revokeAllSessionsForUser } from "../lib/sessions";
 import { config } from "../config";
 import { loadAuthProviders } from "../auth/registry";
@@ -811,6 +841,95 @@ router.post("/logout", requireAuthForLogout, async (req, res) => {
   clearSessionCookie(res);
   res.clearCookie("sani-token");
   res.json({ message: "Logged out" });
+});
+
+// Platzhalter fuer anonymisierte Referenzen auf ein geloeschtes Konto. Die
+// Schuldaten (Protokolle, News, Schichten, Logs) bleiben erhalten, nur die
+// Verbindung zur Person entfaellt.
+const DELETED_USER = "geloescht";
+
+/**
+ * Selbst-Loeschung des eigenen Kontos (DSGVO Art. 17, App-Store-Richtlinie
+ * 5.1.1(v)). Nur eigene Daten werden entfernt oder anonymisiert; Protokolle
+ * und Berichte der Schule bleiben beim Verantwortlichen bestehen. Wie beim
+ * Entfernen eines Anmeldewegs muss die Sitzung frisch sein, damit ein
+ * unbeaufsichtigtes Geraet nicht reicht, um das Konto still zu kappen.
+ */
+router.post("/account/delete", authLimiter, requireAuth, async (req: AuthRequest, res) => {
+  const authTime = req.user?.authTime ?? req.user?.iat;
+  if (!authTime || Date.now() - authTime * 1000 > LINK_SESSION_FRESHNESS_MS) {
+    res.status(403).json({ error: "Bitte melde dich erneut an, bevor du dein Konto loeschst.", code: "LINK_SESSION_STALE" });
+    return;
+  }
+
+  const userId = req.user!.userId;
+  const schoolId = schoolIdOf(req);
+
+  await db.transaction(async (tx) => {
+    const [user] = await tx
+      .select({ id: usersTable.id, role: usersTable.role, firstName: usersTable.firstName, lastName: usersTable.lastName })
+      .from(usersTable)
+      .where(and(eq(usersTable.id, userId), eq(usersTable.schoolId, schoolId)))
+      .for("update")
+      .limit(1);
+    if (!user) return;
+
+    // Eigene Zeilen entfernen: Geraete, Sitzungen, Benachrichtigungen,
+    // Dienststatus, Abwesenheiten, Schicht-Mitgliedschaften, Lesemarken,
+    // Einsatz-Ausblendungen und DEK-Umschlaege (Zugriff auf die
+    // Verschluesselung erlischt mit dem Konto).
+    await tx.delete(deviceTokensTable).where(eq(deviceTokensTable.userId, userId));
+    await tx.delete(sessionsTable).where(eq(sessionsTable.userId, userId));
+    await tx.delete(notificationsTable).where(eq(notificationsTable.userId, userId));
+    await tx.delete(dutyTable).where(eq(dutyTable.userId, userId));
+    await tx.delete(loaTable).where(eq(loaTable.userId, userId));
+    await tx.delete(shiftMembersTable).where(eq(shiftMembersTable.userId, userId));
+    await tx.delete(newsReadsTable).where(eq(newsReadsTable.userId, userId));
+    await tx.delete(missionDismissalsTable).where(eq(missionDismissalsTable.userId, userId));
+    await tx.delete(schoolDekWrapsTable).where(eq(schoolDekWrapsTable.userId, userId));
+
+    // Schuldaten anonymisieren statt loeschen: die Schule bleibt Verantwortliche
+    // und ihre Protokolle duerfen nicht verschwinden, nur weil jemand geht.
+    await tx.update(incidentReportsTable)
+      .set({ authorId: DELETED_USER, responderIdsJson: sql`(${incidentReportsTable.responderIdsJson}::jsonb - ${userId})::json` })
+      .where(and(eq(incidentReportsTable.authorId, userId), eq(incidentReportsTable.schoolId, schoolId)));
+    await tx.update(incidentReportsTable)
+      .set({ responderIdsJson: sql`(${incidentReportsTable.responderIdsJson}::jsonb - ${userId})::json` })
+      .where(and(sql`${incidentReportsTable.responderIdsJson}::jsonb ? ${userId}`, eq(incidentReportsTable.schoolId, schoolId)));
+    await tx.update(newsTable).set({ authorId: DELETED_USER }).where(eq(newsTable.authorId, userId));
+    await tx.update(shiftsTable).set({ createdBy: DELETED_USER }).where(eq(shiftsTable.createdBy, userId));
+    await tx.update(missionsTable).set({ assignedParamedicId: null }).where(eq(missionsTable.assignedParamedicId, userId));
+    await tx.update(missionsTable).set({ requestedBy: null }).where(eq(missionsTable.requestedBy, userId));
+    await tx.update(missionActivityLogTable).set({ userId: DELETED_USER, userName: null }).where(eq(missionActivityLogTable.userId, userId));
+    await tx.update(reportAccessLogTable).set({ userId: DELETED_USER, userName: null }).where(eq(reportAccessLogTable.userId, userId));
+    await tx.update(roleChangeLogTable).set({ actorId: DELETED_USER, actorName: null }).where(eq(roleChangeLogTable.actorId, userId));
+    await tx.update(roleChangeLogTable).set({ targetUserId: DELETED_USER }).where(eq(roleChangeLogTable.targetUserId, userId));
+    await tx.update(profileChangeLogTable).set({ actorId: DELETED_USER }).where(eq(profileChangeLogTable.actorId, userId));
+    await tx.update(profileChangeLogTable).set({ targetUserId: DELETED_USER }).where(eq(profileChangeLogTable.targetUserId, userId));
+    await tx.update(identityChangeLogTable).set({ userId: DELETED_USER }).where(eq(identityChangeLogTable.userId, userId));
+    await tx.update(cryptoGrantLogTable).set({ actorId: DELETED_USER, actorName: null }).where(eq(cryptoGrantLogTable.actorId, userId));
+    await tx.update(cryptoGrantLogTable).set({ targetUserId: DELETED_USER }).where(eq(cryptoGrantLogTable.targetUserId, userId));
+
+    // Rechenschaftsnachweis: die Loeschung selbst bleibt als Protokolleintrag
+    // stehen, damit nicht unklar ist, wann und durch wen das Konto ging.
+    await logRoleChangeTx(tx, {
+      actorId: userId,
+      actorName: `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() || null,
+      targetUserId: userId,
+      action: "delete_user",
+      before: user.role,
+      after: null,
+    });
+
+    // Benutzerzeile zuletzt loeschen; Kaskaden raeumen Anmeldewege, Tokens
+    // und Schluesselmaterial ab. Eigene Rollen-Zeilen koennen danach nicht
+    // mehr blockieren, deshalb wird der Eintrag vorher geschrieben.
+    await tx.delete(usersTable).where(eq(usersTable.id, userId));
+  });
+
+  invalidateUserCache(userId);
+  clearSessionCookie(res);
+  res.status(204).send();
 });
 
 /**

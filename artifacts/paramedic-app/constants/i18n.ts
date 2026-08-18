@@ -335,6 +335,9 @@ const translations = {
       correctHint: "Die Änderung wird im Änderungsprotokoll gespeichert.",
       logout: "Abmelden",
       logoutConfirm: "Wirklich abmelden?",
+      deleteAccount: "Konto löschen",
+      deleteAccountConfirm: "Dein Konto und deine Daten werden gelöscht. Einsatzprotokolle bleiben anonymisiert beim Schulsanitätsdienst. Wirklich fortfahren?",
+      deleteAccountFailed: "Konto konnte nicht gelöscht werden",
       version: "Version",
       myRank: "Mein Rang",
       activityLog: "Mein Aktivitätslog",
@@ -595,6 +598,9 @@ const translations = {
       accessDenied: "Zugriff verweigert",
       firstName: "Vorname",
       lastName: "Nachname",
+      notFoundTitle: "Seite nicht gefunden",
+      notFoundBody: "Diese Seite gibt es nicht oder du hast keinen Zugriff darauf.",
+      backHome: "Zurück zur App",
     },
   },
   en: {
@@ -930,6 +936,9 @@ const translations = {
       correctHint: "The change is recorded in the change log.",
       logout: "Sign Out",
       logoutConfirm: "Are you sure you want to sign out?",
+      deleteAccount: "Delete Account",
+      deleteAccountConfirm: "Your account and your data will be deleted. Incident reports stay anonymized with the school service. Continue?",
+      deleteAccountFailed: "Could not delete account",
       version: "Version",
       myRank: "My Rank",
       activityLog: "My Activity Log",
@@ -1169,8 +1178,6 @@ const translations = {
       migrationFailed: "Encrypting legacy reports failed.",
     },
     common: {
-
-
       loading: "Loading...",
       error: "Error",
       retry: "Retry",
@@ -1192,6 +1199,9 @@ const translations = {
       accessDenied: "Access Denied",
       firstName: "First name",
       lastName: "Last name",
+      notFoundTitle: "Page not found",
+      notFoundBody: "This page does not exist or you do not have access to it.",
+      backHome: "Back to the app",
     },
   },
 };
