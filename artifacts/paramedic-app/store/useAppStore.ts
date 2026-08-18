@@ -87,6 +87,13 @@ interface AppState {
   /** Ziel aus einem Benachrichtigungs-Tap, das auf die Entsperrung wartet. */
   pendingNotificationRoute: string | null;
   setPendingNotificationRoute: (route: string | null) => void;
+
+  /**
+   * Im Cloud-Betrieb gewaehlte Schule (Schul-Waehler vor der Anmeldung).
+   * Im Selbsthosting bleibt sie leer — die Instanz gehoert genau einer Schule.
+   */
+  selectedSchool: { id: string; name: string } | null;
+  setSelectedSchool: (school: { id: string; name: string } | null) => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -190,6 +197,9 @@ export const useAppStore = create<AppState>()(
 
       pendingNotificationRoute: null,
       setPendingNotificationRoute: (route) => set({ pendingNotificationRoute: route }),
+
+      selectedSchool: null,
+      setSelectedSchool: (selectedSchool) => set({ selectedSchool }),
     }),
     {
       name: "paramedic-store-v3",
@@ -198,6 +208,7 @@ export const useAppStore = create<AppState>()(
         theme: state.theme,
         language: state.language,
         avatarUriMap: state.avatarUriMap,
+        selectedSchool: state.selectedSchool,
       }),
       merge: (persistedState, currentState) => ({
         ...currentState,

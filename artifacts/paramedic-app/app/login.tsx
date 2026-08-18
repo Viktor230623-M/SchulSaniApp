@@ -22,7 +22,7 @@ import { useTopPad } from "@/hooks/useTopPad";
 import { SCHOOL_NAME } from "@/constants/appConfig";
 import { t } from "@/constants/i18n";
 import { getTheme, istDunklesThema, withAlpha } from "@/constants/theme";
-import ApiService, { AuthError, syncCryptoLockState, type AuthProviderInfo } from "@/services/ApiService";
+import ApiService, { AuthError, syncCryptoLockState, type AuthProviderInfo, type PublicSchool } from "@/services/ApiService";
 import { useAppStore } from "@/store/useAppStore";
 
 async function createHandoffVerifier(): Promise<string> {
@@ -55,6 +55,11 @@ export default function LoginScreen() {
   const theme = getTheme(useAppStore((s) => s.theme));
   const login = useAppStore((s) => s.login);
   const setToken = useAppStore((s) => s.setToken);
+  const [schools, setSchools] = useState<PublicSchool[] | null>(null);
+  const [schoolsFailed, setSchoolsFailed] = useState(false);
+  const [multiTenant, setMultiTenant] = useState(false);
+  const selectedSchool = useAppStore((s) => s.selectedSchool);
+  const setSelectedSchool = useAppStore((s) => s.setSelectedSchool);
   const [providers, setProviders] = useState<AuthProviderInfo[] | null>(null);
   const [providersFailed, setProvidersFailed] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState<AuthProviderInfo | null>(null);
@@ -71,24 +76,57 @@ export default function LoginScreen() {
     if (fehler === "email-konflikt") setRedirectError(t("auth.emailKonflikt", lang));
   }, [fehler, lang]);
 
+  // Im Cloud-Betrieb beginnt die Anmeldung mit der Wahl der Schule; erst
+  // danach werden die Anmeldewege geladen. Im Selbsthosting gibt es genau
+  // eine Schule (oder gar keine Eintraege) — der Waehler bleibt verborgen.
   useEffect(() => {
     let cancelled = false;
-    ApiService.getAuthProviders()
-      .then(({ providers: list }) => {
+    ApiService.getSchools()
+      .then((result) => {
         if (cancelled) return;
-        if (list.length === 0) throw new Error("Keine Anmeldewege konfiguriert");
-        setProviders(list);
-        if (list.length === 1) setSelectedProvider(list[0]);
+        setMultiTenant(result.multiTenant);
+        setSchools(result.schools);
+        setSchoolsFailed(false);
+        if (!result.multiTenant || result.schools.length <= 1) {
+          // Selbsthosting oder genau eine Schule: kein Waehler noetig.
+          if (result.schools.length === 1 && !selectedSchool) {
+            setSelectedSchool({ id: result.schools[0]!.id, name: result.schools[0]!.name });
+          }
+          loadProviders();
+        }
       })
       .catch(() => {
         if (cancelled) return;
-        setProvidersFailed(true);
-        setProviders([]);
+        setSchoolsFailed(true);
+        setSchools([]);
+        loadProviders();
       });
     return () => {
       cancelled = true;
     };
   }, []);
+
+  function loadProviders() {
+    ApiService.getAuthProviders()
+      .then(({ providers: list }) => {
+        if (list.length === 0) throw new Error("Keine Anmeldewege konfiguriert");
+        setProviders(list);
+        if (list.length === 1) setSelectedProvider(list[0]);
+      })
+      .catch(() => {
+        setProvidersFailed(true);
+        setProviders([]);
+      });
+  }
+
+  function pickSchool(school: PublicSchool) {
+    setSelectedSchool({ id: school.id, name: school.name });
+    setProviders(null);
+    setSelectedProvider(null);
+    loadProviders();
+  }
+
+  const selectedSchoolId = selectedSchool?.id ?? undefined;
 
   async function handleAppleNative() {
     if (!selectedProvider || selectedProvider.key !== "apple" || Platform.OS !== "ios") return;
@@ -125,6 +163,7 @@ export default function LoginScreen() {
             }
           : undefined,
         email: credential.email ?? undefined,
+        schoolId: selectedSchoolId,
       });
       setToken(restored.token);
       login(restored.user);
@@ -152,7 +191,7 @@ export default function LoginScreen() {
     setRedirectError("");
     setRedirecting(true);
     try {
-      const restored = await ApiService.loginLocal(selectedProvider.key, username, password);
+      const restored = await ApiService.loginLocal(selectedProvider.key, username, password, selectedSchoolId);
       setToken(restored.token);
       login(restored.user);
       router.replace(restored.user.mustChangePassword ? "/passwort-wechseln" : restored.user.profileConfirmedAt === null ? "/name-bestaetigen" : "/(tabs)/news");
@@ -171,7 +210,7 @@ export default function LoginScreen() {
       const returnUrl = Platform.OS === "web" ? undefined : Linking.createURL("login");
       const verifier = Platform.OS === "web" ? undefined : await createHandoffVerifier();
       const challenge = verifier ? await createHandoffChallenge(verifier) : undefined;
-      const startUrl = ApiService.getProviderStartUrl(provider.key, returnUrl, challenge);
+      const startUrl = ApiService.getProviderStartUrl(provider.key, returnUrl, challenge, selectedSchoolId);
 
       if (Platform.OS === "web") {
         window.location.href = startUrl;
@@ -218,11 +257,13 @@ export default function LoginScreen() {
   }
 
   const topPad = useTopPad();
-  const showProviderList = providers !== null && providers.length > 1 && selectedProvider === null;
+  const showSchoolPicker = multiTenant && schools !== null && schools.length > 1 && !selectedSchool;
+  const showProviderList = !showSchoolPicker && providers !== null && providers.length > 1 && selectedProvider === null;
   const selectedVisual = selectedProvider ? providerVisual(selectedProvider) : null;
   const isLocal = selectedProvider?.type === "local";
   const istAppleNativ = selectedProvider?.key === "apple" && Platform.OS === "ios";
   const dunkel = istDunklesThema(theme.background);
+  const displayName = selectedSchool?.name || SCHOOL_NAME;
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -232,20 +273,68 @@ export default function LoginScreen() {
       >
         <View style={styles.header}>
           <MedicalCross size={64} color={theme.tint} animate />
-          <Text style={[styles.appName, { color: theme.text }]}>{SCHOOL_NAME}</Text>
+          <Text style={[styles.appName, { color: theme.text }]}>{displayName}</Text>
           <Text style={[styles.appSubtitle, { color: theme.textSecondary }]}>
             {t("auth.adminSystem", lang)}
             {selectedProvider ? ` · ${selectedProvider.displayName}` : ""}
           </Text>
         </View>
 
-        {providersFailed && (
+        {schoolsFailed && (
           <View style={[styles.noticeCard, { backgroundColor: theme.card, borderColor: theme.warning }]}>
             <Ionicons name="warning-outline" size={18} color={theme.warning} />
             <Text style={[styles.noticeText, { color: theme.textSecondary }]}>
               {t("auth.providersLoadFailed", lang)}
             </Text>
           </View>
+        )}
+
+        {providersFailed && !showSchoolPicker && (
+          <View style={[styles.noticeCard, { backgroundColor: theme.card, borderColor: theme.warning }]}>
+            <Ionicons name="warning-outline" size={18} color={theme.warning} />
+            <Text style={[styles.noticeText, { color: theme.textSecondary }]}>
+              {t("auth.providersLoadFailed", lang)}
+            </Text>
+          </View>
+        )}
+
+        {showSchoolPicker && (
+          <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
+            <Text style={[styles.title, { color: theme.text }]}>{t("auth.chooseSchool", lang)}</Text>
+            <Text style={[styles.body, { color: theme.textSecondary }]}>{t("auth.chooseSchoolBody", lang)}</Text>
+            {schools!.map((school) => (
+              <Pressable
+                key={school.id}
+                accessibilityRole="button"
+                accessibilityLabel={school.name}
+                onPress={() => pickSchool(school)}
+                style={({ pressed }) => [
+                  styles.providerRow,
+                  { borderColor: theme.inputBorder, backgroundColor: theme.inputBackground, opacity: pressed ? 0.8 : 1 },
+                ]}
+              >
+                <Ionicons name="school-outline" size={20} color={theme.tint} />
+                <Text style={[styles.providerText, { color: theme.text }]}>{school.name}</Text>
+                <Ionicons name="chevron-forward" size={18} color={theme.textTertiary} />
+              </Pressable>
+            ))}
+          </View>
+        )}
+
+        {selectedSchool && multiTenant && !showSchoolPicker && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t("auth.chooseSchool", lang)}
+            onPress={() => {
+              setSelectedSchool(null);
+              setSelectedProvider(null);
+              setProviders(null);
+            }}
+            style={styles.backRow}
+          >
+            <Ionicons name="chevron-back" size={18} color={theme.tint} />
+            <Text style={[styles.backText, { color: theme.tint }]}>{t("auth.chooseSchool", lang)}</Text>
+          </Pressable>
         )}
 
         {showProviderList && (

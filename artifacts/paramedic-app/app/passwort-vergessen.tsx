@@ -9,6 +9,7 @@ import { useAppStore } from "@/store/useAppStore";
 export default function PasswortVergessenScreen() {
   const lang = useAppStore((s) => s.language);
   const theme = getTheme(useAppStore((s) => s.theme));
+  const selectedSchool = useAppStore((s) => s.selectedSchool);
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -18,7 +19,7 @@ export default function PasswortVergessenScreen() {
     if (!email.trim()) { setError(t("auth.emailRequired", lang)); return; }
     setLoading(true); setError(""); setMessage("");
     try {
-      const response = await ApiService.requestPasswordReset(email);
+      const response = await ApiService.requestPasswordReset(email, selectedSchool?.id);
       setMessage(response || t("auth.forgotSuccess", lang));
     } catch (err) {
       setError(err instanceof Error ? err.message : t("auth.loginFailed", lang));

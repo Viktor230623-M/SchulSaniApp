@@ -33,6 +33,18 @@ export interface AuthProvidersResult {
   joinCodeRequired: boolean;
 }
 
+/** Schule im Cloud-Betrieb, wie sie GET /auth/schools liefert. */
+export interface PublicSchool {
+  id: string;
+  name: string;
+  joinCodeRequired: boolean;
+}
+
+export interface SchoolsResult {
+  multiTenant: boolean;
+  schools: PublicSchool[];
+}
+
 export interface AuthIdentityInfo {
   id: string;
   providerKey: string;
@@ -210,8 +222,10 @@ interface AuthParams {
   hasKeypair: boolean;
 }
 
-async function fetchAuthParams(providerKey: string, username: string): Promise<AuthParams> {
-  const url = `${API_BASE}/auth/params?providerKey=${encodeURIComponent(providerKey)}&username=${encodeURIComponent(username)}`;
+async function fetchAuthParams(providerKey: string, username: string, schoolId?: string): Promise<AuthParams> {
+  const params = new URLSearchParams({ providerKey, username });
+  if (schoolId) params.set("schoolId", schoolId);
+  const url = `${API_BASE}/auth/params?${params}`;
   const resp = await fetch(url, { headers: { "ngrok-skip-browser-warning": "true" }, cache: "no-store" });
   if (!resp.ok) throw new Error("Anmeldewege konnten nicht geladen werden");
   return resp.json();
@@ -222,7 +236,7 @@ async function fetchAuthParamsForCurrentUser(): Promise<string | null> {
   const user = useAppStore.getState().user;
   const identity = user?.email || user?.id || "";
   if (!identity) return null;
-  const params = await fetchAuthParams("local", identity);
+  const params = await fetchAuthParams("local", identity, user?.schoolId ?? undefined);
   return params.saltLogin;
 }
 
@@ -357,14 +371,14 @@ const ApiService = {
    * Server, Verschuesselungs-Key auf dem Geraet), danach wird das eigene
    * Schluesselpaar entsperrt bzw. beim ersten Login eingerichtet.
    */
-  async loginLocal(providerKey: string, username: string, password: string): Promise<{ user: User; isTealUnlocked: boolean; token: string }> {
-    const params = await fetchAuthParams(providerKey, username);
+  async loginLocal(providerKey: string, username: string, password: string, schoolId?: string): Promise<{ user: User; isTealUnlocked: boolean; token: string }> {
+    const params = await fetchAuthParams(providerKey, username, schoolId);
     const proof = await keyManager.deriveKey(password, params.saltLogin);
     const resp = await fetch(`${API_BASE}/auth/login`, {
       method: "POST",
       headers: headers(),
       credentials: "include",
-      body: JSON.stringify({ providerKey, username, proof: toBase64(proof) }),
+      body: JSON.stringify({ providerKey, username, proof: toBase64(proof), ...(schoolId ? { schoolId } : {}) }),
     });
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok) throw new Error(data.error ?? "Anmeldung fehlgeschlagen");
@@ -374,7 +388,7 @@ const ApiService = {
     return { user: { ...data.user, permissions: data.permissions ?? [] }, isTealUnlocked: data.isTealUnlocked, token: data.token };
   },
 
-  async registerLocalAccount(input: { email: string; password: string; username?: string; firstName?: string; lastName?: string; joinCode?: string }): Promise<string> {
+  async registerLocalAccount(input: { email: string; password: string; username?: string; firstName?: string; lastName?: string; joinCode?: string; schoolId?: string }): Promise<string> {
     // Salt und Proof entstehen lokal; der Server bekommt nur den Proof.
     const saltLogin = await keyManager.generateSalt();
     const proof = await keyManager.deriveKey(input.password, saltLogin);
@@ -396,15 +410,15 @@ const ApiService = {
     return { message: data.message ?? "", isApproved: data.isApproved === true };
   },
 
-  async resendLocalVerification(email: string): Promise<string> {
-    const resp = await fetch(`${API_BASE}/auth/local/verify/resend`, { method: "POST", headers: headers(), body: JSON.stringify({ email }) });
+  async resendLocalVerification(email: string, schoolId?: string): Promise<string> {
+    const resp = await fetch(`${API_BASE}/auth/local/verify/resend`, { method: "POST", headers: headers(), body: JSON.stringify({ email, ...(schoolId ? { schoolId } : {}) }) });
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok) throw new Error(data.error ?? "Bestätigungs-Mail konnte nicht angefordert werden");
     return data.message ?? "";
   },
 
-  async requestPasswordReset(email: string): Promise<string> {
-    const resp = await fetch(`${API_BASE}/auth/local/password/forgot`, { method: "POST", headers: headers(), body: JSON.stringify({ email }) });
+  async requestPasswordReset(email: string, schoolId?: string): Promise<string> {
+    const resp = await fetch(`${API_BASE}/auth/local/password/forgot`, { method: "POST", headers: headers(), body: JSON.stringify({ email, ...(schoolId ? { schoolId } : {}) }) });
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok) throw new Error(data.error ?? "Passwort-Reset konnte nicht angefordert werden");
     return data.message ?? "";
@@ -469,6 +483,7 @@ async changePassword(currentPassword: string, newPassword: string): Promise<stri
     nonce: string;
     fullName?: { givenName?: string; familyName?: string };
     email?: string;
+    schoolId?: string;
   }): Promise<{ user: User; isTealUnlocked: boolean; token: string }> {
     const resp = await fetch(`${API_BASE}/auth/apple/native/complete`, {
       method: "POST",
@@ -533,11 +548,14 @@ async changePassword(currentPassword: string, newPassword: string): Promise<stri
    * noetig. Wirft bei Netzfehler oder Zeitlimit -- der Aufrufer entscheidet,
    * wie der Anmeldebildschirm bei einem Ausfall dieses Abrufs aussieht.
    */
-  async getAuthProviders(): Promise<AuthProvidersResult> {
+  async getAuthProviders(schoolId?: string): Promise<AuthProvidersResult> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 8_000);
     try {
-      const resp = await fetch(`${API_BASE}/auth/providers`, {
+      const url = schoolId
+        ? `${API_BASE}/auth/providers?schoolId=${encodeURIComponent(schoolId)}`
+        : `${API_BASE}/auth/providers`;
+      const resp = await fetch(url, {
         cache: "no-store",
         headers: { "ngrok-skip-browser-warning": "true" },
         signal: controller.signal,
@@ -585,12 +603,37 @@ async changePassword(currentPassword: string, newPassword: string): Promise<stri
   },
 
   /** URL des Weiterleitungsstarts eines Anmeldewegs (GET /auth/:provider/start). */
-  getProviderStartUrl(providerKey: string, returnTo?: string, handoffChallenge?: string): string {
+  getProviderStartUrl(providerKey: string, returnTo?: string, handoffChallenge?: string, schoolId?: string): string {
     const url = `${API_BASE}/auth/${encodeURIComponent(providerKey)}/start`;
     if (!returnTo) return url;
     const params = new URLSearchParams({ returnTo });
     if (handoffChallenge) params.set("handoffChallenge", handoffChallenge);
+    if (schoolId) params.set("schoolId", schoolId);
     return `${url}?${params}`;
+  },
+
+  /**
+   * Aktive Schulen im Cloud-Betrieb (GET /auth/schools). Der Schul-Waehler
+   * zeigt sie vor der Anmeldung. Im Selbsthosting leer.
+   */
+  async getSchools(): Promise<SchoolsResult> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8_000);
+    try {
+      const resp = await fetch(`${API_BASE}/auth/schools`, {
+        cache: "no-store",
+        headers: { "ngrok-skip-browser-warning": "true" },
+        signal: controller.signal,
+      });
+      if (!resp.ok) throw new Error("Schulen konnten nicht geladen werden");
+      const data = await resp.json();
+      return {
+        multiTenant: data.multiTenant === true,
+        schools: Array.isArray(data.schools) ? data.schools : [],
+      };
+    } finally {
+      clearTimeout(timeout);
+    }
   },
 
   /** Setzt einmalig den bestaetigten Namen fuer das eigene Konto (PATCH /auth/profile). */

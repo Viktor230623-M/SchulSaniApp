@@ -10,6 +10,7 @@ import { useAppStore } from "@/store/useAppStore";
 export default function RegistrierenScreen() {
   const lang = useAppStore((s) => s.language);
   const theme = getTheme(useAppStore((s) => s.theme));
+  const selectedSchool = useAppStore((s) => s.selectedSchool);
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -26,10 +27,10 @@ export default function RegistrierenScreen() {
   // verlangt — auf offenen Instanzen haette es keinen Zweck und wuerde
   // nur verwirren.
   useEffect(() => {
-    ApiService.getAuthProviders()
+    ApiService.getAuthProviders(selectedSchool?.id)
       .then(({ joinCodeRequired: required }) => setJoinCodeRequired(required))
       .catch(() => {});
-  }, []);
+  }, [selectedSchool?.id]);
 
   async function submit() {
     if (!email.trim()) { setError(t("auth.emailRequired", lang)); return; }
@@ -37,7 +38,7 @@ export default function RegistrierenScreen() {
     if (joinCodeRequired && !joinCode.trim()) { setError(t("auth.joinCodeFailed", lang)); return; }
     setLoading(true); setError(""); setMessage("");
     try {
-      await ApiService.registerLocalAccount({ email, password, username: username.trim() || undefined, firstName, lastName, joinCode: joinCodeRequired ? joinCode.trim() : undefined });
+      await ApiService.registerLocalAccount({ email, password, username: username.trim() || undefined, firstName, lastName, joinCode: joinCodeRequired ? joinCode.trim() : undefined, schoolId: selectedSchool?.id });
       router.replace({ pathname: "/email-bestaetigen", params: { email } });
     } catch (err) {
       setError(err instanceof Error ? err.message : t("auth.loginFailed", lang));

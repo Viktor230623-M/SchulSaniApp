@@ -13,6 +13,7 @@ export default function EmailBestaetigenScreen() {
   const initialEmail = typeof rawEmail === "string" ? rawEmail : "";
   const lang = useAppStore((s) => s.language);
   const theme = getTheme(useAppStore((s) => s.theme));
+  const selectedSchool = useAppStore((s) => s.selectedSchool);
   const [email, setEmail] = useState(initialEmail);
   const [loading, setLoading] = useState(Boolean(token));
   const [message, setMessage] = useState("");
@@ -37,7 +38,7 @@ export default function EmailBestaetigenScreen() {
   async function resend() {
     if (!email.trim()) { setError(t("auth.emailRequired", lang)); return; }
     setLoading(true); setError("");
-    try { setMessage(await ApiService.resendLocalVerification(email)); }
+    try { setMessage(await ApiService.resendLocalVerification(email, selectedSchool?.id)); }
     catch (err) { setError(err instanceof Error ? err.message : t("auth.verifyFailed", lang)); }
     finally { setLoading(false); }
   }
