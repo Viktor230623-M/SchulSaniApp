@@ -51,7 +51,8 @@ export default function NameBestaetigenScreen() {
     }
   }
 
-  function handleLogout() {
+  async function handleLogout() {
+    await ApiService.logout();
     logout();
     router.replace("/login");
   }

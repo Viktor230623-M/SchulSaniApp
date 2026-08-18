@@ -18,10 +18,17 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { GlassLoader } from "@/components/GlassLoader";
 import { getTheme, istDunklesThema } from "@/constants/theme";
 import ApiService, { setAuthToken } from "@/services/ApiService";
-import { registerForPushNotificationsAsync } from "@/services/PushNotificationService";
+import { listenForTokenRefresh, registerForPushNotificationsAsync } from "@/services/PushNotificationService";
 import { useAppStore } from "@/store/useAppStore";
 
 SplashScreen.preventAutoHideAsync();
+
+// Oeffentliche Vorschau: faengt die API-Aufrufe ab, bevor die erste Anfrage
+// laeuft. Metro setzt die Variable als Text ein, im normalen Build faellt der
+// Block samt Daten aus dem Bundle.
+if (process.env["EXPO_PUBLIC_DEMO"] === "1") {
+  require("@/services/demo/mockFetch").installiereVorschau();
+}
 
 const queryClient = new QueryClient();
 
@@ -65,6 +72,13 @@ function RootLayoutNav() {
       registerForPushNotificationsAsync();
     }
   }, [authStatus]);
+
+  // Tokens werden von APNs/FCM unabhaengig vom App-Start rotiert. Der Listener
+  // meldet ein neues Token an den Server, solange eine Sitzung besteht.
+  useEffect(() => {
+    const subscription = listenForTokenRefresh();
+    return () => subscription.remove();
+  }, []);
 
   // Solange die Sitzung geprueft wird, weder Anwendung noch Anmeldung zeigen —
   // ein angemeldeter Nutzer soll dabei nicht kurz den Login-Bildschirm sehen.

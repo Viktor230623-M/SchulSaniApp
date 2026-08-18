@@ -389,6 +389,10 @@ export default function SettingsScreen() {
     });
     if (!confirmed) return;
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    // Server-Sitzung widerrufen und Geraet abmelden; danach den lokalen
+    // Zustand leeren. Ohne den Server-Teil bliebe das httpOnly-Cookie gueltig
+    // und der naechste App-Start stellte die Sitzung still wieder her.
+    await ApiService.logout();
     logout();
     router.replace("/login");
   }

@@ -617,6 +617,20 @@ async changePassword(currentPassword: string, newPassword: string): Promise<stri
     } catch {
       // absichtlich ignoriert
     }
+    // Geraete abmelden, solange das Bearer-Token noch gilt. Dynamische
+    // Imports, weil beide Dienste ihrerseits diesen ApiService importieren.
+    try {
+      const { unregisterPushNotifications } = await import("./PushNotificationService");
+      await unregisterPushNotifications();
+    } catch {
+      // absichtlich ignoriert
+    }
+    try {
+      const { disableWebPush } = await import("./WebPushService");
+      await disableWebPush();
+    } catch {
+      // absichtlich ignoriert
+    }
     setAuthToken(null);
     // Verschluesseltes Schluesselmaterial gehoert nicht ueber Abmeldungen
     // hinweg auf dem Geraet -- die Sitzung ohne KEK kann es nicht nutzen.

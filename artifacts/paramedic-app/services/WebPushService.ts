@@ -75,3 +75,17 @@ export async function enableWebPush(): Promise<"granted" | "denied" | "unsupport
   await ApiService.registerDeviceToken(JSON.stringify(subscription), "web");
   return "granted";
 }
+
+export async function disableWebPush(): Promise<void> {
+  if (!webPushSupported()) return;
+  try {
+    const registration = await navigator.serviceWorker.getRegistration();
+    const subscription = await registration?.pushManager.getSubscription();
+    if (subscription) {
+      await ApiService.unregisterDeviceToken(JSON.stringify(subscription));
+      await subscription.unsubscribe();
+    }
+  } catch (err) {
+    console.error("Failed to disable web push:", err);
+  }
+}

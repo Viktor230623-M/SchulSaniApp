@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Notifications from "expo-notifications";
 import * as Device from "expo-device";
 import { Platform } from "react-native";
@@ -20,6 +21,15 @@ Notifications.setNotificationHandler({
 });
 
 let deviceToken: string | null = null;
+
+// Das Token uebersteht App-Neustarts: Bei einer Abmeldung nach einem Kaltstart
+// ist es nicht mehr im Speicher, aber der Server kennt es noch.
+const TOKEN_STORAGE_KEY = "push-device-token";
+
+async function rememberToken(token: string | null): Promise<void> {
+  if (token) await AsyncStorage.setItem(TOKEN_STORAGE_KEY, token);
+  else await AsyncStorage.removeItem(TOKEN_STORAGE_KEY);
+}
 
 export async function requestNotificationPermissions(): Promise<boolean> {
   if (!Device.isDevice) {
@@ -90,6 +100,7 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
     }
 
     deviceToken = token;
+    await rememberToken(token);
     const platform: "ios" | "android" | "web" = Platform.OS === "ios" ? "ios" : "android";
 
     try {
@@ -106,14 +117,40 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
 }
 
 export async function unregisterPushNotifications(): Promise<void> {
-  if (deviceToken) {
+  // Nach einem Kaltstart steht das Token nur noch im Speicher des Geraets.
+  const token = deviceToken ?? (await AsyncStorage.getItem(TOKEN_STORAGE_KEY));
+  if (token) {
     try {
-      await ApiService.unregisterDeviceToken(deviceToken);
+      await ApiService.unregisterDeviceToken(token);
     } catch (err) {
       console.error("Failed to unregister token:", err);
     }
     deviceToken = null;
+    await rememberToken(null);
   }
+}
+
+/**
+ * Registriert das Fortfuehren eines neuen Geraete-Tokens beim Backend. APNs
+ * und FCM rotieren Tokens unabhaengig vom App-Start; ohne diese Meldung
+ * wuerde Push nach einer Rotation stumm bleiben, bis der Nutzer sich neu
+ * anmeldet.
+ */
+export function listenForTokenRefresh(): Notifications.EventSubscription {
+  return Notifications.addPushTokenListener(async ({ data }) => {
+    if (Platform.OS !== "ios" && Platform.OS !== "android") return;
+    const token = normalizeToken(data);
+    if (!token) return;
+    const { useAppStore } = await import("@/store/useAppStore");
+    if (useAppStore.getState().authStatus !== "authed") return;
+    deviceToken = token;
+    await rememberToken(token);
+    try {
+      await ApiService.registerDeviceToken(token, Platform.OS === "ios" ? "ios" : "android");
+    } catch (err) {
+      console.error("Failed to register refreshed token:", err);
+    }
+  });
 }
 
 export function addNotificationReceivedListener(
