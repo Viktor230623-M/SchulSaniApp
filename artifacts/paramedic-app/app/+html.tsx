@@ -23,6 +23,19 @@ export default function Root({ children }: PropsWithChildren) {
           content="width=device-width, initial-scale=1, minimum-scale=1, viewport-fit=cover"
         />
 
+        <title>{APP_NAME}</title>
+        <meta name="description" content="Einsatzverwaltung für Schulsanitätsdienste — Einsätze, Protokolle und Dienstplan, Ende-zu-Ende verschlüsselt." />
+        {/* Die App-Routen liegen hinter der Anmeldung und sind leere Huelle fuer
+            Crawler. Die oeffentliche Landing-Page liegt unter demo.schulsaniapp.com
+            und ist dort indexierbar; die App-Shell bleibt noindex. */}
+        <meta name="robots" content="noindex, nofollow" />
+
+        <meta property="og:type" content="website" />
+        <meta property="og:site_name" content={APP_NAME} />
+        <meta property="og:title" content={APP_NAME} />
+        <meta property="og:description" content="Einsatzverwaltung für Schulsanitätsdienste — Einsätze, Protokolle und Dienstplan, Ende-zu-Ende verschlüsselt." />
+        <meta property="og:image" content="/icons/icon-512.png" />
+
         <link rel="manifest" href="/manifest.json" />
         <meta name="theme-color" content={THEME_COLOR} />
 

@@ -1,0 +1,35 @@
+# SchulSaniApp
+
+> Einsatzverwaltung für Schulsanitätsdienste: Einsatzalarme, digitale Einsatzprotokolle, Dienstplan und Abwesenheiten — Ende-zu-Ende verschlüsselt und DSGVO-konform.
+
+SchulSaniApp ist eine App für Schulsanitätsdienste an weiterführenden Schulen. Sie organisiert den kompletten Ablauf eines Sanitätsdienstes: eingehende Einsätze werden per Push-Meldung alarmiert, die Einsatzkräfte dokumentieren ihre Einsätze digital (Patientendaten, Maßnahmen, Verlauf) und reichen die Protokolle ein. Dienstplan und Abwesenheitsanträge laufen über dieselbe App.
+
+## Wichtige Fakten
+
+- Einsatzalarm in Echtzeit per Push-Benachrichtigung an alle im Dienst befindlichen Sanitäter:innen
+- Digitale Einsatzprotokolle statt Papier, mit Nachtragsfunktion nach Einreichung
+- Dienstplan mit Schichten, Vertretungssuche und selbstständigem Übernehmen
+- Abwesenheitsanträge mit Genehmigung, Ablehnung und Einspruch
+- Ende-zu-Ende-Verschlüsselung: Der Server speichert nur Chiffrat, Gesundheitsdaten (Art. 9 DSGVO) sind für den Server nie lesbar
+- DSGVO-konform: Die Schule ist Verantwortlicher, die Verarbeitung läuft über einen Auftragsverarbeitungsvertrag nach Art. 28 DSGVO
+- Hosting in der EU (Frankfurt am Main), kein Drittland-Transfer von Gesundheitsdaten
+- Anmeldung per E-Mail oder über Apple-, Google-, Microsoft-Konto
+- Kostenlos nutzbar
+
+## Für wen die App ist
+
+- Schulsanitätsdienste an weiterführenden Schulen
+- Koordinator:innen und Verantwortliche des Sanitätsdienstes
+- Schulen, die eine DSGVO-konforme digitale Einsatzdokumentation suchen
+
+## Links
+
+- App und Anmeldung: https://schulsaniapp.com/login
+- Registrierung: https://schulsaniapp.com/registrieren
+- Produktseite (Deutsch): https://demo.schulsaniapp.com/
+- Product page (English): https://demo.schulsaniapp.com/en/
+- Support: support@mail.schulsaniapp.com
+
+## Hinweis für Lesende
+
+Dieses Projekt befasst sich mit Gesundheitsdaten Minderjähriger (Patientenakten von Schülerinnen und Schülern). Die App ist so gebaut, dass der Betrieb die Inhalte der Einsatzprotokolle technisch nie im Klartext lesen kann — die Verschlüsselung ist Architektur, nicht eine Zusatzfunktion.
