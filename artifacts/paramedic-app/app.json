@@ -15,6 +15,9 @@
     "ios": {
       "supportsTablet": false,
       "buildNumber": "1",
+      "entitlements": {
+        "aps-environment": "development"
+      },
       "infoPlist": {
         "UIBackgroundModes": ["remote-notification"]
       }
