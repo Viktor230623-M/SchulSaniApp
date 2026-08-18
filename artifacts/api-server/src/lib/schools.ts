@@ -57,23 +57,14 @@ export async function resolveSchoolId(
     throw new Error("Schulkontext fehlt");
   }
   const [school] = await db
-    .select({ id: schoolsTable.id })
+    .select({ id: schoolsTable.id, isActive: schoolsTable.isActive })
     .from(schoolsTable)
     .where(eq(schoolsTable.id, schoolId))
     .limit(1);
-  if (!school || !(await isSchoolActive(schoolId))) {
+  if (!school || school.isActive !== true) {
     throw new Error("Schule ist nicht aktiv");
   }
   return schoolId;
-}
-
-async function isSchoolActive(schoolId: string): Promise<boolean> {
-  const [school] = await db
-    .select({ isActive: schoolsTable.isActive })
-    .from(schoolsTable)
-    .where(eq(schoolsTable.id, schoolId))
-    .limit(1);
-  return school?.isActive !== false;
 }
 
 /**

@@ -87,27 +87,21 @@ export default function LoginScreen() {
         setMultiTenant(result.multiTenant);
         setSchools(result.schools);
         setSchoolsFailed(false);
-        if (!result.multiTenant || result.schools.length <= 1) {
-          // Selbsthosting oder genau eine Schule: kein Waehler noetig.
-          if (result.schools.length === 1 && !selectedSchool) {
-            setSelectedSchool({ id: result.schools[0]!.id, name: result.schools[0]!.name });
-          }
-          loadProviders();
-        }
       })
       .catch(() => {
         if (cancelled) return;
         setSchoolsFailed(true);
         setSchools([]);
-        loadProviders();
       });
     return () => {
       cancelled = true;
     };
   }, []);
 
+  const selectedSchoolId = selectedSchool?.id ?? undefined;
+
   function loadProviders() {
-    ApiService.getAuthProviders()
+    ApiService.getAuthProviders(selectedSchoolId)
       .then(({ providers: list }) => {
         if (list.length === 0) throw new Error("Keine Anmeldewege konfiguriert");
         setProviders(list);
@@ -119,14 +113,33 @@ export default function LoginScreen() {
       });
   }
 
+  // Sobald feststeht, ob ein Schul-Waehler noetig ist, die Anmeldewege laden:
+  // Selbsthosting, genau eine Schule oder bereits gewaehlte Schule → direkt
+  // weiter. Der Effekt reagiert auch auf die persistierte Auswahl (AsyncStorage
+  // hydriert asynchron), damit eine fruehere Wahl den Waehler nicht blockiert.
+  const showSchoolPicker = multiTenant && schools !== null && schools.length > 1 && !selectedSchool;
+  useEffect(() => {
+    if (schools === null) return;
+    if (showSchoolPicker) return;
+    loadProviders();
+    // schools/showSchoolPicker bewusst nicht in den Dependencies: Die
+    // Anmeldewege sollen nicht bei jedem Neu-Render neu geladen werden.
+  }, [schools !== null, showSchoolPicker, selectedSchoolId]);
+
+  // Genau eine Schule im Cloud-Betrieb: automatisch vorauswaehlen, damit
+  // auch dort kein Waehler aufpoppt.
+  useEffect(() => {
+    if (schools !== null && schools.length === 1 && !selectedSchool) {
+      setSelectedSchool({ id: schools[0]!.id, name: schools[0]!.name });
+    }
+  }, [schools, selectedSchool]);
+
   function pickSchool(school: PublicSchool) {
+    // Der Effekt auf selectedSchoolId laedt die Anmeldewege anschliessend.
     setSelectedSchool({ id: school.id, name: school.name });
     setProviders(null);
     setSelectedProvider(null);
-    loadProviders();
   }
-
-  const selectedSchoolId = selectedSchool?.id ?? undefined;
 
   async function handleAppleNative() {
     if (!selectedProvider || selectedProvider.key !== "apple" || Platform.OS !== "ios") return;
@@ -257,7 +270,6 @@ export default function LoginScreen() {
   }
 
   const topPad = useTopPad();
-  const showSchoolPicker = multiTenant && schools !== null && schools.length > 1 && !selectedSchool;
   const showProviderList = !showSchoolPicker && providers !== null && providers.length > 1 && selectedProvider === null;
   const selectedVisual = selectedProvider ? providerVisual(selectedProvider) : null;
   const isLocal = selectedProvider?.type === "local";

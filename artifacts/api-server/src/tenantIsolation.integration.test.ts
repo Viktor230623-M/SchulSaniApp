@@ -35,7 +35,10 @@ describe.skipIf(!DB_URL)("Mandantentrennung", () => {
     createNotifications = notifications.createNotificationForMultipleUsers;
     app = (await import("./app")).default;
 
-    await db.execute(sql`TRUNCATE users, notifications, device_tokens, incident_reports CASCADE`);
+    // Nur die eigenen Zeilen raeumen — die Dateien laufen parallel in
+    // getrennten Workern gegen dieselbe Datenbank, ein TRUNCATE wuerde die
+    // Daten der anderen Integrationstest-Datei wegwerfen.
+    await aufraeumen();
 
     ids = { aAdmin: "u-a-admin", aSani: "u-a-sani", bAdmin: "u-b-admin", reportA: "r-a", reportB: "r-b" };
     const jetzt = new Date();
@@ -90,8 +93,25 @@ describe.skipIf(!DB_URL)("Mandantentrennung", () => {
   });
 
   afterAll(async () => {
-    await db.execute(sql`TRUNCATE users, notifications, device_tokens, incident_reports CASCADE`);
+    await aufraeumen();
   });
+
+  // Loescht nur die Daten dieser Datei (Schule A/B und ihre Konten), damit
+  // parallel laufende Integrationstest-Dateien ungestoert bleiben.
+  async function aufraeumen() {
+    await db.execute(sql`
+      DELETE FROM report_access_log WHERE user_id IN ('u-a-admin', 'u-a-sani', 'u-b-admin');
+      DELETE FROM mission_dismissals WHERE user_id IN ('u-a-admin', 'u-a-sani', 'u-b-admin');
+      DELETE FROM news_reads WHERE user_id IN ('u-a-admin', 'u-a-sani', 'u-b-admin');
+      DELETE FROM shift_members WHERE user_id IN ('u-a-admin', 'u-a-sani', 'u-b-admin');
+      DELETE FROM notifications WHERE user_id IN ('u-a-admin', 'u-a-sani', 'u-b-admin');
+      DELETE FROM device_tokens WHERE user_id IN ('u-a-admin', 'u-a-sani', 'u-b-admin');
+      DELETE FROM incident_reports WHERE school_id IN ('schule-a', 'schule-b');
+      DELETE FROM sessions WHERE user_id IN ('u-a-admin', 'u-a-sani', 'u-b-admin');
+      DELETE FROM user_identities WHERE user_id IN ('u-a-admin', 'u-a-sani', 'u-b-admin');
+      DELETE FROM users WHERE id IN ('u-a-admin', 'u-a-sani', 'u-b-admin');
+    `);
+  }
 
   function token(userId: string, role: string): string {
     return signToken({ userId, role, passwordVersion: 0 });

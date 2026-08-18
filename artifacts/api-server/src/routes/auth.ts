@@ -1256,7 +1256,14 @@ router.post("/link/:provider/start", authLimiter, requireAuth, async (req: AuthR
       absoluteLifetimeMs: LINK_SESSION_FRESHNESS_MS,
     });
     res.cookie(SESSION_COOKIE, sessionToken, sessionCookieOptions());
-    const { redirectUrl } = await provider.beginRedirect({ returnTo, linkUserId });
+    // Im Cloud-Betrieb muss der Ruecksprung wissen, in welcher Schule das
+    // Konto liegt (der Link ist an ein Konto gebunden, nicht an eine
+    // Schule der Anfrage). Im Selbsthosting faellt der Wert weg.
+    const { redirectUrl } = await provider.beginRedirect({
+      returnTo,
+      linkUserId,
+      schoolId: req.user!.schoolId ?? undefined,
+    });
     res.json({ redirectUrl });
   } catch (err) {
     console.error("OIDC-Verknuepfung konnte nicht gestartet werden:", err);
