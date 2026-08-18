@@ -74,8 +74,10 @@ export const usersTable = pgTable("users", {
   unique("users_school_id_username_key").on(t.schoolId, t.username),
   // Ueber lower(), nicht ueber die Spalte: Microsoft lieferte dieselbe Adresse
   // mit grossem Anfangsbuchstaben zurueck und legte damit ein zweites Konto an,
-  // das der einfache Unique-Index durchwinkte.
-  uniqueIndex("users_email_lower_unique").on(sql`lower(${t.email})`),
+  // das der einfache Unique-Index durchwinkte. Schulgebunden statt global:
+  // dieselbe Adresse darf an zwei Schulen unabhaengig existieren, sobald der
+  // Backend mehrere Schulen bedient.
+  uniqueIndex("users_school_email_lower_unique").on(t.schoolId, sql`lower(${t.email})`),
 ]);
 
 // Zweite und weitere Anmeldewege eines Kontos. Die primaere Identitaet bleibt
