@@ -1,0 +1,54 @@
+# EAS baut auf einem sauberen Klon des Repos — lokale Artefakte und
+# Instanz-Dateien gehoeren nicht in den Upload. node_modules wird von EAS
+# ohnehin ignoriert; ios/android erzeugt `expo prebuild` selbst.
+
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+static-build/
+expo-env.d.ts
+
+# Native (werden von prebuild generiert)
+ios/
+android/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+.metro-cache/
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+*.pem
+
+# local env files (Secrets nie hochladen)
+.env
+.env*.local
+
+# typescript
+*.tsbuildinfo
+.vercel
+
+# lokale Instanz- und Vertriebsartefakte
+screens/
+screenshots/
+downloads/
+*.zip
+*.ipa
+*.aab
+*.apk
+*.dmg
