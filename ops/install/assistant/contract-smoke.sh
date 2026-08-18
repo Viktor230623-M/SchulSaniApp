@@ -58,7 +58,6 @@ const body = {
   themeColor: "#22C55E",
   bundleId: "com.example.sani",
   schoolId: "example",
-  ownerUserId: "owner",
   vapidSubject: "mailto:admin@example.test",
 };
 const cookie = fs.readFileSync(cookiePath, "utf8").split("\n").find((line) => line.includes("schulsani_setup"))?.split("\t").pop();
@@ -110,7 +109,7 @@ if (microsoft.groupToRoleMap.leaders !== "sanitaeter_leitung") throw new Error("
 if (google.issuerUrl !== "https://accounts.google.com") throw new Error("Google-Issuer ungueltig.");
 if (microsoft.issuerUrl !== "https://login.microsoftonline.com/00000000-0000-0000-0000-000000000000/v2.0") throw new Error("Microsoft-Issuer aus Tenant-ID ungueltig.");
 const env = fs.readFileSync(process.argv[3], "utf8");
-for (const key of ["SMTP_HOST", "SMTP_PORT", "SMTP_REQUIRE_TLS", "MAIL_FROM", "APP_BASE_URL"]) {
+for (const key of ["SMTP_HOST", "SMTP_PORT", "SMTP_REQUIRE_TLS", "MAIL_FROM", "APP_BASE_URL", "FCM_SERVICE_ACCOUNT_PATH", "FCM_PROJECT_ID", "APNS_KEY_PATH", "APNS_KEY_ID", "APNS_TEAM_ID", "APNS_BUNDLE_ID", "APNS_ENV"]) {
   if (!env.includes(`${key}=`)) throw new Error(`${key} fehlt in Backend-.env.`);
 }
 console.log("Installer-Vertrag: ok");

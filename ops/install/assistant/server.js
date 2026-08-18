@@ -492,11 +492,6 @@ function validateConfig(body) {
     errors.schoolId = "Diese Schul-Kennung ist bereits vergeben.";
   }
 
-  out.ownerUserId = trimOrEmpty(body.ownerUserId);
-  if (out.ownerUserId && !IDENTIFIER_RE.test(out.ownerUserId)) {
-    errors.ownerUserId = "Bitte eine gueltige Konto-ID angeben.";
-  }
-
   out.vapidSubject = trimOrEmpty(body.vapidSubject);
   if (out.vapidSubject && !/^mailto:[^@\s]+@[^@\s]+\.[^@\s]+$/.test(out.vapidSubject)) {
     errors.vapidSubject = 'Bitte im Format "mailto:name@domain.de" angeben, oder freilassen.';
@@ -504,7 +499,7 @@ function validateConfig(body) {
   if (!out.vapidSubject) {
     out.vapidSubject = `mailto:admin@${out.domain || "beispielschule.de"}`;
   }
-  out.ownerAccountId = out.ownerUserId || crypto.randomUUID();
+  out.ownerAccountId = crypto.randomUUID();
   // Eigentuemer-Login: E-Mail-Konto, oder der erste gewaehlte OIDC-Anbieter.
   out.ownerProviderKey = usesLocal ? "local" : (out.providers[0] ? out.providers[0].key : "local");
 
@@ -628,7 +623,6 @@ function buildBackendEnv(cfg, secrets) {
     envLine("AUTH_PROVIDERS_PATH", AUTH_PROVIDERS_PATH),
     envLine("APP_NAME", cfg.appName),
     envLine("SCHOOL_ID", cfg.schoolId || "school"),
-    envLine("OWNER_USER_ID", cfg.ownerUserId || ""),
     envLine("SCHOOL_JOIN_CODE", cfg.joinCode || ""),
     envLine("APP_BASE_URL", allowedOrigins),
     envLine("SMTP_HOST", cfg.smtpHost),
@@ -645,6 +639,7 @@ function buildBackendEnv(cfg, secrets) {
     // Native Push laeuft ueber die zentralen FCM-/APNs-Konten des Anbieters;
     // die Werte traegt der Anbieter nach der Einrichtung ein (kein Repo-Inhalt).
     "FCM_SERVICE_ACCOUNT_PATH=",
+    "FCM_SERVICE_ACCOUNT=",
     "FCM_PROJECT_ID=",
     "APNS_KEY_PATH=",
     "APNS_KEY_ID=",
@@ -664,7 +659,6 @@ function buildAppEnv(cfg, secrets) {
     envLine("EXPO_PUBLIC_APP_NAME", cfg.appName),
     envLine("EXPO_PUBLIC_THEME_COLOR", cfg.themeColor),
     envLine("APP_BUNDLE_ID", cfg.bundleId),
-    envLine("EXPO_PUBLIC_OWNER_USER_ID", cfg.ownerUserId || ""),
     envLine("EXPO_PUBLIC_VAPID_PUBLIC_KEY", secrets.vapidPublicKey),
     "",
   ].join("\n");
@@ -959,7 +953,6 @@ function publicState() {
           themeColor: state.config.themeColor,
           bundleId: state.config.bundleId,
           schoolId: state.config.schoolId,
-          ownerUserId: state.config.ownerUserId,
           joinCode: state.config.joinCode,
           vapidSubject: state.config.vapidSubject,
         }
