@@ -141,6 +141,13 @@
       "when": 1786932272532,
       "tag": "0019_eminent_daredevil",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1787037691528,
+      "tag": "0020_cold_maximus",
+      "breakpoints": true
     }
   ]
 }
