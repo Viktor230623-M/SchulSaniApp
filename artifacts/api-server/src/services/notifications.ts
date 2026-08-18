@@ -33,9 +33,9 @@ export async function createNotification(data: {
   const [recipient] = await db
     .select({ id: usersTable.id })
     .from(usersTable)
-    .where(and(eq(usersTable.id, data.userId), eq(usersTable.schoolId, data.schoolId)))
+    .where(and(eq(usersTable.id, data.userId), eq(usersTable.schoolId, data.schoolId), eq(usersTable.isApproved, true)))
     .limit(1);
-  if (!recipient) throw new Error("Notification recipient is outside the school");
+  if (!recipient) throw new Error("Notification recipient is outside the school or not approved");
 
   const notification: NewNotification = {
     id: uid(),
@@ -68,7 +68,7 @@ export async function createNotificationForMultipleUsers(userIds: string[], data
   const recipients = await db
     .select({ id: usersTable.id })
     .from(usersTable)
-    .where(and(eq(usersTable.schoolId, data.schoolId), inArray(usersTable.id, userIds)));
+    .where(and(eq(usersTable.schoolId, data.schoolId), eq(usersTable.isApproved, true), inArray(usersTable.id, userIds)));
   const allowedIds = new Set(recipients.map((user) => user.id));
   const notifications: NewNotification[] = userIds.filter((userId) => allowedIds.has(userId)).map((userId) => ({
     id: uid(),
