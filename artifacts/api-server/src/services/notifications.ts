@@ -191,7 +191,7 @@ async function sendPushNotification(notification: Notification): Promise<void> {
       const result = await sendWebPush(row.token, {
         title: "Neue Meldung",
         body: "",
-        url: "/",
+        url: "/login",
         notificationId: notification.id,
       });
       if (result === "gone") {
@@ -262,6 +262,12 @@ export async function saveDeviceToken(userId: string, schoolId: string, token: s
   }
 }
 
-export async function removeDeviceToken(token: string, schoolId: string): Promise<void> {
-  await db.delete(deviceTokensTable).where(and(eq(deviceTokensTable.token, token), eq(deviceTokensTable.schoolId, schoolId)));
+export async function removeDeviceToken(token: string, schoolId: string, userId: string): Promise<void> {
+  // Nur das eigene Geraet darf abgemeldet werden: ohne userId-Scope koennte
+  // ein angemeldeter Nutzer ein fremdes Token loeschen, wenn er es kennt.
+  await db.delete(deviceTokensTable).where(and(
+    eq(deviceTokensTable.token, token),
+    eq(deviceTokensTable.schoolId, schoolId),
+    eq(deviceTokensTable.userId, userId),
+  ));
 }

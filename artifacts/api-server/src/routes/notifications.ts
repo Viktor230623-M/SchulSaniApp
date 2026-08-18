@@ -56,7 +56,7 @@ router.post("/unregister-device", requireAuth, async (req: AuthRequest, res) => 
   }
   
   try {
-    await removeDeviceToken(token, schoolId);
+    await removeDeviceToken(token, schoolId, req.user!.userId);
     res.json({ ok: true });
   } catch (err) {
     console.error("Failed to unregister device token:", err);
