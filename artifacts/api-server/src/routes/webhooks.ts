@@ -15,7 +15,9 @@ import { join } from "node:path";
 
 const router: IRouter = Router();
 
-const logDir = join(__dirname, "..", "..", "logs");
+// Nach dem Build liegt das Bundle in dist/, daher relativ zum Prozess-CWD
+// (artifacts/api-server) aufloesen statt __dirname zu nutzen.
+const logDir = join(process.cwd(), "logs");
 const bounceLog = join(logDir, "resend-webhooks.log");
 
 interface BounceData {
