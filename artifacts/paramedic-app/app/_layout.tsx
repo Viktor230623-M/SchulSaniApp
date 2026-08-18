@@ -6,7 +6,7 @@ import {
   useFonts,
 } from "@expo-google-fonts/inter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Stack } from "expo-router";
+import { router, Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import { StyleSheet, View } from "react-native";
@@ -18,7 +18,11 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { GlassLoader } from "@/components/GlassLoader";
 import { getTheme, istDunklesThema } from "@/constants/theme";
 import ApiService, { setAuthToken } from "@/services/ApiService";
-import { listenForTokenRefresh, registerForPushNotificationsAsync } from "@/services/PushNotificationService";
+import {
+  addNotificationResponseListener,
+  listenForTokenRefresh,
+  registerForPushNotificationsAsync,
+} from "@/services/PushNotificationService";
 import { useAppStore } from "@/store/useAppStore";
 
 SplashScreen.preventAutoHideAsync();
@@ -31,6 +35,18 @@ if (process.env["EXPO_PUBLIC_DEMO"] === "1") {
 }
 
 const queryClient = new QueryClient();
+
+function notificationTarget(type: string): 
+  | "/(tabs)/missions"
+  | "/(tabs)/news"
+  | "/(tabs)/loa"
+  | "/(tabs)/notifications"
+  | null {
+  if (type.startsWith("mission_") || type === "high_priority_alert") return "/(tabs)/missions";
+  if (type === "news") return "/(tabs)/news";
+  if (type === "loa_update") return "/(tabs)/loa";
+  return "/(tabs)/notifications";
+}
 
 function RootLayoutNav() {
   const authStatus = useAppStore((s) => s.authStatus);
@@ -79,6 +95,33 @@ function RootLayoutNav() {
     const subscription = listenForTokenRefresh();
     return () => subscription.remove();
   }, []);
+
+  // Tap auf eine Benachrichtigung fuehrt zum passenden Tab. Ist die App noch
+  // gesperrt oder niemand angemeldet, wird das Ziel vorgemerkt und nach der
+  // Entsperrung abgerufen.
+  useEffect(() => {
+    const subscription = addNotificationResponseListener((response) => {
+      const data = response.notification.request.content.data ?? {};
+      const type = typeof data.type === "string" ? data.type : "";
+      const target = notificationTarget(type);
+      if (!target) return;
+      const state = useAppStore.getState();
+      if (state.authStatus === "authed" && !state.cryptoLocked) {
+        router.navigate(target);
+      } else {
+        state.setPendingNotificationRoute(target);
+      }
+    });
+    return () => subscription.remove();
+  }, []);
+
+  useEffect(() => {
+    const pending = useAppStore.getState().pendingNotificationRoute;
+    if (authStatus === "authed" && !cryptoLocked && pending) {
+      useAppStore.getState().setPendingNotificationRoute(null);
+      router.navigate(pending as Parameters<typeof router.navigate>[0]);
+    }
+  }, [authStatus, cryptoLocked]);
 
   // Solange die Sitzung geprueft wird, weder Anwendung noch Anmeldung zeigen —
   // ein angemeldeter Nutzer soll dabei nicht kurz den Login-Bildschirm sehen.

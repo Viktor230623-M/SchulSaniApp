@@ -83,6 +83,10 @@ interface AppState {
 
   avatarUriMap: Record<string, string>;
   setAvatarUri: (userId: string, uri: string | null) => void;
+
+  /** Ziel aus einem Benachrichtigungs-Tap, das auf die Entsperrung wartet. */
+  pendingNotificationRoute: string | null;
+  setPendingNotificationRoute: (route: string | null) => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -105,6 +109,7 @@ export const useAppStore = create<AppState>()(
           news: [],
           loaRequests: [],
           notifications: [],
+          pendingNotificationRoute: null,
         })),
       setToken: (token) => set({ token }),
 
@@ -182,6 +187,9 @@ export const useAppStore = create<AppState>()(
                 Object.entries(s.avatarUriMap).filter(([k]) => k !== userId)
               ),
         })),
+
+      pendingNotificationRoute: null,
+      setPendingNotificationRoute: (route) => set({ pendingNotificationRoute: route }),
     }),
     {
       name: "paramedic-store-v3",
