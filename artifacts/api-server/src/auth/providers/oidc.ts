@@ -42,6 +42,7 @@ interface PendingRequest {
   returnTo?: string;
   handoffChallenge?: string;
   linkUserId?: string;
+  schoolId?: string;
   createdAt: number;
 }
 
@@ -227,6 +228,7 @@ export function createOidcRedirectProvider(cfg: OidcRedirectProviderConfig): Red
         returnTo: options.returnTo,
         handoffChallenge: options.handoffChallenge,
         linkUserId: options.linkUserId,
+        schoolId: options.schoolId,
         createdAt: Date.now(),
       });
 
@@ -385,6 +387,7 @@ export function createOidcRedirectProvider(cfg: OidcRedirectProviderConfig): Red
         returnTo: pending.returnTo,
         handoffChallenge: pending.handoffChallenge,
         linkUserId: pending.linkUserId,
+        schoolId: pending.schoolId,
       };
     },
 

@@ -87,6 +87,13 @@ if (authRelayBaseUrl !== undefined) {
 }
 
 export const config = {
+  /**
+   * Cloud-Betrieb: Eine Instanz bedient viele Schulen (schools-Tabelle),
+   * die Schul-Kennung kommt aus jeder Anfrage statt aus der Umgebung.
+   * Selbsthosting bleibt der Standard: SCHOOL_ID aus der Umgebung, die
+   * schools-Tabelle kann leer bleiben.
+   */
+  multiTenant: process.env["MULTI_TENANT"]?.trim() === "true",
   /** Herkuenfte, die die API im Browser aufrufen duerfen. */
   allowedOrigins,
   /** Anzeigename der Instanz, u. a. Rueckfalltitel fuer Benachrichtigungen. */

@@ -45,6 +45,12 @@ import {
 import { logRoleChangeTx } from "../lib/roleChangeLog";
 import { createSession, resolveSession, revokeSession, revokeAllSessionsForUser } from "../lib/sessions";
 import { config } from "../config";
+import {
+  listPublicSchools,
+  resolveSchoolId,
+  schoolJoinCodeMatches,
+  schoolRequiresJoinCode,
+} from "../lib/schools";
 import { loadAuthProviders } from "../auth/registry";
 import type { AuthProfile, AuthProvider, AuthResult, PasswordAuthProvider, RedirectAuthProvider } from "../auth/types";
 import { hashLoginProof, verifyLoginProof } from "../auth/providers/local";
@@ -171,15 +177,52 @@ function createWebHandoff(sessionToken: string): string {
 // direkt im Formular, fuer den OIDC-Erst-Login ueber einen Zwischen-Screen,
 // dessen einmaliges Token hier haengt. Bestehende, auf Freischaltung wartende
 // Konten bleiben beim bisherigen Verwalter-Flow.
+//
+// Selbsthosting: ein gemeinsamer Code aus der Umgebung. Cloud-Betrieb: ein
+// Code je Schule aus der schools-Tabelle.
 const JOIN_CODE_TTL_MS = 15 * 60 * 1000;
 const joinCodeHandoffs = new Map<string, { userId: string; expiresAt: number }>();
-const joinCodeRequired = config.joinCode !== undefined;
 
-function joinCodeMatches(candidate: unknown): boolean {
-  if (!joinCodeRequired || typeof candidate !== "string" || !config.joinCode) return false;
-  const a = Buffer.from(candidate);
-  const b = Buffer.from(config.joinCode);
-  return a.length === b.length && timingSafeEqual(a, b);
+/** true, wenn diese Schule eine Eintrittskarte verlangt (global oder je Schule). */
+async function joinCodeRequiredFor(schoolId: string): Promise<boolean> {
+  if (!config.multiTenant) return config.joinCode !== undefined;
+  return schoolRequiresJoinCode(schoolId);
+}
+
+async function joinCodeMatchesFor(schoolId: string, candidate: unknown): Promise<boolean> {
+  if (!config.multiTenant) {
+    if (!config.joinCode || typeof candidate !== "string") return false;
+    const a = Buffer.from(candidate);
+    const b = Buffer.from(config.joinCode);
+    return a.length === b.length && timingSafeEqual(a, b);
+  }
+  return schoolJoinCodeMatches(schoolId, candidate);
+}
+
+/**
+ * Schul-Kennung eines explizit uebergebenen Werts: im Selbsthosting die
+ * SCHOOL_ID aus der Umgebung (der Wert wird ignoriert), im Cloud-Betrieb der
+ * Wert selbst, validiert gegen die schools-Tabelle. null, wenn sie fehlt oder
+ * ungueltig ist.
+ */
+async function resolveSchoolContext(schoolId: string | undefined): Promise<string | null> {
+  if (!config.multiTenant) {
+    return process.env["SCHOOL_ID"]?.trim() || "school";
+  }
+  if (!schoolId) return null;
+  try {
+    return await resolveSchoolId(schoolId);
+  } catch {
+    return null;
+  }
+}
+
+/** Schul-Kennung dieser Anfrage: Body-Feld oder Query-Parameter `schoolId`. */
+async function schoolIdFromRequest(req: AuthRequest): Promise<string | null> {
+  const schoolId =
+    (typeof req.body?.schoolId === "string" ? req.body.schoolId : undefined) ??
+    (typeof req.query?.["schoolId"] === "string" ? req.query["schoolId"] : undefined);
+  return resolveSchoolContext(schoolId);
 }
 
 // Nonces fuer den nativen Apple-Login: kurzlebig, einmalig verbrauchbar.
@@ -221,12 +264,6 @@ function clearSessionCookie(res: import("express").Response): void {
     path: "/",
     ...(config.cookieDomain ? { domain: config.cookieDomain } : {}),
   });
-}
-
-function requiredSchoolId(): string {
-  const schoolId = process.env["SCHOOL_ID"]?.trim();
-  if (!schoolId) throw new Error("SCHOOL_ID ist nicht gesetzt.");
-  return schoolId;
 }
 
 const JWT_SECRET = process.env["JWT_SECRET"];
@@ -330,12 +367,18 @@ router.get("/params", authLimiter, async (req, res) => {
   let saltEnc = randomSalt();
   let hasKeypair = false;
 
+  const schoolId = await schoolIdFromRequest(req);
+  if (!schoolId) {
+    res.status(400).json({ error: "Schulkontext fehlt." });
+    return;
+  }
+
   if (username && username.length <= 254) {
     const [user] = await db
       .select({ loginSalt: usersTable.loginSalt, id: usersTable.id })
       .from(usersTable)
       .where(and(
-        eq(usersTable.schoolId, requiredSchoolId()),
+        eq(usersTable.schoolId, schoolId),
         eq(usersTable.authProvider, provider.key),
         or(
           eq(usersTable.externalSubject, username),
@@ -377,9 +420,14 @@ router.post("/login", authLimiter, async (req, res) => {
     return;
   }
 
+  const schoolId = await schoolIdFromRequest(req);
+  if (!schoolId) {
+    res.status(400).json({ error: "Schulkontext fehlt." });
+    return;
+  }
+
   try {
-    const result = await provider.authenticate({ username, password: proof });
-    const schoolId = requiredSchoolId();
+    const result = await provider.authenticate({ username, password: proof, schoolId });
     const [user] = await db.select().from(usersTable).where(and(
         eq(usersTable.schoolId, schoolId),
         eq(usersTable.authProvider, provider.key),
@@ -441,12 +489,20 @@ router.post("/local/register", localAccountLimiter, async (req, res) => {
     return;
   }
 
-  // Eintrittskarte der Schule: Ist ein Schul-Zugangscode konfiguriert, kommt
+  const schoolId = await schoolIdFromRequest(req);
+  if (!schoolId) {
+    res.status(400).json({ error: "Schulkontext fehlt." });
+    return;
+  }
+
+  // Eintrittskarte der Schule: Verlangt die Schule einen Zugangscode, kommt
   // ein Konto nur mit dem richtigen Code zustande. Die Registrierung verraet
   // dabei nicht, ob der Code fehlt oder falsch ist — beides heisst 403.
-  if (joinCodeRequired && !joinCodeMatches(req.body?.joinCode)) {
-    res.status(403).json({ error: "Der Schul-Zugangscode fehlt oder ist falsch." });
-    return;
+  if (!(await joinCodeMatchesFor(schoolId, req.body?.joinCode))) {
+    if (await joinCodeRequiredFor(schoolId)) {
+      res.status(403).json({ error: "Der Schul-Zugangscode fehlt oder ist falsch." });
+      return;
+    }
   }
 
   try {
@@ -463,8 +519,6 @@ router.post("/local/register", localAccountLimiter, async (req, res) => {
     res.status(503).json({ error: "E-Mail-Versand ist derzeit nicht erreichbar." });
     return;
   }
-
-  const schoolId = requiredSchoolId();
   const [account] = await db.select({
     id: usersTable.id,
     email: usersTable.email,
@@ -530,7 +584,7 @@ router.post("/local/register", localAccountLimiter, async (req, res) => {
         schoolId: registrationSchoolId,
         // Mit Schul-Zugangscode ist die Registrierung die Eintrittskarte: das
         // Konto ist sofort nutzbar (E-Mail-Bestaetigung kommt trotzdem).
-        isApproved: joinCodeRequired,
+        isApproved: await joinCodeRequiredFor(registrationSchoolId),
         profileConfirmedAt: null,
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -618,7 +672,12 @@ router.post("/local/verify/resend", localAccountLimiter, async (req, res) => {
       res.status(503).json({ error: "E-Mail-Versand ist derzeit nicht erreichbar." });
       return;
     }
-    const [user] = await db.select({ id: usersTable.id, email: usersTable.email, emailVerifiedAt: usersTable.emailVerifiedAt }).from(usersTable).where(and(eq(usersTable.email, email), eq(usersTable.authProvider, getLocalProvider().key), eq(usersTable.schoolId, requiredSchoolId()))).limit(1);
+    const resendSchoolId = await schoolIdFromRequest(req);
+    if (!resendSchoolId) {
+      res.status(400).json({ error: "Schulkontext fehlt." });
+      return;
+    }
+    const [user] = await db.select({ id: usersTable.id, email: usersTable.email, emailVerifiedAt: usersTable.emailVerifiedAt }).from(usersTable).where(and(eq(usersTable.email, email), eq(usersTable.authProvider, getLocalProvider().key), eq(usersTable.schoolId, resendSchoolId))).limit(1);
   let mail: { to: string; subject: string; text: string; html: string } | undefined;
   if (user && !user.emailVerifiedAt) {
     const token = await issueAuthToken(user.id, "email_verify", new Date(Date.now() + 24 * 60 * 60 * 1000));
@@ -652,10 +711,15 @@ router.post("/local/password/forgot", resetIpLimiter, resetEmailLimiter, async (
     return;
   }
   await hashLoginProof(email);
+  const forgotSchoolId = await schoolIdFromRequest(req);
+  if (!forgotSchoolId) {
+    res.status(400).json({ error: "Schulkontext fehlt." });
+    return;
+  }
   // Reset nur fuer bestaetigte Adressen. Eine unbestaetigte Adresse gehoert
   // moeglicherweise gar nicht dem Kontoinhaber (Verwalter-Korrektur, noch
   // nicht bestaetigt); eine Reset-Mail dorthin waere eine Uebernahmekette.
-  const [user] = await db.select({ id: usersTable.id, email: usersTable.email, emailVerifiedAt: usersTable.emailVerifiedAt }).from(usersTable).where(and(eq(usersTable.email, email), eq(usersTable.authProvider, getLocalProvider().key), eq(usersTable.schoolId, requiredSchoolId()))).limit(1);
+  const [user] = await db.select({ id: usersTable.id, email: usersTable.email, emailVerifiedAt: usersTable.emailVerifiedAt }).from(usersTable).where(and(eq(usersTable.email, email), eq(usersTable.authProvider, getLocalProvider().key), eq(usersTable.schoolId, forgotSchoolId))).limit(1);
   let mail: { to: string; subject: string; text: string; html: string } | undefined;
   if (user && user.emailVerifiedAt) {
     const token = await issueAuthToken(user.id, "password_reset", new Date(Date.now() + 60 * 60 * 1000));
@@ -1053,13 +1117,24 @@ router.get("/session", sessionLimiter, async (req, res) => {
  * ein Anmeldebildschirm muss wissen koennen, welche Wege es ueberhaupt gibt,
  * bevor sich jemand angemeldet hat.
  */
-router.get("/providers", (_req, res) => {
+router.get("/providers", async (req, res) => {
+  // Cloud-Betrieb: die Schule bestimmt, ob ein Zugangscode noetig ist — der
+  // Client fragt mit ?schoolId= und bekommt die passende Antwort.
+  const schoolId = await schoolIdFromRequest(req);
   res.json({
     providers: authProviders.map((p) => ({ key: p.key, displayName: p.displayName, type: p.type })),
     // Der Client zeigt den Schul-Code-Screen nur, wenn die Instanz einen
     // verlangt. Ob einer gesetzt ist, verraet nichts ueber seinen Wert.
-    joinCodeRequired,
+    joinCodeRequired: schoolId ? await joinCodeRequiredFor(schoolId) : config.joinCode !== undefined,
   });
+});
+
+/**
+ * Aktive Schulen im Cloud-Betrieb, oeffentlich — der Schul-Waehler braucht
+ * id und name, bevor eine Anmeldung beginnt. Im Selbsthosting leer.
+ */
+router.get("/schools", async (_req, res) => {
+  res.json({ multiTenant: config.multiTenant, schools: await listPublicSchools() });
 });
 
 router.get("/identities", requireAuth, async (req: AuthRequest, res) => {
@@ -1209,7 +1284,13 @@ router.get("/:provider/start", authLimiter, async (req, res) => {
       res.status(400).json({ error: "Ruecksprungziel ist nicht zulaessig." });
       return;
     }
-    const { redirectUrl } = await provider.beginRedirect({ returnTo, handoffChallenge });
+    // Cloud-Betrieb: die Schule reist im state mit, damit der Ruecksprung
+    // weiss, in welchem Mandanten das Konto entsteht. Selbsthosting ignoriert
+    // den Wert (schoolIdFromRequest faellt auf die Umgebung zurueck).
+    const schoolId = config.multiTenant
+      ? (typeof req.query["schoolId"] === "string" ? req.query["schoolId"] : undefined)
+      : undefined;
+    const { redirectUrl } = await provider.beginRedirect({ returnTo, handoffChallenge, schoolId });
     res.redirect(redirectUrl);
   } catch (err) {
     console.error("OIDC-Weiterleitung konnte nicht gestartet werden:", err);
@@ -1449,7 +1530,13 @@ async function completeOidcCallback(req: import("express").Request, res: import(
   }
 
   const { subject, profile } = authResult;
-  const schoolId = requiredSchoolId();
+  // Cloud-Betrieb: die Schule kommt aus dem state des Anmeldewegs; die
+  // Route selbst traegt sie nicht. Selbsthosting faellt auf die Umgebung zurueck.
+  const schoolId = await resolveSchoolContext(authResult.schoolId);
+  if (!schoolId) {
+    res.status(400).json({ error: "Schulkontext fehlt." });
+    return;
+  }
 
   if (authResult.returnTo && !authResult.handoffChallenge) {
     res.status(400).json({ error: "Native Weiterleitung ist unvollstaendig." });
@@ -1530,12 +1617,12 @@ async function completeOidcCallback(req: import("express").Request, res: import(
       return;
     }    const account = await reconcileAccount(provider.key, subject, profile, schoolId);
 
-    // Instanz mit Schul-Zugangscode: ein nicht freigeschaltetes Konto wartet
+    // Schule mit Zugangscode: ein nicht freigeschaltetes Konto wartet
     // auf den Code, nicht auf einen Verwalter — auch ein Konto aus einem
     // abgebrochenen frueheren Versuch. Ein frisches einmaliges Token verweist
     // auf den Schul-Code-Screen, dort wird das Konto erst freigeschaltet. Im
     // nativen Ablauf reist der Handoff als Query-Parameter zurueck in die App.
-    if (joinCodeRequired && !account.isApproved) {
+    if ((await joinCodeRequiredFor(schoolId)) && !account.isApproved) {
       const token = randomBytes(32).toString("base64url");
       joinCodeHandoffs.set(token, { userId: account.userId, expiresAt: Date.now() + JOIN_CODE_TTL_MS });
       if (authResult.returnTo) {
@@ -1663,13 +1750,17 @@ router.post("/apple/native/complete", authLimiter, async (req, res) => {
   }
 
   try {
-    const schoolId = requiredSchoolId();
+    const schoolId = await schoolIdFromRequest(req);
+    if (!schoolId) {
+      res.status(400).json({ error: "Schulkontext fehlt." });
+      return;
+    }
     const account = await reconcileAccount(provider.key, authResult.subject, authResult.profile, schoolId);
 
-    // Instanz mit Schul-Zugangscode: die App wechselt auf den Schul-Code-Screen,
+    // Schule mit Zugangscode: die App wechselt auf den Schul-Code-Screen,
     // der das einmalige Handoff-Token einloest — auch bei einem Konto aus einem
     // abgebrochenen frueheren Versuch.
-    if (joinCodeRequired && !account.isApproved) {
+    if ((await joinCodeRequiredFor(schoolId)) && !account.isApproved) {
       const token = randomBytes(32).toString("base64url");
       joinCodeHandoffs.set(token, { userId: account.userId, expiresAt: Date.now() + JOIN_CODE_TTL_MS });
       res.status(403).json({ error: "Der Schul-Zugangscode fehlt.", code: "JOIN_CODE_REQUIRED", handoff: token });
@@ -1746,7 +1837,14 @@ router.post("/join-code", authLimiter, async (req, res) => {
     return;
   }
 
-  if (!joinCodeMatches(req.body?.joinCode)) {
+  // Die Eintrittskarte haengt an der Schule des Kontos, nicht an der Instanz:
+  // im Cloud-Betrieb koennen verschiedene Schulen verschiedene Codes haben.
+  const [handoffUser] = await db
+    .select({ schoolId: usersTable.schoolId })
+    .from(usersTable)
+    .where(eq(usersTable.id, entry.userId))
+    .limit(1);
+  if (!handoffUser?.schoolId || !(await joinCodeMatchesFor(handoffUser.schoolId, req.body?.joinCode))) {
     // Falscher Code kostet den Vorgang nicht: Das Handoff bleibt erhalten,
     // damit ein Tippfehler nicht den ganzen Login ruiniert. Der Limiter deckt
     // Versuche ab.

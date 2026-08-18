@@ -44,10 +44,8 @@ interface RawOidcRedirectProviderConfig {
 
 const EXAMPLE_FILE = "ops/install/auth-providers.example.json";
 
-function requiredSchoolId(): string {
-  const schoolId = process.env["SCHOOL_ID"]?.trim();
-  if (!schoolId) throw new Error("SCHOOL_ID ist nicht gesetzt.");
-  return schoolId;
+function defaultSchoolId(): string | undefined {
+  return process.env["SCHOOL_ID"]?.trim() || (process.env["MULTI_TENANT"]?.trim() === "true" ? undefined : "school");
 }
 
 function buildProvider(raw: RawLocalProviderConfig | RawOidcRedirectProviderConfig, relay?: AuthRelaySettings): AuthProvider {
@@ -59,7 +57,9 @@ function buildProvider(raw: RawLocalProviderConfig | RawOidcRedirectProviderConf
       ...createLocalProvider({
         key: raw.key,
         displayName: raw.displayName,
-        schoolId: raw.schoolId ?? requiredSchoolId(),
+        // Im Cloud-Betrieb kommt die Schule je Anfrage (schoolId in der
+        // Anfrage); der Konfigurationswert ist dann nur ein Rueckfall.
+        schoolId: raw.schoolId ?? defaultSchoolId(),
       }),
       groupToRoleMap: raw.groupToRoleMap ?? {},
     };

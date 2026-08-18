@@ -26,6 +26,27 @@ export const userRoleEnum = pgEnum("user_role", [
   "teacher", "admin", "owner",
 ]);
 
+// Schulen im Cloud-Betrieb (Mehrmandantenfaehigkeit).
+//
+// Im Selbsthosting bleibt die Instanz einer Schule zugeordnet (SCHOOL_ID aus
+// der Umgebung) und diese Tabelle kann leer bleiben. Im Cloud-Betrieb
+// (MULTI_TENANT=true) ist jede Zeile hier ein Mandant: die Anmeldung beginnt
+// mit der Wahl der Schule, und der Zugangscode liegt je Schule vor -- gehasht
+// wie auth_tokens.token_hash, nie im Klartext.
+export const schoolsTable = pgTable("schools", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  // Optionaler Schul-Zugangscode (SHA-256 des Codes, siehe lib/schools).
+  // Ohne Eintrag ist die Registrierung fuer diese Schule offen.
+  joinCodeHash: text("join_code_hash"),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type School = typeof schoolsTable.$inferSelect;
+export type NewSchool = typeof schoolsTable.$inferInsert;
+
 // Users table
 //
 // authProvider/externalSubject bilden den Anmeldeweg ab (R6): woher ein Konto

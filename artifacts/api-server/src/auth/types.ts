@@ -21,6 +21,8 @@ export interface AuthResult {
   handoffChallenge?: string;
   linkUserId?: string;
   mustChangePassword?: boolean;
+  /** Cloud-Betrieb: die Schule, aus der der Anmeldeweg gestartet wurde. */
+  schoolId?: string;
 }
 
 export type AuthProviderType = "local" | "oidc-redirect";
@@ -34,12 +36,12 @@ interface AuthProviderBase {
 
 export interface PasswordAuthProvider extends AuthProviderBase {
   readonly type: "local";
-  authenticate(credentials: { username: string; password: string }): Promise<AuthResult>;
+  authenticate(credentials: { username: string; password: string; schoolId?: string }): Promise<AuthResult>;
 }
 
 export interface RedirectAuthProvider extends AuthProviderBase {
   readonly type: "oidc-redirect";
-  beginRedirect(options?: { returnTo?: string; handoffChallenge?: string; linkUserId?: string }): Promise<{ redirectUrl: string }>;
+  beginRedirect(options?: { returnTo?: string; handoffChallenge?: string; linkUserId?: string; schoolId?: string }): Promise<{ redirectUrl: string }>;
   completeRedirect(params: Record<string, string>): Promise<AuthResult>;
   /** Nur Apple: verifiziert das Identity-Token des nativen App-Logins. */
   verifyNativeToken?(params: {

@@ -52,8 +52,12 @@ export function createOneTimePassword(): string {
 export interface LocalProviderConfig {
   key: string;
   displayName: string;
-  /** Schule, der diese Installation zugeordnet ist (Mehrmandantenfall aus R4). */
-  schoolId: string;
+  /**
+   * Schule, der diese Installation zugeordnet ist (Selbsthosting). Im
+   * Cloud-Betrieb wird die Schule je Anfrage uebergeben und dieser Wert
+   * ignoriert.
+   */
+  schoolId?: string;
 }
 
 /**
@@ -71,7 +75,7 @@ export interface LocalProviderConfig {
  * Server kann einen bcrypt-Hash nicht gegen einen Proof pruefen).
  */
 export function createLocalProvider(cfg: LocalProviderConfig): PasswordAuthProvider {
-  const { key, displayName, schoolId } = cfg;
+  const { key, displayName, schoolId: defaultSchoolId } = cfg;
 
   return {
     key,
@@ -80,6 +84,8 @@ export function createLocalProvider(cfg: LocalProviderConfig): PasswordAuthProvi
 
     async authenticate(credentials) {
       const username = credentials.username.toLowerCase().trim();
+      const schoolId = credentials.schoolId ?? defaultSchoolId;
+      if (!schoolId) throw new Error(GENERIC_AUTH_ERROR);
 
       const rows = await db
         .select()
