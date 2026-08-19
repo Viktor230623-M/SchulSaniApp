@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>SchulSaniApp — Demo</title>
+<meta name="robots" content="noindex, nofollow" />
+<style>
+  :root {
+    --bg: #F7F7F9;
+    --card: #FFFFFF;
+    --cardBorder: #E5E7EB;
+    --text: #111827;
+    --text2: #6B7280;
+    --text3: #9CA3AF;
+    --tint: #22C55E;
+    --tintDark: #16A34A;
+    --tintLight: #DCFCE7;
+    --bgTertiary: #E8E8ED;
+    --danger: #EF4444;
+    --warning: #F97316;
+    --blue: #3B82F6;
+    --violet: #8B5CF6;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--text);
+    background: #0B0F0C;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  .stage { height: 100dvh; display: flex; align-items: center; justify-content: center; }
+  .phone {
+    position: relative; width: 100%; height: 100%;
+    max-width: 430px; background: var(--bg); overflow: hidden;
+  }
+  @media (min-width: 480px) {
+    .phone {
+      height: min(92dvh, 880px); border-radius: 42px;
+      border: 1px solid rgba(255,255,255,.08);
+      box-shadow: 0 40px 120px rgba(0,0,0,.55);
+    }
+  }
+  .hidden { display: none !important; }
+
+  /* ---------- Login (wie die echte Anmeldung) ---------- */
+  .login {
+    position: absolute; inset: 0; overflow-y: auto;
+    background: var(--bg);
+    padding: calc(env(safe-area-inset-top) + 40px) 24px calc(env(safe-area-inset-bottom) + 40px);
+  }
+  .login-scroll { display: flex; flex-direction: column; align-items: center; }
+  .login-head { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-bottom: 32px; }
+  .cross { position: relative; width: 64px; height: 64px; animation: pulse 1.6s ease-in-out infinite; }
+  .cross i {
+    position: absolute; background: var(--tint); border-radius: 4px;
+  }
+  .cross i.v { left: 50%; top: 0; transform: translateX(-50%); width: 21px; height: 64px; }
+  .cross i.h { top: 50%; left: 0; transform: translateY(-50%); width: 64px; height: 21px; }
+  @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+  .login-name { font-size: 26px; font-weight: 700; letter-spacing: -.01em; }
+  .login-sub { font-size: 13px; color: var(--text2); }
+
+  .card {
+    width: 100%; max-width: 400px; background: var(--card);
+    border: 1px solid var(--cardBorder); border-radius: 20px; padding: 24px;
+    box-shadow: 0 4px 18px rgba(0,0,0,.08);
+  }
+  .card-title { font-size: 16px; font-weight: 600; }
+  .card-body { font-size: 13px; line-height: 19px; color: var(--text2); }
+
+  .provider-row {
+    display: flex; align-items: center; gap: 12px;
+    min-height: 52px; padding: 0 14px;
+    border: 1px solid var(--cardBorder); border-radius: 12px;
+    background: #F9FAFB; margin-top: 12px;
+    font-size: 15px; font-weight: 500; cursor: pointer;
+    transition: background .15s ease;
+  }
+  .provider-row:hover { background: #F3F4F6; }
+  .provider-row svg { flex: none; }
+  .provider-row span { flex: 1; }
+  .provider-row .chev { color: var(--text3); }
+
+  .divider { display: flex; align-items: center; gap: 12px; margin: 20px 0; color: var(--text3); font-size: 12px; }
+  .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--cardBorder); }
+
+  .btn {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    min-height: 52px; border-radius: 12px; border: 0;
+    font-size: 16px; font-weight: 600; cursor: pointer;
+    transition: transform .12s ease, background .2s ease, box-shadow .2s ease;
+    text-decoration: none; width: 100%;
+  }
+  .btn:active { transform: scale(.97); }
+  .btn-primary { background: var(--tint); color: #fff; box-shadow: 0 8px 20px rgba(34,197,94,.32); }
+  .btn-primary:hover { background: var(--tintDark); }
+  .btn-ghost { background: transparent; color: var(--tintDark); border: 1px solid var(--cardBorder); }
+  .btn-ghost:hover { border-color: #D1D5DB; }
+  .login-note { margin-top: 20px; text-align: center; color: var(--text3); font-size: 12.5px; max-width: 320px; line-height: 1.5; }
+
+  /* ---------- App ---------- */
+  .app { position: absolute; inset: 0; display: flex; flex-direction: column; }
+  .demo-flag {
+    position: absolute; top: calc(env(safe-area-inset-top) + 12px); right: 16px; z-index: 20;
+    font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+    color: var(--tintDark); background: var(--tintLight);
+    padding: 5px 11px; border-radius: 999px;
+  }
+  .app-main { flex: 1; overflow-y: auto; padding: calc(env(safe-area-inset-top) + 20px) 16px 140px; scrollbar-width: none; }
+  .app-main::-webkit-scrollbar { display: none; }
+
+  .tab-panel { display: none; animation: rise .32s ease; }
+  .tab-panel.is-active { display: block; }
+  @keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+  .heading { font-size: 28px; font-weight: 700; letter-spacing: -.02em; }
+  .sub-hint { font-size: 13px; color: var(--tint); margin-top: 2px; }
+
+  /* Filter-Pills (News) */
+  .filters { display: flex; gap: 8px; margin: 14px 0; overflow-x: auto; scrollbar-width: none; }
+  .filters::-webkit-scrollbar { display: none; }
+  .pill {
+    flex: none; padding: 7px 14px; border-radius: 20px; border: 0; cursor: pointer;
+    font-size: 13px; font-weight: 500; background: var(--bgTertiary); color: var(--text2);
+  }
+  .pill.on { background: var(--tint); color: #fff; }
+
+  .appcard {
+    background: var(--card); border: 1px solid var(--cardBorder); border-radius: 20px;
+    padding: 14px; box-shadow: 0 4px 18px rgba(0,0,0,.06);
+    margin-top: 10px;
+  }
+  .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 8px;
+  }
+  .title { font-size: 16px; font-weight: 700; margin-top: 8px; }
+  .summary { font-size: 13px; line-height: 18px; color: var(--text2); margin-top: 4px; }
+  .footer { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .author { font-size: 11px; color: var(--text3); }
+  .small-btn { font-size: 11px; font-weight: 600; padding: 5px 10px; border-radius: 8px; border: 1px solid var(--tint); color: var(--tint); background: transparent; cursor: pointer; }
+  .dot { width: 8px; height: 8px; border-radius: 4px; background: var(--tint); flex: none; }
+
+  /* Mission */
+  .mission-head { display: flex; justify-content: space-between; align-items: flex-start; }
+  .badges { display: flex; gap: 6px; }
+  .time { text-align: right; }
+  .time b { font-size: 14px; font-weight: 600; display: block; }
+  .time small { font-size: 11px; color: var(--text3); }
+  .meta-row { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text3); margin-top: 8px; }
+  .actions { display: flex; gap: 8px; margin-top: 12px; }
+  .actions .btn { min-height: 44px; font-size: 14px; flex: 1; }
+  .btn-reject { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
+  .btn-reject:hover { background: rgba(239,68,68,.06); }
+
+  /* Dienst */
+  .week { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+  .day { background: var(--card); border: 1px solid var(--cardBorder); border-radius: 14px; padding: 12px 10px; text-align: center; }
+  .day.today { border-color: var(--tint); background: #F0FDF4; }
+  .day .dow { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text3); }
+  .day.today .dow { color: var(--tintDark); }
+  .day .nm { display: block; font-size: 12px; font-weight: 600; margin-top: 8px; }
+
+  /* Abwesenheit / Meldungen */
+  .av { width: 40px; height: 40px; border-radius: 50%; flex: none; display: grid; place-items: center; font-weight: 700; font-size: 13px; background: var(--tintLight); color: var(--tintDark); }
+  .ic { width: 38px; height: 38px; border-radius: 11px; flex: none; display: grid; place-items: center; background: var(--tintLight); color: var(--tintDark); }
+  .grow { flex: 1; min-width: 0; }
+
+  /* Einstellungen */
+  .setting { display: flex; align-items: center; justify-content: space-between; padding: 15px 4px; border-bottom: 1px solid var(--cardBorder); }
+  .setting:last-child { border-bottom: 0; }
+  .setting .lbl { font-size: 15px; font-weight: 600; }
+  .setting .hint { font-size: 12.5px; color: var(--text3); }
+  .setting a { color: var(--tintDark); font-weight: 700; text-decoration: none; }
+
+  /* Toast */
+  .toast {
+    position: absolute; left: 50%; bottom: 100px; transform: translateX(-50%) translateY(10px);
+    background: #111827; color: #fff; font-size: 13px; padding: 10px 16px; border-radius: 12px;
+    opacity: 0; pointer-events: none; transition: opacity .25s ease, transform .25s ease; z-index: 50;
+    white-space: nowrap;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* ---------- Tab-Leiste ---------- */
+  .tabbar {
+    position: absolute; left: 10px; right: 10px;
+    bottom: calc(env(safe-area-inset-bottom) + 12px);
+    display: flex; align-items: stretch; gap: 8px;
+  }
+  .pillbar {
+    flex: 1; height: 62px; display: flex; align-items: center; padding: 0 6px;
+    border-radius: 31px; border: 1px solid var(--cardBorder);
+    background: rgba(255,255,255,.72);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    box-shadow: 0 10px 34px rgba(16,24,40,.16);
+  }
+  .tab {
+    position: relative; flex: 1; height: 54px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    border: 0; background: none; cursor: pointer; color: var(--text3);
+    font-size: 10px; font-weight: 600;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .tab .bg {
+    position: absolute; inset: 3px 1px; border-radius: 17px;
+    background: rgba(34,197,94,.14);
+    opacity: 0; transform: scale(.94);
+    transition: opacity .22s ease, transform .22s ease;
+  }
+  .tab.is-active { color: var(--tint); }
+  .tab.is-active .bg { opacity: 1; transform: scale(1); }
+  .tab svg, .tab span { position: relative; }
+  .tab span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .gear {
+    width: 62px; height: 62px; flex: none; border-radius: 31px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    border: 1px solid var(--cardBorder);
+    background: rgba(255,255,255,.72);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    box-shadow: 0 10px 34px rgba(16,24,40,.16);
+    color: var(--text3); cursor: pointer; font-size: 10px; font-weight: 600;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .gear.is-active { color: var(--tint); }
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="phone">
+
+    <!-- ===================== Login ===================== -->
+    <section class="login" id="login-view">
+      <div class="login-scroll">
+        <div class="login-head">
+          <div class="cross" aria-hidden="true"><i class="v"></i><i class="h"></i></div>
+          <div class="login-name">Schulsanitaetsdienst</div>
+          <div class="login-sub">Verwaltungssystem</div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Anmeldeweg wählen</div>
+
+          <button class="provider-row" data-provider="Google">
+            <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3l5.7-5.7C34.3 6.1 29.4 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.6-.4-3.9z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 16.1 19 13 24 13c3.1 0 5.9 1.2 8 3l5.7-5.7C34.3 6.1 29.4 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.2 5.6l6.2 5.2C36.9 39.2 44 34 44 24c0-1.3-.1-2.6-.4-3.9z"/></svg>
+            <span>Google</span>
+            <svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+          </button>
+
+          <button class="provider-row" data-provider="Microsoft">
+            <svg width="18" height="18" viewBox="0 0 23 23"><path fill="#F35325" d="M1 1h10v10H1z"/><path fill="#81BC06" d="M12 1h10v10H12z"/><path fill="#05A6F0" d="M1 12h10v10H1z"/><path fill="#FFBA08" d="M12 12h10v10H12z"/></svg>
+            <span>Microsoft</span>
+            <svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+          </button>
+
+          <button class="provider-row" data-provider="Apple">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="#000"><path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/></svg>
+            <span>Apple</span>
+            <svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+          </button>
+
+          <div class="divider">oder</div>
+
+          <button class="btn btn-primary" id="enter-app">Ohne Anmeldung fortfahren</button>
+          <a class="btn btn-ghost" href="https://schulsaniapp.com" style="margin-top:10px;min-height:46px;font-size:14px">Zur echten App</a>
+        </div>
+
+        <p class="login-note">Dies ist eine Demo mit Beispieldaten — keine echten Einsätze, keine echten Personen.</p>
+      </div>
+    </section>
+
+    <!-- ===================== App ===================== -->
+    <section class="app hidden" id="app-view">
+      <span class="demo-flag">Demo</span>
+
+      <main class="app-main">
+
+        <!-- News -->
+        <div class="tab-panel is-active" data-panel="news">
+          <h1 class="heading">Neuigkeiten</h1>
+          <div class="sub-hint">2 ungelesen</div>
+          <div class="filters">
+            <button class="pill on">Alle</button>
+            <button class="pill">Veröffentlicht</button>
+            <button class="pill">Ausstehend</button>
+            <button class="pill">Abgelehnt</button>
+          </div>
+
+          <div class="appcard">
+            <div class="row">
+              <span class="badge" style="background:rgba(59,130,246,.14);color:#3B82F6">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l14-6v14L3 13v-2zM17 8l4 2v4l-4 2"/></svg>
+                Ankündigung
+              </span>
+              <span class="badge" style="background:rgba(34,197,94,.14);color:#22C55E">Veröffentlicht</span>
+              <span class="dot"></span>
+            </div>
+            <div class="title">Erste-Hilfe-Kurs im Oktober</div>
+            <div class="summary">Meldet euch bis Freitag bei Frau Berger an. Der Kurs zählt als Dienstzeit.</div>
+            <div class="footer">
+              <span class="author">Frau Berger · 10.08.2026</span>
+              <button class="small-btn">Als gelesen markieren</button>
+            </div>
+          </div>
+
+          <div class="appcard">
+            <div class="row">
+              <span class="badge" style="background:rgba(139,92,246,.14);color:#8B5CF6">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h12v2l-4 4v5l-4 3v-8L6 6z"/></svg>
+                Schulung
+              </span>
+              <span class="badge" style="background:rgba(34,197,94,.14);color:#22C55E">Veröffentlicht</span>
+              <span class="dot"></span>
+            </div>
+            <div class="title">Neue Übungsmaterialien</div>
+            <div class="summary">Im Sanitätsraum liegen neue Fallbeispiele und Verbandsmaterial zum Üben bereit.</div>
+            <div class="footer">
+              <span class="author">Herr Krüger · 07.08.2026</span>
+              <button class="small-btn">Als gelesen markieren</button>
+            </div>
+          </div>
+
+          <div class="appcard">
+            <div class="row">
+              <span class="badge" style="background:rgba(34,197,94,.14);color:#16A34A">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4M21 3v6h-6"/></svg>
+                Aktualisierung
+              </span>
+              <span class="badge" style="background:rgba(34,197,94,.14);color:#22C55E">Veröffentlicht</span>
+            </div>
+            <div class="title">Neuer Dienstplan online</div>
+            <div class="summary">Der Plan für die kommende Woche steht. Schaut in den Dienst-Tab.</div>
+            <div class="footer"><span class="author">Leitung · 05.08.2026</span></div>
+          </div>
+        </div>
+
+        <!-- Einsatz -->
+        <div class="tab-panel" data-panel="missions">
+          <h1 class="heading">Einsätze</h1>
+          <div class="sub-hint">1 ausstehend</div>
+
+          <div class="appcard" style="border-color:rgba(59,130,246,.4)">
+            <div class="mission-head">
+              <div class="badges">
+                <span class="badge" style="background:rgba(239,68,68,.14);color:#EF4444"><span style="width:6px;height:6px;border-radius:50%;background:#EF4444"></span>Hoch</span>
+                <span class="badge" style="background:rgba(59,130,246,.14);color:#3B82F6">Ausstehend</span>
+              </div>
+              <div class="time"><b>10:24</b><small>12. Aug</small></div>
+            </div>
+            <div class="title">Kreislaufprobleme</div>
+            <div class="summary">Schülerin klagt über Schwindel und Übelkeit nach dem Sportunterricht.</div>
+            <div class="meta-row">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-5.5-7-11a7 7 0 0 1 14 0c0 5.5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>
+              Pausenhof B
+            </div>
+            <div class="actions">
+              <button class="btn btn-reject" id="demo-reject">Ablehnen</button>
+              <button class="btn btn-primary" id="demo-accept">Annehmen</button>
+            </div>
+          </div>
+
+          <div class="appcard">
+            <div class="mission-head">
+              <div class="badges">
+                <span class="badge" style="background:rgba(249,115,22,.14);color:#F97316"><span style="width:6px;height:6px;border-radius:50%;background:#F97316"></span>Mittel</span>
+                <span class="badge" style="background:rgba(107,114,128,.14);color:#6B7280">Abgeschlossen</span>
+              </div>
+              <div class="time"><b>13:05</b><small>11. Aug</small></div>
+            </div>
+            <div class="title">Schnittwunde</div>
+            <div class="summary">Schnittverletzung an der Hand im Werkunterricht, versorgt und verbunden.</div>
+            <div class="meta-row">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-5.5-7-11a7 7 0 0 1 14 0c0 5.5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>
+              Werkraum
+            </div>
+          </div>
+
+          <div class="appcard">
+            <div class="mission-head">
+              <div class="badges">
+                <span class="badge" style="background:rgba(34,197,94,.14);color:#22C55E"><span style="width:6px;height:6px;border-radius:50%;background:#22C55E"></span>Niedrig</span>
+                <span class="badge" style="background:rgba(107,114,128,.14);color:#6B7280">Abgeschlossen</span>
+              </div>
+              <div class="time"><b>09:40</b><small>10. Aug</small></div>
+            </div>
+            <div class="title">Umgeknickt</div>
+            <div class="summary">Verstauchung beim Aufwärmen, gekühlt und an die Eltern übergeben.</div>
+            <div class="meta-row">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-5.5-7-11a7 7 0 0 1 14 0c0 5.5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>
+              Sporthalle
+            </div>
+          </div>
+        </div>
+
+        <!-- Dienst -->
+        <div class="tab-panel" data-panel="duty">
+          <h1 class="heading">Dienst</h1>
+          <div class="sub-hint">Diese Woche</div>
+          <div class="week" style="margin-top:14px">
+            <div class="day"><div class="dow">Mo</div><span class="nm">Lena M.</span><span class="nm">Jonas K.</span></div>
+            <div class="day"><div class="dow">Di</div><span class="nm">Sara T.</span><span class="nm">Ben W.</span></div>
+            <div class="day"><div class="dow">Mi</div><span class="nm">Lena M.</span><span class="nm">Mia S.</span></div>
+            <div class="day"><div class="dow">Do</div><span class="nm">Jonas K.</span><span class="nm">Ben W.</span></div>
+            <div class="day today"><div class="dow">Fr</div><span class="nm">Sara T.</span><span class="nm">Mia S.</span></div>
+          </div>
+          <div class="appcard">
+            <div class="title" style="margin-top:0">Diese Woche</div>
+            <div class="summary">Fünf Schichten besetzt, alle Pausen abgedeckt. Freitag ist dein Dienst.</div>
+            <div class="footer"><span class="author">8 Schichten · 2 offene</span></div>
+          </div>
+        </div>
+
+        <!-- Abwesenheit -->
+        <div class="tab-panel" data-panel="loa">
+          <h1 class="heading">Abwesenheiten</h1>
+          <div class="sub-hint">1 ausstehend</div>
+
+          <div class="appcard row">
+            <div class="av">LM</div>
+            <div class="grow">
+              <div class="title" style="margin-top:0;font-size:15px">Lena M.</div>
+              <div class="summary" style="margin-top:2px">Krankmeldung · 12.–14. Okt</div>
+            </div>
+            <span class="badge" style="background:rgba(34,197,94,.14);color:#22C55E">Genehmigt</span>
+          </div>
+
+          <div class="appcard row">
+            <div class="av">BW</div>
+            <div class="grow">
+              <div class="title" style="margin-top:0;font-size:15px">Ben W.</div>
+              <div class="summary" style="margin-top:2px">Klausur · 16. Okt</div>
+            </div>
+            <span class="badge" style="background:rgba(249,115,22,.14);color:#F97316">Ausstehend</span>
+          </div>
+
+          <div class="appcard row">
+            <div class="av">ST</div>
+            <div class="grow">
+              <div class="title" style="margin-top:0;font-size:15px">Sara T.</div>
+              <div class="summary" style="margin-top:2px">Arzttermin · 20. Okt</div>
+            </div>
+            <span class="badge" style="background:rgba(34,197,94,.14);color:#22C55E">Genehmigt</span>
+          </div>
+        </div>
+
+        <!-- Meldungen -->
+        <div class="tab-panel" data-panel="notifications">
+          <h1 class="heading">Meldungen</h1>
+
+          <div class="appcard row" style="align-items:flex-start">
+            <div class="ic">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg>
+            </div>
+            <div class="grow">
+              <div class="title" style="margin-top:0;font-size:14.5px">Neuer Einsatz: Pausenhof B</div>
+              <div class="summary" style="margin-top:2px">Ein neuer Einsatz wurde gemeldet.</div>
+              <div class="author" style="margin-top:6px">vor 2 Std.</div>
+            </div>
+          </div>
+
+          <div class="appcard row" style="align-items:flex-start">
+            <div class="ic">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/></svg>
+            </div>
+            <div class="grow">
+              <div class="title" style="margin-top:0;font-size:14.5px">Dienstplan geändert</div>
+              <div class="summary" style="margin-top:2px">Deine Schicht am Freitag wurde bestätigt.</div>
+              <div class="author" style="margin-top:6px">gestern</div>
+            </div>
+          </div>
+
+          <div class="appcard row" style="align-items:flex-start">
+            <div class="ic">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3h8a2 2 0 0 1 2 2v16l-6-3-6 3V5a2 2 0 0 1 2-2z"/></svg>
+            </div>
+            <div class="grow">
+              <div class="title" style="margin-top:0;font-size:14.5px">Protokoll eingereicht</div>
+              <div class="summary" style="margin-top:2px">Dein Einsatzprotokoll wurde übermittelt.</div>
+              <div class="author" style="margin-top:6px">vor 3 Tagen</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Einstellungen -->
+        <div class="tab-panel" data-panel="settings">
+          <h1 class="heading">Einstellungen</h1>
+          <div class="appcard" style="margin-top:14px;padding:6px 18px">
+            <div class="setting"><div><div class="lbl">Profil</div><div class="hint">Muster-Schüler:in · Sanitäter:in</div></div></div>
+            <div class="setting"><div><div class="lbl">Benachrichtigungen</div><div class="hint">Push aktiviert</div></div></div>
+            <div class="setting"><div><div class="lbl">Darstellung</div><div class="hint">Hell</div></div></div>
+            <div class="setting"><div><div class="lbl">Demo verlassen</div><div class="hint">Zurück zum Start</div></div><a href="#" id="leave-demo">Verlassen</a></div>
+            <div class="setting"><div><div class="lbl">Zur Demo-Website</div><div class="hint">Alle Infos zur App</div></div><a href="/">Öffnen</a></div>
+          </div>
+          <p class="login-note" style="margin-top:14px">Diese Mock-App ist nicht mit dem echten SchulSaniApp-Server verbunden.</p>
+        </div>
+
+      </main>
+
+      <nav class="tabbar">
+        <div class="pillbar">
+          <button class="tab is-active" data-tab="news">
+            <span class="bg"></span>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 9h8M8 13h8M8 17h5M16 9h0"/></svg>
+            <span>News</span>
+          </button>
+          <button class="tab" data-tab="loa">
+            <span class="bg"></span>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/></svg>
+            <span>Abwesenheit</span>
+          </button>
+          <button class="tab" data-tab="duty">
+            <span class="bg"></span>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4h6a2 2 0 0 1 2 2v3h3a1 1 0 0 1 1 1v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-9a1 1 0 0 1 1-1h3V6a2 2 0 0 1 2-2z"/><path d="M12 11v6M9 14h6"/></svg>
+            <span>Dienst</span>
+          </button>
+          <button class="tab" data-tab="missions">
+            <span class="bg"></span>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg>
+            <span>Einsatz</span>
+          </button>
+          <button class="tab" data-tab="notifications">
+            <span class="bg"></span>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 9a6 6 0 1 0-12 0c0 7-3 7-3 7h18s-3 0-3-7"/><path d="M10.3 20a2 2 0 0 0 3.4 0"/></svg>
+            <span>Meldungen</span>
+          </button>
+        </div>
+        <button class="gear" data-tab="settings" title="Mehr">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h10M18 6h2M4 12h2M10 12h10M4 18h8M16 18h4"/><circle cx="16" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="14" cy="18" r="2"/></svg>
+          <span>Mehr</span>
+        </button>
+      </nav>
+
+      <div class="toast" id="toast"></div>
+    </section>
+
+  </div>
+</div>
+
+<script>
+  var titles = {
+    news: "Neuigkeiten",
+    loa: "Abwesenheiten",
+    duty: "Dienst",
+    missions: "Einsätze",
+    notifications: "Meldungen",
+    settings: "Einstellungen"
+  };
+
+  var tabs = Array.prototype.slice.call(document.querySelectorAll("[data-tab]"));
+  var panels = Array.prototype.slice.call(document.querySelectorAll("[data-panel]"));
+  var toast = document.getElementById("toast");
+  var toastTimer = null;
+
+  function showToast(msg) {
+    toast.textContent = msg;
+    toast.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toast.classList.remove("show"); }, 1800);
+  }
+
+  function activate(name) {
+    tabs.forEach(function (t) { t.classList.toggle("is-active", t.getAttribute("data-tab") === name); });
+    panels.forEach(function (p) { p.classList.toggle("is-active", p.getAttribute("data-panel") === name); });
+    var main = document.querySelector(".app-main");
+    if (main) main.scrollTop = 0;
+  }
+
+  tabs.forEach(function (t) {
+    t.addEventListener("click", function () { activate(t.getAttribute("data-tab")); });
+  });
+
+  // Anmeldewege sind in der Demo nur Deko.
+  Array.prototype.slice.call(document.querySelectorAll(".provider-row")).forEach(function (row) {
+    row.addEventListener("click", function () {
+      showToast("In der Demo nicht verfügbar — ohne Anmeldung fortfahren");
+    });
+  });
+
+  document.getElementById("enter-app").addEventListener("click", function () {
+    document.getElementById("login-view").classList.add("hidden");
+    document.getElementById("app-view").classList.remove("hidden");
+    activate("news");
+  });
+
+  document.getElementById("leave-demo").addEventListener("click", function (e) {
+    e.preventDefault();
+    document.getElementById("app-view").classList.add("hidden");
+    document.getElementById("login-view").classList.remove("hidden");
+  });
+
+  document.getElementById("demo-accept").addEventListener("click", function () {
+    this.textContent = "Angenommen ✓";
+    this.style.background = "#DCFCE7";
+    this.style.color = "#16A34A";
+    this.style.boxShadow = "none";
+    showToast("Demo: Einsatz angenommen");
+  });
+  document.getElementById("demo-reject").addEventListener("click", function () {
+    this.textContent = "Abgelehnt";
+    this.style.opacity = ".5";
+    showToast("Demo: Einsatz abgelehnt");
+  });
+</script>
+</body>
+</html>

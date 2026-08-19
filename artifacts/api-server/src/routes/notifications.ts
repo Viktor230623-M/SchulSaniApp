@@ -3,8 +3,20 @@ import { and, desc, eq } from "drizzle-orm";
 import { db, notificationsTable } from "@workspace/db";
 import { requireAuth, schoolIdOf, type AuthRequest } from "../middlewares/auth";
 import { saveDeviceToken, removeDeviceToken } from "../services/notifications";
+import { z } from "@workspace/api-zod";
+import { validate } from "../middlewares/validate";
 
 const router = Router();
+
+const registerDeviceBody = z.object({
+  token: z.string().min(1).max(4096),
+  platform: z.enum(["ios", "android", "web"]),
+  deviceId: z.string().max(512).nullish(),
+});
+
+const unregisterDeviceBody = z.object({
+  token: z.string().min(1).max(4096),
+});
 
 router.get("/", requireAuth, async (req: AuthRequest, res) => {
   const { userId } = req.user!;
@@ -23,19 +35,9 @@ router.post("/read-all", requireAuth, async (req: AuthRequest, res) => {
   res.json({ ok: true });
 });
 
-router.post("/register-device", requireAuth, async (req: AuthRequest, res) => {
+router.post("/register-device", requireAuth, validate({ body: registerDeviceBody }), async (req: AuthRequest, res) => {
   const { userId } = req.user!;
   const { token, platform, deviceId } = req.body as { token: string; platform: "ios" | "android" | "web"; deviceId?: string };
-  
-  if (!token) {
-    res.status(400).json({ error: "token is required" });
-    return;
-  }
-  
-  if (!["ios", "android", "web"].includes(platform)) {
-    res.status(400).json({ error: "platform must be ios, android, or web" });
-    return;
-  }
   
   try {
     await saveDeviceToken(userId, schoolIdOf(req), token, platform, deviceId);
@@ -46,14 +48,9 @@ router.post("/register-device", requireAuth, async (req: AuthRequest, res) => {
   }
 });
 
-router.post("/unregister-device", requireAuth, async (req: AuthRequest, res) => {
+router.post("/unregister-device", requireAuth, validate({ body: unregisterDeviceBody }), async (req: AuthRequest, res) => {
   const schoolId = schoolIdOf(req);
   const { token } = req.body as { token: string };
-  
-  if (!token) {
-    res.status(400).json({ error: "token is required" });
-    return;
-  }
   
   try {
     await removeDeviceToken(token, schoolId, req.user!.userId);

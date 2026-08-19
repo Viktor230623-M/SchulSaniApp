@@ -54,7 +54,7 @@ export default function NameBestaetigenScreen() {
   async function handleLogout() {
     await ApiService.logout();
     logout();
-    router.replace("/login");
+    router.replace("/");
   }
 
   const canConfirm = firstName.trim().length > 0 && lastName.trim().length > 0;

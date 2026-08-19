@@ -6,6 +6,7 @@ const smtpUser = process.env["SMTP_USER"]?.trim();
 const smtpPassword = process.env["SMTP_PASSWORD"];
 const mailFrom = process.env["MAIL_FROM"]?.trim();
 const mailFromName = process.env["MAIL_FROM_NAME"]?.trim() || process.env["APP_NAME"]?.trim();
+const mailReplyTo = process.env["MAIL_REPLY_TO"]?.trim();
 const appBaseUrl = process.env["APP_BASE_URL"]?.trim()?.replace(/\/$/, "");
 const smtpSecure = process.env["SMTP_SECURE"] === "true";
 const smtpRequireTls = process.env["SMTP_REQUIRE_TLS"] !== "false";
@@ -63,6 +64,7 @@ export async function sendMail(input: { to: string; subject: string; text: strin
   const from = required("MAIL_FROM", mailFrom);
   await getTransporter().sendMail({
     from: mailFromName ? `"${mailFromName}" <${from}>` : from,
+    replyTo: mailReplyTo,
     to: input.to,
     subject: input.subject,
     text: input.text,

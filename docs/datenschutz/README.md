@@ -31,6 +31,7 @@ besteht nicht.
 | [anlage-1-tom.md](anlage-1-tom.md) | Technische und organisatorische Maßnahmen (Art. 32 DSGVO) |
 | [anlage-2-unterauftragsverarbeiter.md](anlage-2-unterauftragsverarbeiter.md) | Unterauftragsverarbeiter, Übermittlungsorte und Rechtsgrundlagen |
 | [anlage-3-datenkategorien.md](anlage-3-datenkategorien.md) | Datenkategorien, Betroffenenkategorien, Zwecke und Speicherfristen |
+| [auftragsverarbeitungsspezifikation.md](auftragsverarbeitungsspezifikation.md) | Ausgefüllte Auftragsverarbeitungsspezifikation (Gegenstand, Dauer, Ort, Betroffenen- und Datenkategorien) als Anlage zum AVV |
 
 ## Ende-zu-Ende-Verschlüsselung
 

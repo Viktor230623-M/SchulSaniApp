@@ -58,7 +58,7 @@ export default function RegistrierenScreen() {
       {message ? <AuthMessage text={message} theme={theme} /> : null}
       {error ? <AuthMessage text={error} error theme={theme} /> : null}
       <AuthButton label={t("auth.registerButton", lang)} loading={loading} disabled={!email || !password} onPress={submit} theme={theme} />
-      <Pressable onPress={() => router.replace("/login")} style={styles.secondary}>
+      <Pressable onPress={() => router.replace("/")} style={styles.secondary}>
         <Text style={[styles.secondaryText, { color: theme.textSecondary }]}>{t("auth.backToLogin", lang)}</Text>
       </Pressable>
       <AuthLink label={t("auth.forgotPassword", lang)} onPress={() => router.push("/passwort-vergessen")} theme={theme} />

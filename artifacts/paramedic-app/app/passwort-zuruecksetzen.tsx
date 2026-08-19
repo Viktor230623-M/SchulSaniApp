@@ -45,7 +45,7 @@ export default function PasswortZuruecksetzenScreen() {
       {message ? <AuthMessage text={message} theme={theme} /> : null}
       {error ? <AuthMessage text={error} error theme={theme} /> : null}
       {!message && <AuthButton label={t("auth.resetButton", lang)} loading={loading} disabled={!token || !password || !repeat} onPress={submit} theme={theme} />}
-      <AuthLink label={t("auth.backToLogin", lang)} onPress={() => router.replace("/login")} theme={theme} />
+      <AuthLink label={t("auth.backToLogin", lang)} onPress={() => router.replace("/")} theme={theme} />
     </AuthShell>
   );
 }

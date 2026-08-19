@@ -5,8 +5,16 @@ import { db, loaTable, usersTable } from "@workspace/db";
 import { requireAuth, requirePermission, schoolIdOf, type AuthRequest } from "../middlewares/auth";
 import { notifyUser } from "../services/notifications";
 import { translateToLanguages } from "../services/translator";
+import { z } from "@workspace/api-zod";
+import { validate } from "../middlewares/validate";
 
 const router = Router();
+
+const loaCreateBody = z.object({
+  fromDate: z.string().refine((s) => !Number.isNaN(new Date(s).getTime()), "ungültiges Datum"),
+  toDate: z.string().refine((s) => !Number.isNaN(new Date(s).getTime()), "ungültiges Datum"),
+  reason: z.string().min(1).max(1000),
+});
 
 router.get("/", requireAuth, async (req: AuthRequest, res) => {
   const { userId } = req.user!;
@@ -18,24 +26,12 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
   res.json(items);
 });
 
-router.post("/", requireAuth, requirePermission("loa.create"), async (req: AuthRequest, res) => {
+router.post("/", requireAuth, requirePermission("loa.create"), validate({ body: loaCreateBody }), async (req: AuthRequest, res) => {
   const { userId } = req.user!;
   const schoolId = schoolIdOf(req);
   const { fromDate, toDate, reason } = req.body;
-  if (!fromDate || !toDate || !reason) {
-    res.status(400).json({ error: "fromDate, toDate, reason required" });
-    return;
-  }
-  if (reason.length > 1000) {
-    res.status(400).json({ error: "reason max 1000 characters" });
-    return;
-  }
   const parsedFromDate = new Date(fromDate);
   const parsedToDate = new Date(toDate);
-  if (isNaN(parsedFromDate.getTime()) || isNaN(parsedToDate.getTime())) {
-    res.status(400).json({ error: "fromDate and toDate must be valid ISO date strings" });
-    return;
-  }
   // Derive the display name server-side from the authenticated user — never trust the client.
   const [profile] = await db
     .select({ firstName: usersTable.firstName, lastName: usersTable.lastName })

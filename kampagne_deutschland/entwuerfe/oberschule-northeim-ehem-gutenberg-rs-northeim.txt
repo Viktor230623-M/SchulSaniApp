@@ -1,0 +1,19 @@
+An: h.schult@obs-northeim.de
+Betreff: App für Schulsanitätsdienste: kurze Demo
+
+Sehr geehrter Herr Schult,
+
+Ich bin Schüler am Gymnasium Blankenese und habe eine App für Schulsanitätsdienste entwickelt. Ich bin sehr interessiert daran, sie an Ihrer Schule vorzustellen.
+
+Sie können sich die App direkt ansehen unter demo.schulsaniapp.com. Keine Anmeldung nötig, Sie sehen sofort, wie ein Einsatz, das Protokoll und der Dienstplan aussehen.
+
+Die App ersetzt den Papierkram: Das Einsatzprotokoll wird direkt am Handy ausgefüllt und als PDF exportiert, die Sanitäter:innen werden per Push-Nachricht alarmiert statt über eine Durchsage, und Dienstplan samt Vertretung laufen in derselben App.
+
+Zum Datenschutz, kurz und konkret: Die Schule bleibt datenschutzrechtlich Verantwortliche, ich bin Auftragsverarbeiter, dafür schließen wir einen Vertrag nach Art. 28 DSGVO. Die Server stehen in der EU (Frankfurt). Die Schule bestimmt, wann sie ihre Protokolle bekommt, halbjährlich, jährlich oder nach fünf Jahren, alles als ein PDF-Bündel, und nach dem Download werden die Daten bei mir gelöscht. Wer es lieber ganz selbst betreibt, kann die App auch auf eigenen Servern hosten.
+
+Hätten Sie oder die betreuende Lehrkraft Interesse an einer kurzen Demo? Zwanzig Minuten reichen. Kosten entstehen keine, und es ist komplett unverbindlich.
+
+Erreichbar bin ich unter dieser E-Mail-Adresse oder telefonisch: 0160 96245201.
+
+Mit freundlichen Grüßen
+Viktor Gnjatic · SchulSaniApp

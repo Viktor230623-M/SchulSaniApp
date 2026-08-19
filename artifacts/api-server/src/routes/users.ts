@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { and, eq } from "drizzle-orm";
-import { db, usersTable, type UserRole } from "@workspace/db";
+import { db, deviceTokensTable, usersTable, type UserRole } from "@workspace/db";
 import { requireAuth, requirePermission, schoolIdOf, invalidateUserCache, type AuthRequest } from "../middlewares/auth";
 import { assertAdminReachable, LockoutError } from "../lib/rolePermissions";
 import { logRoleChangeTx } from "../lib/roleChangeLog";
@@ -125,7 +125,7 @@ router.patch("/:id/approve", requireAuth, requirePermission("users.approve"), as
         .returning();
       updated = rows[0];
       await logRoleChangeTx(tx, {
-        actorId: req.user!.userId, targetUserId: id, action: "approve",
+        schoolId, actorId: req.user!.userId, targetUserId: id, action: "approve",
         before: existing.role, after: newRole,
       });
       await assertAdminReachable(tx, schoolId);
@@ -169,7 +169,7 @@ router.patch("/:id/role", requireAuth, requirePermission("users.assign_role"), a
         .returning();
       updated = rows[0];
       await logRoleChangeTx(tx, {
-        actorId: req.user!.userId, targetUserId: id, action: "assign_role",
+        schoolId, actorId: req.user!.userId, targetUserId: id, action: "assign_role",
         before: existing.role, after: role,
       });
       // In derselben Transaktion, damit zwei gleichzeitige Herabstufungen
@@ -247,10 +247,10 @@ router.patch("/:id/profile", requireAuth, requirePermission("users.correct_profi
       .returning();
     updated = rows[0];
     if (locked.firstName !== cleanFirstName) {
-      await logProfileChangeTx(tx, { actorId: req.user!.userId, targetUserId: id, field: "first_name", before: locked.firstName, after: cleanFirstName });
+      await logProfileChangeTx(tx, { schoolId, actorId: req.user!.userId, targetUserId: id, field: "first_name", before: locked.firstName, after: cleanFirstName });
     }
     if (locked.lastName !== cleanLastName) {
-      await logProfileChangeTx(tx, { actorId: req.user!.userId, targetUserId: id, field: "last_name", before: locked.lastName, after: cleanLastName });
+      await logProfileChangeTx(tx, { schoolId, actorId: req.user!.userId, targetUserId: id, field: "last_name", before: locked.lastName, after: cleanLastName });
     }
   });
   if (correctionError === "not_found") {
@@ -277,11 +277,14 @@ router.delete("/:id", requireAuth, requirePermission("users.delete"), async (req
   let geloescht = 0;
   try {
     await db.transaction(async (tx) => {
+      // Push-Geraetetokens entfernen, damit geloeschte Nutzer keine
+      // Alarmierungen mehr empfangen.
+      await tx.delete(deviceTokensTable).where(eq(deviceTokensTable.userId, id));
       const result = await tx.delete(usersTable).where(and(eq(usersTable.id, id), eq(usersTable.schoolId, schoolId))).returning();
       geloescht = result.length;
       if (geloescht > 0) {
         await logRoleChangeTx(tx, {
-          actorId: req.user!.userId, targetUserId: id, action: "delete_user",
+          schoolId, actorId: req.user!.userId, targetUserId: id, action: "delete_user",
           before: target.role, after: null,
         });
         await assertAdminReachable(tx, schoolId);

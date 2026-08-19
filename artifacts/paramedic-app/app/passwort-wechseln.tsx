@@ -66,7 +66,7 @@ export default function PasswortWechselnScreen() {
   async function handleLogout() {
     await ApiService.logout();
     logout();
-    router.replace("/login");
+    router.replace("/");
   }
 
   return (

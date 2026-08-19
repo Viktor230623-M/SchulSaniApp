@@ -58,7 +58,6 @@ Backend (`artifacts/api-server/.env`):
 | `AUTH_PROVIDERS_PATH` | Path to the config file of the active sign-in providers              |
 | `SCHOOL_ID`          | The school's official school number (e.g. `4321`); new accounts get this ID assigned |
 | `ROLE_MAP_PATH`      | Optional: path to a bootstrap role mapping for first-time setup       |
-| `OWNER_USER_ID`      | User ID with access to the administrative SQL console                 |
 | `VAPID_PUBLIC_KEY`   | Public VAPID key for web push                                         |
 | `VAPID_PRIVATE_KEY`  | Private VAPID key for web push                                        |
 | `VAPID_SUBJECT`      | Contact (mailto: or URL) for web push                                 |

@@ -46,3 +46,6 @@ export const THEME_COLOR = pflicht(
   "EXPO_PUBLIC_THEME_COLOR",
   process.env["EXPO_PUBLIC_THEME_COLOR"],
 );
+
+/** Kontaktadresse fuer Lizenzanfragen (Lizenz-Screen, mailto-Link). */
+export const LICENSE_EMAIL = "team@schulsaniapp.com";

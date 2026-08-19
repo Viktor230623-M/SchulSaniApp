@@ -3,7 +3,7 @@
   "short_name": "__APP_NAME__",
   "description": "Einsatzdokumentation des __SCHOOL_NAME__",
   "lang": "de",
-  "start_url": "/",
+  "start_url": "/login",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",

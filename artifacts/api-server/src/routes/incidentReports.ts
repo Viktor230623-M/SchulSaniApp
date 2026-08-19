@@ -134,6 +134,12 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
   const now = new Date();
   const id = randomUUID();
 
+  const incidentAt = body["incidentAt"] ? new Date(body["incidentAt"] as string) : now;
+  if (isNaN(incidentAt.getTime())) {
+    res.status(400).json({ error: "incidentAt muss ein gueltiges Datum sein." });
+    return;
+  }
+
   const responders = Array.isArray(body["responders"]) ? body["responders"] as string[] : [userId];
 
   const report: typeof incidentReportsTable.$inferInsert = {
@@ -143,7 +149,7 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
     authorId: userId,
     status: "draft",
     location: typeof body["location"] === "string" ? body["location"].slice(0, 200) : null,
-    incidentAt: body["incidentAt"] ? new Date(body["incidentAt"] as string) : now,
+    incidentAt,
     responderIdsJson: responders,
     contentEncrypted,
     contentKeyVersion,

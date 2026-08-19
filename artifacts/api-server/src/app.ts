@@ -8,6 +8,7 @@ import rateLimit from "express-rate-limit";
 import router from "./routes";
 import { config } from "./config";
 import { MissingSchoolContextError } from "./middlewares/auth";
+import { csrfProtection } from "./middlewares/csrf";
 import { log } from "./lib/logger";
 
 const app: Express = express();
@@ -16,10 +17,12 @@ app.disable("x-powered-by");
 // Ohne diese Middleware setzt Express ETags und beantwortet einen erneuten
 // GET mit 304 (leerer Body) -- der Client liest dann ein leeres resp.json().
 app.disable("etag");
-// Behind nginx — trust exactly one proxy hop so req.ip is the real client
-// address; without this every client shares nginx's IP and the rate
-// limiters throttle all users as one.
-app.set("trust proxy", 1);
+// Behind nginx — trust exactly the number of proxy hops so req.ip is the
+// real client address; without this every client shares nginx's IP and the
+// rate limiters throttle all users as one. Mehrere Hops (z.B. CDN vor nginx)
+// erfordern TRUST_PROXY_HOPS. Die Limiter laufen in-memory; fuer mehrere
+// Backend-Instanzen braucht es einen geteilten Store (rate-limit-redis).
+app.set("trust proxy", Number(process.env["TRUST_PROXY_HOPS"] || 1));
 app.use(helmet());
 // JSON- und Text-Antworten ab ~1KB komprimieren. Nginx vor dem Backend
 // komprimiert selbst nichts, also passiert es hier.
@@ -29,6 +32,9 @@ app.use(cors({
   origin: config.allowedOrigins,
   credentials: true,
 }));
+
+// CSRF-Schutz fuer cookie-authentifizierte Schreibanfragen.
+app.use("/api", csrfProtection);
 
 // Rate limiting
 const generalLimiter = rateLimit({

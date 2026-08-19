@@ -21,8 +21,6 @@ export interface RetentionCutoffs {
   loa: Date;
   /** Einsatzhistorie: 2 Schuljahre, danach Anonymisierung. */
   activityLogAnonymize: Date;
-  /** Protokolle des Administrationszugangs: 12 Monate. */
-  consoleLog: Date;
   /** Zugriffsprotokolle der Anwendung: 12 Monate. */
   accessLog: Date;
   /** Protokoll von Rollenaenderungen: 12 Monate, wie report_access_log. */
@@ -65,7 +63,6 @@ export function computeCutoffs(now: Date): RetentionCutoffs {
     // konservative Auslegung: es wird nie zu frueh geloescht.
     loa: minusMonths(now, 24),
     activityLogAnonymize: minusMonths(now, 24),
-    consoleLog: minusMonths(now, 12),
     accessLog: minusMonths(now, 12),
     roleChangeLog: minusMonths(now, 12),
     profileChangeLog: minusMonths(now, 12),

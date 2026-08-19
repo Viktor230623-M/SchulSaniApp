@@ -21,8 +21,7 @@ describe("computeCutoffs", () => {
     expect(cutoffs.notifications.toISOString()).toBe("2026-04-20T10:00:00.000Z");
   });
 
-  it("loescht Konsolen- und Zugriffsprotokolle nach 12 Monaten", () => {
-    expect(cutoffs.consoleLog.toISOString()).toBe("2025-07-19T10:00:00.000Z");
+  it("loescht Zugriffsprotokolle nach 12 Monaten", () => {
     expect(cutoffs.accessLog.toISOString()).toBe("2025-07-19T10:00:00.000Z");
   });
 

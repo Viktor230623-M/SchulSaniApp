@@ -69,7 +69,7 @@ export default function SchulCodeScreen() {
           <AuthButton label={t("auth.joinCodeButton", lang)} loading={loading} disabled={!code.trim()} onPress={submit} theme={theme} />
         </>
       )}
-      <AuthLink label={t("auth.backToLogin", lang)} onPress={() => router.replace("/login")} theme={theme} />
+      <AuthLink label={t("auth.backToLogin", lang)} onPress={() => router.replace("/")} theme={theme} />
     </AuthShell>
   );
 }

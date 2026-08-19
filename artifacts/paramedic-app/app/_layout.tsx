@@ -170,11 +170,14 @@ function RootLayoutNav() {
         <Stack.Screen name="name-bestaetigen" options={{ headerShown: false }} />
       </Stack.Protected>
       <Stack.Protected guard={authStatus === "anon"}>
+        <Stack.Screen name="start" options={{ headerShown: false }} />
         <Stack.Screen name="login" options={{ headerShown: false }} />
         <Stack.Screen name="registrieren" options={{ headerShown: false }} />
         <Stack.Screen name="email-bestaetigen" options={{ headerShown: false }} />
         <Stack.Screen name="freischaltung-warten" options={{ headerShown: false }} />
         <Stack.Screen name="schul-code" options={{ headerShown: false }} />
+        <Stack.Screen name="schul-id" options={{ headerShown: false }} />
+        <Stack.Screen name="lizenz" options={{ headerShown: false }} />
         <Stack.Screen name="passwort-vergessen" options={{ headerShown: false }} />
         <Stack.Screen name="passwort-zuruecksetzen" options={{ headerShown: false }} />
       </Stack.Protected>

@@ -53,11 +53,11 @@ export default function EmailBestaetigenScreen() {
       {message && !loading && !error && (
         <AuthLink
           label={approved ? t("auth.backToLogin", lang) : t("auth.waitForApproval", lang)}
-          onPress={() => approved ? router.replace("/login") : router.replace({ pathname: "/freischaltung-warten", params: { email } })}
+          onPress={() => approved ? router.replace("/") : router.replace({ pathname: "/freischaltung-warten", params: { email } })}
           theme={theme}
         />
       )}
-      {(!message || error) && <AuthLink label={t("auth.backToLogin", lang)} onPress={() => router.replace("/login")} theme={theme} />}
+      {(!message || error) && <AuthLink label={t("auth.backToLogin", lang)} onPress={() => router.replace("/")} theme={theme} />}
     </AuthShell>
   );
 }

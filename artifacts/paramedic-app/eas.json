@@ -15,7 +15,9 @@
       },
       "env": {
         "EXPO_PUBLIC_APP_NAME": "SchulSani",
-        "EXPO_PUBLIC_THEME_COLOR": "#22C55E"
+        "EXPO_PUBLIC_THEME_COLOR": "#22C55E",
+        "EXPO_PUBLIC_DOMAIN": "schulsaniapp.com",
+        "APP_BUNDLE_ID": "com.schulsani.app"
       }
     },
     "preview": {
@@ -28,7 +30,9 @@
       },
       "env": {
         "EXPO_PUBLIC_APP_NAME": "SchulSani",
-        "EXPO_PUBLIC_THEME_COLOR": "#22C55E"
+        "EXPO_PUBLIC_THEME_COLOR": "#22C55E",
+        "EXPO_PUBLIC_DOMAIN": "schulsaniapp.com",
+        "APP_BUNDLE_ID": "com.schulsani.app"
       }
     },
     "production": {
@@ -41,7 +45,9 @@
       },
       "env": {
         "EXPO_PUBLIC_APP_NAME": "SchulSani",
-        "EXPO_PUBLIC_THEME_COLOR": "#22C55E"
+        "EXPO_PUBLIC_THEME_COLOR": "#22C55E",
+        "EXPO_PUBLIC_DOMAIN": "schulsaniapp.com",
+        "APP_BUNDLE_ID": "com.schulsani.app"
       }
     }
   },

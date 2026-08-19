@@ -71,3 +71,6 @@ landing-site/
 .graphify/
 graphify-out/
 .gitattributes
+
+# Sensible Bankdaten — niemals committen
+ops/ssd-daten/

@@ -394,7 +394,9 @@ export default function SettingsScreen() {
     // und der naechste App-Start stellte die Sitzung still wieder her.
     await ApiService.logout();
     logout();
-    router.replace("/login");
+    // Ueber die Wurzel: index.tsx entscheidet zwischen Start-Screen (keine
+    // Schule gewaehlt) und direktem Login (Schule persistiert).
+    router.replace("/");
   }
 
   async function handleDeleteAccount() {
@@ -410,7 +412,7 @@ export default function SettingsScreen() {
     try {
       await ApiService.deleteAccount();
       logout();
-      router.replace("/login");
+      router.replace("/");
     } catch (err) {
       notify(t("settings.deleteAccountFailed", lang), err instanceof Error ? err.message : undefined);
     }

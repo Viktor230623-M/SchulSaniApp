@@ -30,14 +30,14 @@ self.addEventListener("push", (event) => {
       icon: "/icons/icon-192.png",
       badge: "/icons/icon-192.png",
       tag: data.notificationId || undefined,
-      data: { url: data.url || "/" },
+      data: { url: data.url || "/login" },
     }),
   );
 });
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const target = (event.notification.data && event.notification.data.url) || "/";
+  const target = (event.notification.data && event.notification.data.url) || "/login";
 
   event.waitUntil(
     self.clients

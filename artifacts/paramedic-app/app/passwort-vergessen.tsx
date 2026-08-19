@@ -32,7 +32,7 @@ export default function PasswortVergessenScreen() {
       {message ? <AuthMessage text={message} theme={theme} /> : null}
       {error ? <AuthMessage text={error} error theme={theme} /> : null}
       <AuthButton label={t("auth.forgotButton", lang)} loading={loading} disabled={!email} onPress={submit} theme={theme} />
-      <AuthLink label={t("auth.backToLogin", lang)} onPress={() => router.replace("/login")} theme={theme} />
+      <AuthLink label={t("auth.backToLogin", lang)} onPress={() => router.replace("/")} theme={theme} />
     </AuthShell>
   );
 }

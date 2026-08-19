@@ -166,7 +166,9 @@ export default function NotificationsScreen() {
                 <Text style={[styles.heading, { color: theme.text }]}>{t("notifications.title", lang)}</Text>
                 {unread > 0 && <Text style={[styles.unreadHint, { color: theme.tint }]}>{unread} {t("notifications.unread", lang)}</Text>}
               </View>
-              {unread > 0 && (
+            </View>
+            {unread > 0 && (
+              <View style={styles.markAllRow}>
                 <Pressable
                   onPress={handleMarkAllRead}
                   disabled={markingAll}
@@ -177,8 +179,8 @@ export default function NotificationsScreen() {
                     : <Text style={[styles.markAllText, { color: theme.tintDark }]}>{t("notifications.markAllRead", lang)}</Text>
                   }
                 </Pressable>
-              )}
-            </View>
+              </View>
+            )}
             <HighPriorityBanner items={highPriority} theme={theme} lang={lang} />
           </View>
         }
@@ -204,7 +206,8 @@ export default function NotificationsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 12 },
+  headerRow: { marginBottom: 4 },
+  markAllRow: { flexDirection: "row", justifyContent: "flex-end", marginTop: 10, marginBottom: 10 },
   heading: { fontSize: 28, fontFamily: "Inter_700Bold" },
   unreadHint: { fontSize: 13, fontFamily: "Inter_400Regular", marginTop: 2 },
   markAllBtn: { paddingHorizontal: 12, paddingVertical: 11, borderRadius: 10, borderWidth: 1 },

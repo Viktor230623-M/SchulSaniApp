@@ -50,7 +50,7 @@ export default function FreischaltungWartenScreen() {
           <AuthButton label={t("auth.resendVerification", lang)} loading={loading} disabled={!email} onPress={resend} theme={theme} />
         </>
       )}
-      <AuthLink label={t("auth.backToLogin", lang)} onPress={() => router.replace("/login")} theme={theme} />
+      <AuthLink label={t("auth.backToLogin", lang)} onPress={() => router.replace("/")} theme={theme} />
     </AuthShell>
   );
 }

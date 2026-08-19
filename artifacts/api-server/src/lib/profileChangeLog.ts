@@ -3,6 +3,7 @@ import { profileChangeLogTable } from "@workspace/db";
 import type { Tx } from "./rolePermissions";
 
 export interface ProfileChangeEntry {
+  schoolId: string | null;
   actorId: string;
   targetUserId: string;
   field: "first_name" | "last_name";
@@ -17,6 +18,7 @@ export interface ProfileChangeEntry {
 export async function logProfileChangeTx(tx: Tx, entry: ProfileChangeEntry): Promise<void> {
   await tx.insert(profileChangeLogTable).values({
     id: randomUUID(),
+    schoolId: entry.schoolId,
     actorId: entry.actorId,
     targetUserId: entry.targetUserId,
     field: entry.field,

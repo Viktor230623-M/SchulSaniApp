@@ -112,6 +112,15 @@ const resetEmailLimiter = rateLimit({
   message: { error: "Zu viele Anfragen, bitte spaeter erneut versuchen." },
 });
 
+// Oeffentliche Meta-Daten (Schul-Waehler, Anmeldewege): Der Einstieg laedt sie
+// einmal je Screen-Aufruf. Ein eigener Limiter verhindert, dass jemand den
+// Schul-Waehler oder die Provider-Liste im Minutentakt abruft.
+const publicInfoLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  message: { error: "Zu viele Anfragen, bitte kurz warten." },
+});
+
 const EMAIL_RESPONSE = "Wenn die Adresse genutzt werden kann, liegt gleich eine E-Mail im Postfach.";
 const AUTH_RESPONSE_FLOOR_MS = 400;
 
@@ -248,7 +257,7 @@ function createNativeHandoff(sessionToken: string, challenge: string): string {
 function sessionCookieOptions() {
   return {
     httpOnly: true,
-    secure: process.env["NODE_ENV"] === "production",
+    secure: process.env["NODE_ENV"] === "production" || process.env["COOKIE_SECURE"] === "true",
     sameSite: "lax" as const,
     path: "/",
     maxAge: SESSION_MAX_AGE_MS,
@@ -633,7 +642,13 @@ router.post("/local/verify", localAccountLimiter, async (req, res) => {
   }
   const verifiedUserId = await db.transaction(async (tx) => {
     const [candidate] = await tx.select({ id: authTokensTable.id, userId: authTokensTable.userId }).from(authTokensTable).innerJoin(usersTable, eq(usersTable.id, authTokensTable.userId)).where(and(eq(authTokensTable.tokenHash, hashAuthToken(token)), eq(authTokensTable.kind, "email_verify"), isNull(authTokensTable.usedAt), gt(authTokensTable.expiresAt, new Date()), eq(usersTable.authProvider, getLocalProvider().key))).limit(1);
-    if (!candidate) return null;
+    if (!candidate) {
+      // Token bereits verbraucht oder abgelaufen — pruefen ob E-Mail
+      // bereits verifiziert ist (z.B. durch Email-Client-Prefetch).
+      const [alreadyVerified] = await tx.select({ id: usersTable.id, emailVerifiedAt: usersTable.emailVerifiedAt, isApproved: usersTable.isApproved }).from(authTokensTable).innerJoin(usersTable, eq(usersTable.id, authTokensTable.userId)).where(and(eq(authTokensTable.tokenHash, hashAuthToken(token)), eq(authTokensTable.kind, "email_verify"), eq(usersTable.authProvider, getLocalProvider().key))).limit(1);
+      if (alreadyVerified?.emailVerifiedAt) return { userId: alreadyVerified.id, isApproved: alreadyVerified.isApproved };
+      return null;
+    }
     const [consumed] = await tx.update(authTokensTable).set({ usedAt: new Date() }).where(and(eq(authTokensTable.id, candidate.id), isNull(authTokensTable.usedAt))).returning({ id: authTokensTable.id });
     if (!consumed) return null;
     const [updated] = await tx.update(usersTable).set({ emailVerifiedAt: new Date(), updatedAt: new Date() }).where(and(eq(usersTable.id, candidate.userId), eq(usersTable.authProvider, getLocalProvider().key))).returning({ id: usersTable.id, isApproved: usersTable.isApproved });
@@ -977,6 +992,7 @@ router.post("/account/delete", authLimiter, requireAuth, async (req: AuthRequest
     // Rechenschaftsnachweis: die Loeschung selbst bleibt als Protokolleintrag
     // stehen, damit nicht unklar ist, wann und durch wen das Konto ging.
     await logRoleChangeTx(tx, {
+      schoolId,
       actorId: userId,
       actorName: `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() || null,
       targetUserId: userId,
@@ -1117,7 +1133,7 @@ router.get("/session", sessionLimiter, async (req, res) => {
  * ein Anmeldebildschirm muss wissen koennen, welche Wege es ueberhaupt gibt,
  * bevor sich jemand angemeldet hat.
  */
-router.get("/providers", async (req, res) => {
+router.get("/providers", publicInfoLimiter, async (req, res) => {
   // Cloud-Betrieb: die Schule bestimmt, ob ein Zugangscode noetig ist — der
   // Client fragt mit ?schoolId= und bekommt die passende Antwort.
   const schoolId = await schoolIdFromRequest(req);
@@ -1133,7 +1149,7 @@ router.get("/providers", async (req, res) => {
  * Aktive Schulen im Cloud-Betrieb, oeffentlich — der Schul-Waehler braucht
  * id und name, bevor eine Anmeldung beginnt. Im Selbsthosting leer.
  */
-router.get("/schools", async (_req, res) => {
+router.get("/schools", publicInfoLimiter, async (_req, res) => {
   res.json({ multiTenant: config.multiTenant, schools: await listPublicSchools() });
 });
 
@@ -1211,6 +1227,7 @@ router.delete("/identities/:id", authLimiter, requireAuth, async (req: AuthReque
       .set({ revokedAt: new Date() })
       .where(and(eq(sessionsTable.userId, req.user!.userId), isNull(sessionsTable.revokedAt)));
     await logIdentityChangeTx(tx, {
+      schoolId: req.user!.schoolId ?? null,
       userId: req.user!.userId,
       providerKey: identity.providerKey,
       action: "unlink",
@@ -1507,7 +1524,7 @@ async function reconcileAccount(
       lastUsedAt: new Date(),
     });
     if (sameEmail) {
-      await logIdentityChangeTx(tx, { userId, providerKey, action: "link" });
+      await logIdentityChangeTx(tx, { schoolId, userId, providerKey, action: "link" });
     }
   });
 
@@ -1590,6 +1607,7 @@ async function completeOidcCallback(req: import("express").Request, res: import(
           // Nur der Neu-Eintrag zaehlt: eine bereits verknuepfte Identitaet,
           // die nur lastUsedAt aktualisiert, ist keine Aenderung.
           await logIdentityChangeTx(tx, {
+            schoolId,
             userId: linkUserId,
             providerKey: provider.key,
             action: "link",

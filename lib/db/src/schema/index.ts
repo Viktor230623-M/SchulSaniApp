@@ -351,6 +351,7 @@ export const deviceTokensTable = pgTable("device_tokens", {
 // Aufbewahrung 12 Monate, wie report_access_log.
 export const roleChangeLogTable = pgTable("role_change_log", {
   id: text("id").primaryKey(),
+  schoolId: text("school_id"),
   actorId: text("actor_id").notNull(),
   actorName: text("actor_name"),
   roleId: text("role_id"),
@@ -368,6 +369,7 @@ export const roleChangeLogTable = pgTable("role_change_log", {
 // sind personenbezogene Daten.
 export const profileChangeLogTable = pgTable("profile_change_log", {
   id: text("id").primaryKey(),
+  schoolId: text("school_id"),
   actorId: text("actor_id").notNull(),
   targetUserId: text("target_user_id").notNull(),
   field: text("field").notNull(), // first_name | last_name | email
@@ -383,6 +385,7 @@ export const profileChangeLogTable = pgTable("profile_change_log", {
 // Gesundheitsdaten.
 export const identityChangeLogTable = pgTable("identity_change_log", {
   id: text("id").primaryKey(),
+  schoolId: text("school_id"),
   userId: text("user_id").notNull(),
   providerKey: text("provider_key").notNull(),
   action: text("action").notNull(), // link | unlink

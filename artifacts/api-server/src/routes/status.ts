@@ -31,12 +31,16 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
 router.get("/on-duty", requireAuth, async (req: AuthRequest, res) => {
   const schoolId = schoolIdOf(req);
   const onDuty = await db.select().from(dutyTable).where(and(eq(dutyTable.status, "on_duty"), eq(dutyTable.schoolId, schoolId)));
+  // Nur die Felder, die der Dienstbildschirm anzeigt. Die volle Nutzerzeile
+  // enthielte E-Mail, Telefon, externe Kennung und Passwort-Metadaten -- nichts
+  // davon gehoert in eine Liste, die jedes Mitglied sehen darf.
   const users = await Promise.all(
     onDuty.map(async (entry) => {
-      const [user] = await db.select().from(usersTable).where(and(eq(usersTable.id, entry.userId), eq(usersTable.schoolId, schoolId)));
-      if (!user) return null;
-      const { passwordHash: _, ...rest } = user;
-      return rest;
+      const [user] = await db
+        .select({ id: usersTable.id, firstName: usersTable.firstName, lastName: usersTable.lastName, role: usersTable.role })
+        .from(usersTable)
+        .where(and(eq(usersTable.id, entry.userId), eq(usersTable.schoolId, schoolId)));
+      return user ?? null;
     })
   );
   // Alphabetisch nach Name: Dienst hat keine Rangfolge, eine stabile Liste

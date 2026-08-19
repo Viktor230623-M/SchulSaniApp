@@ -17,21 +17,27 @@ import appJson from "./app.json";
  * Vorlage mit allen Variablen: .env.example
  */
 
-function pflicht(name: string): string {
+function pflicht(name: string, fallback?: string): string {
   const wert = process.env[name]?.trim();
-  if (!wert) {
-    throw new Error(
-      `Konfiguration fehlt: ${name} ist nicht gesetzt. ` +
-        "Wert in artifacts/paramedic-app/.env eintragen (Vorlage: .env.example) und neu starten/bauen.",
-    );
-  }
-  return wert;
+  if (wert) return wert;
+  // eas-cli ruft `expo config` mit EXPO_NO_DOTENV=1 auf, um das Projekt zu
+  // registrieren — dabei ist .env absichtlich nicht geladen. In diesem
+  // Probe-Fall auf Defaults zurueckfallen statt abbrechen; der echte Build
+  // bekommt die Werte aus eas.json/build.*.env.
+  if (process.env.EXPO_NO_DOTENV === "1" && fallback) return fallback;
+  throw new Error(
+    `Konfiguration fehlt: ${name} ist nicht gesetzt. ` +
+      "Wert in artifacts/paramedic-app/.env eintragen (Vorlage: .env.example) und neu starten/bauen.",
+  );
 }
 
-const appName = pflicht("EXPO_PUBLIC_APP_NAME");
-const themeColor = pflicht("EXPO_PUBLIC_THEME_COLOR");
-const domain = pflicht("EXPO_PUBLIC_DOMAIN");
-const bundleId = pflicht("APP_BUNDLE_ID");
+const appName = pflicht("EXPO_PUBLIC_APP_NAME", "SchulSani");
+const themeColor = pflicht("EXPO_PUBLIC_THEME_COLOR", "#22C55E");
+const domain = pflicht("EXPO_PUBLIC_DOMAIN", "schulsaniapp.com");
+const bundleId = pflicht("APP_BUNDLE_ID", "com.schulsani.app");
+// Web-Pfad unterm die App ausgeliefert wird (z.B. "/app" fuer die Demo unter
+// demo.schulsaniapp.com/app). Leer = Wurzel (Produktion).
+const webBaseUrl = process.env.EXPO_BASE_URL?.trim() ?? "";
 
 type PluginEntry = string | [string, unknown];
 
@@ -63,6 +69,10 @@ export default (): ExpoConfig => {
       name: appName,
       shortName: appName,
       themeColor,
+    },
+    experiments: {
+      ...basis.experiments,
+      ...(webBaseUrl ? { baseUrl: webBaseUrl } : {}),
     },
     plugins: mitRouterOrigin(basis.plugins as PluginEntry[] | undefined),
   };

@@ -3,6 +3,8 @@ import { Router } from "express";
 import { and, desc, eq, inArray, lt, sql } from "drizzle-orm";
 import { db, missionsTable, missionActivityLogTable, usersTable } from "@workspace/db";
 import { requireAuth, requirePermission, schoolIdOf, type AuthRequest } from "../middlewares/auth";
+import { z } from "@workspace/api-zod";
+import { validate } from "../middlewares/validate";
 import { addDismissal, getDismissedFor, removeDismissal } from "../data/dismissals";
 import { notifyOnDutyUsers, notifyUser } from "../services/notifications";
 import { translateToLanguages } from "../services/translator";
@@ -55,25 +57,19 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
   res.json(visible);
 });
 
-router.post("/", requireAuth, requirePermission("missions.create"), async (req: AuthRequest, res) => {
+const missionCreateBody = z.object({
+  title: z.string().min(1).max(200),
+  description: z.string().max(2000).optional(),
+  location: z.string().min(1).max(200),
+  priority: z.string().optional(),
+  scheduledFor: z.string().refine((s) => !Number.isNaN(new Date(s).getTime()), "scheduledFor muss ein gueltiges Datum sein").optional(),
+  patientInfo: z.unknown().optional(),
+});
+
+router.post("/", requireAuth, requirePermission("missions.create"), validate({ body: missionCreateBody }), async (req: AuthRequest, res) => {
   const schoolId = schoolIdOf(req);
   const { title, description, location, priority, scheduledFor, patientInfo } = req.body;
-  if (!title || !location) {
-    res.status(400).json({ error: "title and location required" });
-    return;
-  }
-  if (title.length > 200 || (description?.length ?? 0) > 2000 || location.length > 200) {
-    res.status(400).json({ error: "title max 200, description max 2000, location max 200" });
-    return;
-  }
-  let parsedScheduledFor: Date | undefined;
-  if (scheduledFor) {
-    parsedScheduledFor = new Date(scheduledFor);
-    if (isNaN(parsedScheduledFor.getTime())) {
-      res.status(400).json({ error: "scheduledFor must be a valid ISO date string" });
-      return;
-    }
-  }
+  const parsedScheduledFor: Date | undefined = scheduledFor ? new Date(scheduledFor) : undefined;
   const m: typeof missionsTable.$inferInsert = {
     id: randomUUID(),
     title,

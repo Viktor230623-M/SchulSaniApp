@@ -333,7 +333,7 @@ export default function LoginScreen() {
           </View>
         )}
 
-        {selectedSchool && multiTenant && !showSchoolPicker && (
+        {selectedSchool && multiTenant && !showSchoolPicker && schools !== null && schools.length > 1 && (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={t("auth.chooseSchool", lang)}
@@ -493,6 +493,29 @@ export default function LoginScreen() {
             )}
           </View>
         )}
+
+        <View style={styles.footer}>
+          {multiTenant && schools !== null && schools.length > 0 && (
+            <Pressable
+              accessibilityRole="link"
+              accessibilityLabel={t("auth.loginWithSchoolId", lang)}
+              onPress={() => router.push("/schul-id")}
+              style={styles.footerLink}
+            >
+              <Ionicons name="key-outline" size={17} color={theme.tint} />
+              <Text style={[styles.footerLinkText, { color: theme.tint }]}>{t("auth.loginWithSchoolId", lang)}</Text>
+            </Pressable>
+          )}
+          <Pressable
+            accessibilityRole="link"
+            accessibilityLabel={t("auth.schoolNotIncluded", lang)}
+            onPress={() => router.push("/lizenz")}
+            style={styles.footerLink}
+          >
+            <Ionicons name="help-circle-outline" size={17} color={theme.tint} />
+            <Text style={[styles.footerLinkText, { color: theme.tint }]}>{t("auth.schoolNotIncluded", lang)}</Text>
+          </Pressable>
+        </View>
       </ScrollView>
     </View>
   );
@@ -561,4 +584,7 @@ const styles = StyleSheet.create({
   passwordToggle: { position: "absolute", right: 4, minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" },
   localLink: { minHeight: 44, justifyContent: "center", alignSelf: "flex-start" },
   localLinkText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  footer: { width: "100%", maxWidth: 400, alignItems: "center", gap: 2, marginTop: 8 },
+  footerLink: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12 },
+  footerLinkText: { fontSize: 13, fontFamily: "Inter_600SemiBold", textAlign: "center" },
 });

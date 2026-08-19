@@ -3,6 +3,7 @@ import { identityChangeLogTable } from "@workspace/db";
 import type { Tx } from "./rolePermissions";
 
 export interface IdentityChangeEntry {
+  schoolId: string | null;
   userId: string;
   providerKey: string;
   action: "link" | "unlink";
@@ -16,6 +17,7 @@ export interface IdentityChangeEntry {
 export async function logIdentityChangeTx(tx: Tx, entry: IdentityChangeEntry): Promise<void> {
   await tx.insert(identityChangeLogTable).values({
     id: randomUUID(),
+    schoolId: entry.schoolId,
     userId: entry.userId,
     providerKey: entry.providerKey,
     action: entry.action,

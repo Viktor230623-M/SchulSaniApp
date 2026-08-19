@@ -5,8 +5,17 @@ import { db, newsTable, newsReadsTable, usersTable } from "@workspace/db";
 import { requireAuth, requirePermission, schoolIdOf, type AuthRequest } from "../middlewares/auth";
 import { notifySanitaeters } from "../services/notifications";
 import { translateToLanguages } from "../services/translator";
+import { z } from "@workspace/api-zod";
+import { validate } from "../middlewares/validate";
 
 const router = Router();
+
+const newsCreateBody = z.object({
+  title: z.string().min(1).max(200),
+  summary: z.string().max(300).nullish(),
+  content: z.string().min(1).max(10000),
+  category: z.enum(["announcement", "training", "update", "alert"]).nullish(),
+});
 
 // Gelesen-Zustand ist je Nutzer, nicht je Beitrag: die fruehere Spalte is_read
 // auf der news-Zeile markierte einen Beitrag fuer alle als gelesen, sobald ihn
@@ -33,18 +42,10 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
   res.json(filtered.map((n) => ({ ...n, isRead: gelesen.has(n.id) })));
 });
 
-router.post("/", requireAuth, async (req: AuthRequest, res) => {
+router.post("/", requireAuth, validate({ body: newsCreateBody }), async (req: AuthRequest, res) => {
   const { userId } = req.user!;
   const schoolId = schoolIdOf(req);
   const { title, summary, content, category } = req.body;
-  if (!title || !content) {
-    res.status(400).json({ error: "title and content required" });
-    return;
-  }
-  if (title.length > 200 || (summary?.length ?? 0) > 300 || content.length > 10000) {
-    res.status(400).json({ error: "title max 200, summary max 300, content max 10000" });
-    return;
-  }
   const [user] = await db.select().from(usersTable).where(and(eq(usersTable.id, userId), eq(usersTable.schoolId, schoolId)));
   const authorName = user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() : userId;
   const newItem: typeof newsTable.$inferInsert = {

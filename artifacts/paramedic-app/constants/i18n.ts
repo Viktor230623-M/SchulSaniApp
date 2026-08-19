@@ -118,6 +118,26 @@ const translations = {
       resetSuccess: "Passwort gespeichert. Du kannst dich jetzt anmelden.",
       backToLogin: "Zurück zur Anmeldung",
       createAccountHint: "Noch kein Schul-Konto?",
+      schoolNotIncluded: "Eure Schule ist noch nicht dabei? Lizenz anfragen",
+      loginWithSchoolId: "Mit Schul-ID anmelden",
+      schulIdHeading: "Mit Schul-ID anmelden",
+      schulIdBody:
+        "Gib die Schul-ID eurer Schule ein. Sie steht in der Lizenz-E-Mail, die eure Schule von uns erhalten hat.",
+      schulIdLabel: "Schul-ID",
+      schulIdButton: "Weiter",
+      schulIdNotFound:
+        "Keine Schule mit dieser ID gefunden. Prüfe die Schreibweise oder frage eure Betreuung.",
+      schulIdHint: "Eure Schule ist noch nicht dabei?",
+    },
+    license: {
+      heading: "SchulSaniApp für eure Schule",
+      body: "SchulSaniApp wird pro Schule lizenziert. Wenn eure Schule noch keine Lizenz hat, meldet euch gern — wir zeigen euch in einem kurzen Gespräch, wie der Einstieg aussieht.",
+      cta: "Lizenz anfragen",
+      subject: "Lizenzanfrage SchulSaniApp",
+    },
+    start: {
+      welcome: "Willkommen bei SchulSaniApp",
+      body: "Melde dich mit der Schul-ID deiner Schule an — deine Schule erhält sie mit ihrer Lizenz von uns.",
     },
     duty: {
       title: "Dienststatus",
@@ -721,6 +741,24 @@ const translations = {
       resetSuccess: "Password saved. You can sign in now.",
       backToLogin: "Back to sign in",
       createAccountHint: "No school account yet?",
+      schoolNotIncluded: "Your school not on board yet? Request a license",
+      loginWithSchoolId: "Sign in with school ID",
+      schulIdHeading: "Sign in with school ID",
+      schulIdBody: "Enter your school's ID. You'll find it in the license email your school received from us.",
+      schulIdLabel: "School ID",
+      schulIdButton: "Continue",
+      schulIdNotFound: "No school found with this ID. Check the spelling or ask your coordinator.",
+      schulIdHint: "Your school not on board yet?",
+    },
+    license: {
+      heading: "SchulSaniApp for your school",
+      body: "SchulSaniApp is licensed per school. If your school doesn't have a license yet, get in touch — we'll show you in a short call how to get started.",
+      cta: "Request a license",
+      subject: "License request SchulSaniApp",
+    },
+    start: {
+      welcome: "Welcome to SchulSaniApp",
+      body: "Sign in with your school's ID — your school receives it with its license from us.",
     },
     duty: {
       title: "Duty Status",

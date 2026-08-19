@@ -3,6 +3,7 @@ import { roleChangeLogTable } from "@workspace/db";
 import type { Tx } from "./rolePermissions";
 
 export interface RoleChangeEntry {
+  schoolId: string | null;
   actorId: string;
   actorName?: string | null;
   roleId?: string | null;
@@ -26,6 +27,7 @@ export async function logRoleChangeTx(tx: Tx, entry: RoleChangeEntry): Promise<v
     await tx.transaction(async (sicherungspunkt) => {
       await sicherungspunkt.insert(roleChangeLogTable).values({
         id: randomUUID(),
+        schoolId: entry.schoolId,
         actorId: entry.actorId,
         actorName: entry.actorName ?? null,
         roleId: entry.roleId ?? null,

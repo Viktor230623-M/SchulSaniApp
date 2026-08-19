@@ -205,7 +205,7 @@ router.delete("/:id", requireAuth, requirePermission("roles.manage"), writeLimit
     await db.transaction(async (tx) => {
       // role_permissions haengt per Fremdschluessel mit onDelete cascade daran.
       await tx.delete(rolesTable).where(and(eq(rolesTable.id, id), eq(rolesTable.schoolId, schoolId)));
-      await logRoleChangeTx(tx, { actorId: req.user!.userId, roleId: id, roleKey: role.key, action: "delete", before: role, after: null });
+      await logRoleChangeTx(tx, { schoolId, actorId: req.user!.userId, roleId: id, roleKey: role.key, action: "delete", before: role, after: null });
       await assertAdminReachable(tx, schoolId);
     });
   } catch (err) {
@@ -267,7 +267,7 @@ router.put("/:id/permissions", requireAuth, requirePermission("roles.manage"), w
         await tx.insert(rolePermissionsTable).values({ id: randomUUID(), roleId: id, permission: p });
       }
       await logRoleChangeTx(tx, {
-        actorId: req.user!.userId, roleId: id, roleKey: role.key, action: "set_permissions", before: current, after: requested,
+        schoolId, actorId: req.user!.userId, roleId: id, roleKey: role.key, action: "set_permissions", before: current, after: requested,
       });
       await assertAdminReachable(tx, schoolId);
     });

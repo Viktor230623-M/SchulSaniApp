@@ -1,0 +1,17 @@
+An: lise-meitner-gymnasium@bsfb.hamburg.de
+Betreff: Schulsanitätsdienst aufbauen: App kostenlos für die ersten fünf Schulen
+
+Sehr geehrte Frau Oldenburg,
+
+ich bin Schüler am Gymnasium Blankenese und habe eine App für Schulsanitätsdienste entwickelt. Sie ersetzt den Papierkram: Das Einsatzprotokoll wird direkt am Handy ausgefüllt und als PDF exportiert, die Sanitäter:innen werden per Push-Nachricht alarmiert statt über eine Durchsage, und Dienstplan samt Vertretung laufen in derselben App.
+
+Ich helfe gerade Schulen dabei, einen Schulsanitätsdienst aufzubauen und biete die App den ersten fünf Schulen, die sich melden, ein Jahr lang kostenlos an. Sie können sich die App direkt ansehen unter demo.schulsaniapp.com, ohne Anmeldung.
+
+Was ich mir im Gegenzug wünsche: dass wir öffentlich sagen dürfen, dass wir mit Ihrer Schule zusammenarbeiten und beim Aufbau geholfen haben, und eine Weiterempfehlung, wenn Sie zufrieden sind.
+
+Zum Datenschutz, kurz und konkret: Die Schule bleibt datenschutzrechtlich Verantwortliche, ich bin Auftragsverarbeiter, dafür schließen wir einen Vertrag nach Art. 28 DSGVO. Die Server stehen in der EU (Frankfurt). Die Schule bestimmt, wann sie ihre Protokolle bekommt, halbjährlich, jährlich oder nach fünf Jahren, alles als ein PDF-Bündel, und nach dem Download werden die Daten bei mir gelöscht. Wer es lieber ganz selbst betreibt, kann die App auch auf eigenen Servern hosten.
+
+Hätten Sie Interesse? Ich melde mich auch gerne kurz telefonisch: 0160 96245201.
+
+Mit freundlichen Grüßen
+Viktor Gnjatic · SchulSaniApp

@@ -59,7 +59,6 @@ Backend (`artifacts/api-server/.env`):
 | `AUTH_PROVIDERS_PATH` | Pfad zur Konfigurationsdatei der aktiven Anmeldewege                   |
 | `SCHOOL_ID`          | Amtliche Schulnummer der Schule (z. B. `4321`); neu angelegte Konten bekommen diese Kennung zugewiesen |
 | `ROLE_MAP_PATH`      | Optional: Pfad zu einer Bootstrap-Rollenzuordnung für die Ersteinrichtung |
-| `OWNER_USER_ID`      | Nutzer-ID mit Zugriff auf die administrative SQL-Konsole               |
 | `VAPID_PUBLIC_KEY`   | Öffentlicher VAPID-Schlüssel für Web-Push                              |
 | `VAPID_PRIVATE_KEY`  | Privater VAPID-Schlüssel für Web-Push                                  |
 | `VAPID_SUBJECT`      | Kontaktangabe (mailto: oder URL) für Web-Push                          |
