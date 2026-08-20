@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "users_school_username_lower_unique" ON "users" USING btree ("school_id",lower("username"));

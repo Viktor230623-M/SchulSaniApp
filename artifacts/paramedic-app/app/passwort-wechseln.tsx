@@ -16,6 +16,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { MedicalCross } from "@/components/MedicalCross";
+import { PasswordRequirements } from "@/components/PasswordRequirements";
+import { checkPassword, passwordRuleMessageKey } from "@/constants/passwordPolicy";
 import { useTopPad } from "@/hooks/useTopPad";
 import { t } from "@/constants/i18n";
 import { getTheme, withAlpha } from "@/constants/theme";
@@ -39,8 +41,9 @@ export default function PasswortWechselnScreen() {
   const [error, setError] = useState("");
 
   async function handleChange() {
-    if (newPassword.length < 10) {
-      setError(t("auth.passwordTooShort", lang));
+    const policy = checkPassword(newPassword, { email: user?.email, firstName: user?.firstName, lastName: user?.lastName });
+    if (!policy.ok) {
+      setError(t(passwordRuleMessageKey(policy.firstFailed!), lang));
       return;
     }
     if (newPassword !== repeatPassword) {
@@ -86,6 +89,7 @@ export default function PasswortWechselnScreen() {
           <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
             <PasswordField label={t("auth.currentPassword", lang)} value={currentPassword} onChangeText={setCurrentPassword} hidden={!showPasswords} theme={theme} />
             <PasswordField label={t("auth.newPassword", lang)} value={newPassword} onChangeText={setNewPassword} hidden={!showPasswords} theme={theme} />
+            <PasswordRequirements password={newPassword} context={{ email: user?.email, firstName: user?.firstName, lastName: user?.lastName }} theme={theme} lang={lang} />
             <PasswordField label={t("auth.repeatPassword", lang)} value={repeatPassword} onChangeText={setRepeatPassword} hidden={!showPasswords} theme={theme} onSubmitEditing={handleChange} />
 
             {!!error && (

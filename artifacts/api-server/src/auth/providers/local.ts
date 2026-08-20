@@ -1,5 +1,5 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { and, eq, or } from "drizzle-orm";
+import { and, eq, or, sql } from "drizzle-orm";
 import { db, usersTable } from "@workspace/db";
 import type { PasswordAuthProvider } from "../types";
 
@@ -83,7 +83,11 @@ export function createLocalProvider(cfg: LocalProviderConfig): PasswordAuthProvi
     type: "local",
 
     async authenticate(credentials) {
-      const username = credentials.username.toLowerCase().trim();
+      // Der Benutzername muss exakt stimmen (1:1, inklusive Gross-/
+      // Kleinschreibung). E-Mail und Subjekt werden kleingeschrieben
+      // verglichen, weil sie kanonisch klein gespeichert werden.
+      const identifier = credentials.username.trim();
+      const identifierLower = identifier.toLowerCase();
       const schoolId = credentials.schoolId ?? defaultSchoolId;
       if (!schoolId) throw new Error(GENERIC_AUTH_ERROR);
 
@@ -94,10 +98,11 @@ export function createLocalProvider(cfg: LocalProviderConfig): PasswordAuthProvi
           and(
             eq(usersTable.schoolId, schoolId),
             eq(usersTable.authProvider, key),
+            // Muss exakt der Suche in routes/auth.ts (/params) entsprechen.
             or(
-              eq(usersTable.externalSubject, username),
-              eq(usersTable.email, username),
-              eq(usersTable.username, username),
+              sql`lower(${usersTable.externalSubject}) = ${identifierLower}`,
+              sql`lower(${usersTable.email}) = ${identifierLower}`,
+              eq(usersTable.username, identifier),
             ),
           ),
         )
@@ -120,7 +125,9 @@ export function createLocalProvider(cfg: LocalProviderConfig): PasswordAuthProvi
       }
 
       return {
-        subject: user.externalSubject ?? username,
+        // Kleingeschrieben: Der Aufrufer sucht das Konto damit erneut ueber
+        // external_subject, und das wird kanonisch klein gespeichert.
+        subject: user.externalSubject ?? identifierLower,
         profile: {
           firstName: user.firstName ?? "",
           lastName: user.lastName ?? "",

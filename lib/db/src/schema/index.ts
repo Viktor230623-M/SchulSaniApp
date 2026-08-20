@@ -99,6 +99,11 @@ export const usersTable = pgTable("users", {
   // dieselbe Adresse darf an zwei Schulen unabhaengig existieren, sobald der
   // Backend mehrere Schulen bedient.
   uniqueIndex("users_school_email_lower_unique").on(t.schoolId, sql`lower(${t.email})`),
+  // Gleiche Begruendung wie bei der E-Mail: Die Anmeldung vergleicht Kennungen
+  // ohne Ruecksicht auf Gross-/Kleinschreibung, deshalb duerfen "Mira" und
+  // "mira" nicht als zwei Konten nebeneinander stehen. NULL bleibt erlaubt und
+  // mehrfach moeglich -- ein Benutzername ist optional.
+  uniqueIndex("users_school_username_lower_unique").on(t.schoolId, sql`lower(${t.username})`),
 ]);
 
 // Zweite und weitere Anmeldewege eines Kontos. Die primaere Identitaet bleibt

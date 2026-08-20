@@ -2,6 +2,8 @@ import { router, useLocalSearchParams } from "expo-router";
 import React, { useState } from "react";
 import { Text } from "react-native";
 import { AuthButton, AuthField, AuthLink, AuthMessage, AuthShell } from "@/components/AuthSurface";
+import { PasswordRequirements } from "@/components/PasswordRequirements";
+import { checkPassword, passwordRuleMessageKey } from "@/constants/passwordPolicy";
 import { getTheme } from "@/constants/theme";
 import { t } from "@/constants/i18n";
 import ApiService from "@/services/ApiService";
@@ -23,7 +25,8 @@ export default function PasswortZuruecksetzenScreen() {
 
   async function submit() {
     if (!token) return;
-    if (password.length < 10) { setError(t("auth.passwordTooShort", lang)); return; }
+    const policy = checkPassword(password);
+    if (!policy.ok) { setError(t(passwordRuleMessageKey(policy.firstFailed!), lang)); return; }
     if (password !== repeat) { setError(t("auth.passwordMismatch", lang)); return; }
     setLoading(true); setError("");
     try {
@@ -42,6 +45,7 @@ export default function PasswortZuruecksetzenScreen() {
     <AuthShell theme={theme} title={t("auth.resetHeading", lang)} body={t("auth.resetBody", lang)}>
       <AuthField label={t("auth.newPassword", lang)} value={password} onChangeText={setPassword} theme={theme} icon="lock-closed-outline" password visible={visible} onToggleVisibility={() => setVisible((v) => !v)} autoComplete="new-password" />
       <AuthField label={t("auth.repeatPassword", lang)} value={repeat} onChangeText={setRepeat} theme={theme} icon="lock-closed-outline" password visible={visible} onToggleVisibility={() => setVisible((v) => !v)} onSubmitEditing={submit} autoComplete="new-password" />
+      <PasswordRequirements password={password} theme={theme} lang={lang} />
       {message ? <AuthMessage text={message} theme={theme} /> : null}
       {error ? <AuthMessage text={error} error theme={theme} /> : null}
       {!message && <AuthButton label={t("auth.resetButton", lang)} loading={loading} disabled={!token || !password || !repeat} onPress={submit} theme={theme} />}

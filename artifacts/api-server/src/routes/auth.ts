@@ -370,7 +370,11 @@ router.get("/params", authLimiter, async (req, res) => {
     return;
   }
 
-  const username = typeof req.query["username"] === "string" ? req.query["username"].trim().toLowerCase() : "";
+  // Die Kennung wird in zwei Formen gebraucht: unveraendert fuer den
+  // Benutzernamen (exakter 1:1-Vergleich) und kleingeschrieben fuer E-Mail und
+  // Subjekt, die kanonisch klein gespeichert werden.
+  const identifier = typeof req.query["username"] === "string" ? req.query["username"].trim() : "";
+  const identifierLower = identifier.toLowerCase();
   const randomSalt = () => randomBytes(16).toString("base64");
   let saltLogin = randomSalt();
   let saltEnc = randomSalt();
@@ -382,17 +386,20 @@ router.get("/params", authLimiter, async (req, res) => {
     return;
   }
 
-  if (username && username.length <= 254) {
+  if (identifier && identifier.length <= 254) {
     const [user] = await db
       .select({ loginSalt: usersTable.loginSalt, id: usersTable.id })
       .from(usersTable)
       .where(and(
         eq(usersTable.schoolId, schoolId),
         eq(usersTable.authProvider, provider.key),
+        // Muss exakt der Suche in auth/providers/local.ts entsprechen, sonst
+        // liefert /params ein zufaelliges Salz und die Anmeldung schlaegt
+        // trotz richtigem Passwort fehl.
         or(
-          eq(usersTable.externalSubject, username),
-          eq(usersTable.email, username),
-          eq(usersTable.username, username),
+          sql`lower(${usersTable.externalSubject}) = ${identifierLower}`,
+          sql`lower(${usersTable.email}) = ${identifierLower}`,
+          eq(usersTable.username, identifier),
         ),
       ))
       .limit(1);

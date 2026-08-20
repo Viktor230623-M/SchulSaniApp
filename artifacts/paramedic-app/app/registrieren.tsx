@@ -2,6 +2,8 @@ import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text } from "react-native";
 import { AuthButton, AuthField, AuthLink, AuthMessage, AuthShell } from "@/components/AuthSurface";
+import { PasswordRequirements } from "@/components/PasswordRequirements";
+import { checkPassword, passwordRuleMessageKey } from "@/constants/passwordPolicy";
 import { getTheme } from "@/constants/theme";
 import { t } from "@/constants/i18n";
 import ApiService from "@/services/ApiService";
@@ -34,7 +36,8 @@ export default function RegistrierenScreen() {
 
   async function submit() {
     if (!email.trim()) { setError(t("auth.emailRequired", lang)); return; }
-    if (password.length < 10) { setError(t("auth.passwordTooShort", lang)); return; }
+    const policy = checkPassword(password, { email, username, firstName, lastName });
+    if (!policy.ok) { setError(t(passwordRuleMessageKey(policy.firstFailed!), lang)); return; }
     if (joinCodeRequired && !joinCode.trim()) { setError(t("auth.joinCodeFailed", lang)); return; }
     setLoading(true); setError(""); setMessage("");
     try {
@@ -55,6 +58,7 @@ export default function RegistrierenScreen() {
         <AuthField label={t("auth.joinCodeLabel", lang)} value={joinCode} onChangeText={setJoinCode} theme={theme} icon="key-outline" autoComplete="username" />
       )}
       <AuthField label={t("auth.password", lang)} value={password} onChangeText={setPassword} theme={theme} icon="lock-closed-outline" password visible={visible} onToggleVisibility={() => setVisible((v) => !v)} onSubmitEditing={submit} autoComplete="new-password" />
+      <PasswordRequirements password={password} context={{ email, username, firstName, lastName }} theme={theme} lang={lang} />
       {message ? <AuthMessage text={message} theme={theme} /> : null}
       {error ? <AuthMessage text={error} error theme={theme} /> : null}
       <AuthButton label={t("auth.registerButton", lang)} loading={loading} disabled={!email || !password} onPress={submit} theme={theme} />

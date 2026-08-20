@@ -417,8 +417,8 @@ export default function LoginScreen() {
                   accessibilityLabel={t("auth.username", lang)}
                   style={[styles.localInput, { color: theme.text, borderColor: theme.inputBorder, backgroundColor: theme.inputBackground }]}
                 />
+                <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>{t("auth.password", lang)}</Text>
                 <View style={styles.passwordRow}>
-                  <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>{t("auth.password", lang)}</Text>
                   <TextInput
                     value={password}
                     onChangeText={setPassword}
