@@ -45,11 +45,18 @@ Thumbs.db
 .cache/
 .local/
 artifacts/api-server/.env
+artifacts/api-server/.env.e2e
 artifacts/api-server/.env.bak*
 ecosystem.config.js
 
 # Vom Einrichtungsassistenten geschriebene Anmeldewege (kann Client-Secrets enthalten)
 ops/install/auth-providers.json
+artifacts/api-server/auth-providers.json
+artifacts/api-server/logs/
+artifacts/logs/
+artifacts/paramedic-app/dist.bak-*
+artifacts/paramedic-app/dist-e2e/
+artifacts/api-server/auth-providers.json.bak
 
 # Interne Notizen und Planungsunterlagen
 docs/superpowers/
@@ -74,3 +81,6 @@ graphify-out/
 
 # Sensible Bankdaten — niemals committen
 ops/ssd-daten/
+ops/e2e/.certs/
+kampagne_*/
+schulleitungen_leads.csv

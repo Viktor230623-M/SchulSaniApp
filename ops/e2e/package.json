@@ -1,0 +1,8 @@
+{
+  "name": "@workspace/e2e",
+  "version": "0.0.0",
+  "private": true,
+  "devDependencies": {
+    "playwright": "1.62.1"
+  }
+}

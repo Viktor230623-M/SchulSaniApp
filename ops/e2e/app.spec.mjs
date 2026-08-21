@@ -6,8 +6,11 @@ import { createRequire } from "node:module";
 import fs from "node:fs";
 import path from "node:path";
 
+// Playwright ist eine Dependency dieses Workspace-Pakets (ops/e2e/package.json)
+// und wird ueber die normale Node-Aufloesung gefunden — kein maschinen-
+// spezifischer Pfad mehr.
 const require = createRequire(import.meta.url);
-const { chromium } = require("/Users/viktorgnjatic/Projects/website-ba-barbershop/node_modules/playwright");
+const { chromium } = require("playwright");
 
 const BASE = "https://localhost:8443";
 const MAIL_LOG = "/tmp/schulsani-e2e/mail.log";
@@ -15,7 +18,9 @@ const SHOTS = "/tmp/schulsani-e2e/shots";
 fs.mkdirSync(SHOTS, { recursive: true });
 
 const EMAIL = `e2e-${Date.now()}@schulsani.local`;
-const PASSWORD = "e2e-passwort-12345";
+// Muss der Passwortrichtlinie der App genuegen (10+ Zeichen, Gross- und
+// Kleinbuchstaben, Ziffer, kein haeufiges Wort, kein Personenbezug):
+const PASSWORD = "SaniE2e-4711!";
 const FIRST = "Erika";
 const LAST = "Testkind";
 const JOIN_CODE = "demo123";
@@ -69,7 +74,10 @@ async function fillField(page, label, value) {
 async function readVerificationToken() {
   for (let i = 0; i < 40; i++) {
     if (fs.existsSync(MAIL_LOG)) {
-      const content = fs.readFileSync(MAIL_LOG, "utf8");
+      let content = fs.readFileSync(MAIL_LOG, "utf8");
+      // Quoted-Printable dekodieren: weiche Zeilenumbrueche (= am Zeilenende)
+      // entfernen, dann =3D zu = aufloesen. Sonst kaeme "3D" als Token-Praefix an.
+      content = content.replace(/=\r?\n/g, "").replace(/=3D/g, "=");
       const m = content.match(/token=([A-Za-z0-9_-]+)/);
       if (m) return m[1];
     }
@@ -87,7 +95,8 @@ async function main() {
   try {
     // 1. Navigate to app
     console.log("Step 1: Navigating to app...");
-    await page.goto(BASE + "/", { waitUntil: "networkidle" });
+    // networkidle feuert nie: Push- und Status-Polling halten Verbindungen offen.
+    await page.goto(BASE + "/", { waitUntil: "load" });
     await page.waitForTimeout(3000);
     await snap(page, "01-start");
 
@@ -111,17 +120,18 @@ async function main() {
 
       // Test each tab
       const tabs = [
-        { name: "Einsatz", text: "Einsatz" },
-        { name: "Benachrichtigungen", text: "Meldung" },
+        { name: "Einsätze", text: "Einsätze" },
+        { name: "Meldungen", text: "Meldungen" },
         { name: "Dienst", text: "Dienst" },
-        { name: "Abwesenheit", text: "Abwesenheit" },
-        { name: "News", text: "News" },
+        { name: "Abwesenheit", text: "Abwesenheiten" },
+        { name: "News", text: "Neuigkeiten" },
         { name: "Mehr", text: "Mehr" },
       ];
 
       for (const tab of tabs) {
         try {
-          const btn = page.locator("button").filter({ hasText: tab.text }).first();
+          // RN-Web rendert Pressables als div[role=button], nicht als <button>.
+          const btn = page.getByRole("button", { name: new RegExp(tab.text, "i") }).first();
           if (await btn.isVisible({ timeout: 3000 })) {
             await btn.click();
             await page.waitForTimeout(1000);
@@ -138,7 +148,7 @@ async function main() {
       // Test settings / account deletion
       console.log("Testing settings and account deletion...");
       try {
-        const mehrBtn = page.locator("button").filter({ hasText: "Mehr" }).first();
+        const mehrBtn = page.getByRole("button", { name: /Mehr/i }).first();
         if (await mehrBtn.isVisible({ timeout: 3000 })) {
           await mehrBtn.click();
           await page.waitForTimeout(1000);
@@ -195,13 +205,15 @@ async function main() {
       await fillField(page, "Nachname", LAST);
       await snap(page, "03-register-filled");
 
-      // Look for join code field
+      // Join-Code-Feld ist bedingt und erscheint erst, nachdem die App die
+      // Instanz-Parameter geladen hat — also kurz warten, dann fuellen.
       try {
-        await fillField(page, "Zugangscode", JOIN_CODE);
+        const codeField = page.getByLabel("Schul-Zugangscode").first()
+          .or(page.getByPlaceholder("Schul-Zugangscode").first());
+        await codeField.waitFor({ timeout: 8000 });
+        await codeField.fill(JOIN_CODE);
       } catch {
-        try {
-          await fillField(page, "Schul-Zugangscode", JOIN_CODE);
-        } catch {}
+        console.log("Kein Schul-Zugangscode-Feld sichtbar");
       }
 
       // Submit
@@ -228,14 +240,16 @@ async function main() {
       record("E-Mail verifiziert", verifyStatus === 200, `HTTP ${verifyStatus}`);
 
       // Step 4: Login
-      await page.goto(BASE + "/login", { waitUntil: "networkidle" });
+      await page.goto(BASE + "/login", { waitUntil: "load" });
       await page.waitForTimeout(1000);
       await fillField(page, "Benutzername", EMAIL);
       await fillField(page, "Passwort", PASSWORD);
       await snap(page, "05-login-filled");
-      await page.getByText("Anmelden", { exact: true }).first().click();
+      await page.getByRole("button", { name: "Anmelden" }).first().click();
       await page.waitForTimeout(3000);
       await snap(page, "06-after-login");
+      console.log("URL after login:", page.url());
+      console.log("Body after login:", (await page.innerText("body")).slice(0, 300).replace(/\n+/g, " | "));
       record("Login", true);
 
       // Step 5: Confirm name if needed
@@ -255,9 +269,9 @@ async function main() {
       record("In der App (Tabs) angekommen", true);
 
       // Step 6: Test tabs
-      for (const tab of ["Einsatz", "Benachrichtigungen", "Dienst", "Abwesenheit"]) {
+      for (const tab of ["Einsätze", "Meldungen", "Dienst", "Abwesenheiten"]) {
         try {
-          const btn = page.locator("button").filter({ hasText: tab }).first();
+          const btn = page.getByRole("button", { name: new RegExp(tab, "i") }).first();
           if (await btn.isVisible({ timeout: 3000 })) {
             await btn.click();
             await page.waitForTimeout(800);
@@ -273,7 +287,7 @@ async function main() {
 
       // Step 7: Account deletion
       try {
-        await page.locator("button").filter({ hasText: "Mehr" }).first().click();
+        await page.getByRole("button", { name: /Mehr/i }).first().click();
         await page.waitForTimeout(800);
         await page.getByText("Einstellungen").first().click();
         await page.waitForTimeout(1000);

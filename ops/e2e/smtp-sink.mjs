@@ -26,6 +26,9 @@ const server = net.createServer((socket) => {
       if (inData) {
         if (line === ".") {
           inData = false;
+          // Das Log-Verzeichnis kann zwischen den Laeufen entfernt worden
+          // sein (Test-Setup raeumt auf) — der Sink darf daran nicht sterben.
+          fs.mkdirSync(new URL(".", `file://${LOG}`).pathname, { recursive: true });
           fs.appendFileSync(LOG, `\n=====BEGIN MESSAGE=====\n${data}=====END MESSAGE=====\n`);
           data = "";
           socket.write("250 OK: queued\r\n");
