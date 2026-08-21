@@ -22,6 +22,8 @@ und Dokumentation des Schulsanitätsdienstes einer Schule:
 - Dokumentation von Einsätzen in Einsatzprotokollen (einschließlich
   Gesundheitsdaten, vgl. Ziffer 5);
 - Abwesenheitsverwaltung (LOA) und schulinterne Nachrichten;
+- Organisation von Treffen des Schulsanitätsdienstes über Nachrichten mit
+  Terminfunktion und Teilnahme-Anmeldung (wer kommt, wann angemeldet);
 - PDF-Export eingereichter Protokolle und Übergabe an die Schule.
 
 **Betriebsmodelle:**
@@ -106,6 +108,9 @@ betroffene Person der Verarbeitung).
 - Einsatz-/Schichtort als Freitext (z. B. „Raum 12“, „Pausenhof“)
 - Alter der Patient:innen als Ganzzahl (kein Geburtsdatum)
 - Änderungs- und Zugriffsprotokolle (wer/wann/welche Aktion; Aufbewahrung 12 Monate)
+- Meeting-Teilnahmen: Name und Anmeldezeitpunkt zu als Treffen markierten
+  Nachrichten (Anmeldungen nur für Schulangehörige sichtbar; automatisiert
+  gelöscht 90 Tage nach Meeting-Ende, bei Kontolöschung sofort)
 
 ---
 

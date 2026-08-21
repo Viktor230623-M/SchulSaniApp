@@ -17,6 +17,7 @@ Diese Anlage konkretisiert § 2 und § 3 des AVV. Sie ist bei jeder
 | **Einsatzprotokolle — Metadaten** | Status (Entwurf/eingereicht), Zeitstempel, Einsatzbezug, Autor:in/Responder (Kennungen), Ort | ja | Klartext (Metadaten) |
 | **Einsatzprotokolle — Inhalte (Gesundheitsdaten)** | Patientendaten (Name, Klasse, Alter, Notfallkontakt), Beschwerdebild/Beschreibung, Kategorie, Verletzungsstellen, Vitalzeichen (Puls, SpO2, Atemfrequenz, Blutdruck, AVPU, Schmerz), Maßnahmen, Behandlungsnotizen, Ergebnis, Nachträge, Zeugen | ja | **Art. 9 DSGVO**; nur als Chiffrat (E2E-Verschlüsselung, Anlage 1 Ziffer 1.1) |
 | **Benachrichtigungen** | In-App-Benachrichtigungen (Titel, Text, Typ), Push-Signale (nur technische Bezeichner) | ja | Push-Payloads inhaltsleer |
+| **Meeting-Teilnahmen (Treffen)** | Bei als Treffen markierten Nachrichten: Name und Zeitpunkt der An-/Abmeldung je Teilnehmer:in | ja | Nur für die Organisation des Termins; Liste nur für Angehörige der Schule sichtbar; Anmeldungen automatisiert gelöscht (Ziffer 5) |
 | **Geräte-Tokens** | FCM-/APNs-Token, Web-Push-Subscription, Plattform, Gerätekennung | ja | Klartext (Metadaten); gelöscht bei Abmeldung |
 | **Protokoll- und Änderungsdaten** | Zugriffsprotokolle (Wer/wann/welches Protokoll), Rollen- und Berechtigungsänderungen, Profilkorrekturen, Kontoverknüpfungen | ja | Klartext; Aufbewahrung 12 Monate |
 | **Technische Daten** | IP-Adressen, Sitzungsdaten (nur Hashes), Log-Daten | ja (IP) | Sitzungstokens nur als Hash gespeichert; IP nicht in Sitzungsdaten |
@@ -60,6 +61,7 @@ ist erforderlich (vgl. AVV § 8 Abs. 3).
 | Zugriffs-/Rollen-/Profil-/Identitäts-Protokolle | 12 Monate | automatisierter Job |
 | Abwesenheitsanträge, Einsätze | bis zur Löschung gemäß Schulvorgabe | Löschung durch Verwalter:innen |
 | Geräte-Tokens | bis zur Abmeldung des Geräts; ungültige Tokens unverzüglich | Löschung bei Abmeldung/Fehlercode |
+| Meeting-Teilnahmen (Treffen) | 90 Tage nach Meeting-Ende (ohne Endzeit: nach Beginn); bei Kontolöschung sofort | automatisierter Job; Anonymisierung im Kontolöschungsvorgang |
 | Sitzungen | bis zum Ablauf der Sitzungsfrist (Sliding + absolut) | automatisierte Löschung |
 | Nutzerkonten | bis zur Löschung durch Verwalter:innen (Löschung kaskadiert abhängige Daten) | Löschfunktion |
 
