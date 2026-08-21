@@ -87,6 +87,11 @@ async function readVerificationToken() {
 }
 
 async function main() {
+  // Frischer Lauf: alte Mails loeschen. readVerificationToken liest sonst den
+  // ersten Treffer aus einem frueheren Lauf und verifiziert das falsche Konto
+  // — der neue Login schlaegt dann mit "E-Mail nicht bestaetigt" fehl.
+  if (fs.existsSync(MAIL_LOG)) fs.rmSync(MAIL_LOG);
+
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ ignoreHTTPSErrors: true, viewport: { width: 390, height: 844 } });
   const page = await context.newPage();
@@ -188,12 +193,26 @@ async function main() {
       console.log("On login/start/register page. Running full registration flow...");
 
       // Step 2: Navigate to register
-      if (isOnStart) {
-        // Click "Konto erstellen" or similar
+      // The user can be on /start (school picker), /login (direct provider
+      // login), or /registrieren. Navigate to the registration form from any
+      // of these entry points.
+      if (isOnStart || isOnLogin) {
         const registerLink = page.getByText("Konto erstellen", { exact: true }).first()
           .or(page.getByText("Registrieren", { exact: true }).first());
-        await registerLink.click({ timeout: 5000 });
-        await page.waitForTimeout(1000);
+        if (await registerLink.isVisible({ timeout: 3000 }).catch(() => false)) {
+          await registerLink.click({ timeout: 5000 });
+        } else {
+          // May need to select the email provider first on multi-provider setups
+          const emailProvider = page.getByText("E-Mail", { exact: true }).first();
+          if (await emailProvider.isVisible({ timeout: 2000 }).catch(() => false)) {
+            await emailProvider.click({ timeout: 5000 });
+            await page.waitForTimeout(1500);
+            const registerLink2 = page.getByText("Konto erstellen", { exact: true }).first()
+              .or(page.getByText("Registrieren", { exact: true }).first());
+            await registerLink2.click({ timeout: 5000 });
+          }
+        }
+        await page.waitForTimeout(1500);
       }
 
       await snap(page, "02-register");
@@ -228,29 +247,39 @@ async function main() {
       const token = await readVerificationToken();
       record("Verifizierungs-Mail erhalten", true, `token=${token.slice(0, 8)}…`);
 
-      // Verify via API
-      const verifyStatus = await page.evaluate(async (tok) => {
-        const resp = await fetch("/api/auth/local/verify", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ token: tok }),
-        });
-        return resp.status;
-      }, token);
-      record("E-Mail verifiziert", verifyStatus === 200, `HTTP ${verifyStatus}`);
+      // Verify via API — use page.request (Playwright's built-in HTTP client)
+      // instead of page.evaluate(fetch), so cookies and CSRF headers are
+      // handled automatically.
+      const verifyResp = await page.request.post(`${BASE}/api/auth/local/verify`, {
+        data: { token },
+      });
+      record("E-Mail verifiziert", verifyResp.ok(), `HTTP ${verifyResp.status()}`);
 
       // Step 4: Login
       await page.goto(BASE + "/login", { waitUntil: "load" });
-      await page.waitForTimeout(1000);
+      // Wait for the provider auto-selection and form to render.
+      // The login page loads schools, then providers, then auto-selects the
+      // first (and only) provider — the username/password fields render after.
+      await page.waitForTimeout(4000);
       await fillField(page, "Benutzername", EMAIL);
       await fillField(page, "Passwort", PASSWORD);
       await snap(page, "05-login-filled");
       await page.getByRole("button", { name: "Anmelden" }).first().click();
       await page.waitForTimeout(3000);
       await snap(page, "06-after-login");
+      const afterLogin = await page.innerText("body").catch(() => "");
       console.log("URL after login:", page.url());
-      console.log("Body after login:", (await page.innerText("body")).slice(0, 300).replace(/\n+/g, " | "));
-      record("Login", true);
+      console.log("Body after login:", afterLogin.slice(0, 300).replace(/\n+/g, " | "));
+      // Echte Verifikation: Nach erfolgreichem Login darf die Anmelde-Seite
+      // nicht mehr stehen bleiben. Ein frisches Konto landet beim Namens-Dialog,
+      // ein bestaetigtes direkt in den Tabs.
+      const loginOk =
+        !afterLogin.includes("Bitte bestaetige") &&
+        !afterLogin.includes("wartet auf Freischaltung") &&
+        !afterLogin.includes("fehlgeschlagen") &&
+        (afterLogin.includes("Bestätigen") || afterLogin.includes("Neuigkeiten") || afterLogin.includes("Einsatz") || afterLogin.includes("Dienst"));
+      record("Login", loginOk, loginOk ? "" : afterLogin.slice(0, 120).replace(/\n+/g, " | "));
+      if (!loginOk) return;
 
       // Step 5: Confirm name if needed
       const confirmVisible = await page.getByText("Bestätigen", { exact: true }).first().isVisible({ timeout: 3000 }).catch(() => false);
@@ -266,7 +295,10 @@ async function main() {
       }
 
       await snap(page, "08-tabs");
-      record("In der App (Tabs) angekommen", true);
+      const inAppText = await page.innerText("body").catch(() => "");
+      const tabsVisible = ["Neuigkeiten", "Einsatz", "Dienst", "Abwesenheit"].some((s) => inAppText.includes(s));
+      record("In der App (Tabs) angekommen", tabsVisible, tabsVisible ? "" : "keine Tabs sichtbar");
+      if (!tabsVisible) return;
 
       // Step 6: Test tabs
       for (const tab of ["Einsätze", "Meldungen", "Dienst", "Abwesenheiten"]) {
@@ -332,21 +364,49 @@ async function main() {
 
       // Step 7: Account deletion
       try {
-        await page.getByRole("button", { name: /Mehr/i }).first().click();
+        console.log("  [delete] Suche Mehr-Button...");
+        const mehrBtn = page.getByRole("button", { name: /Mehr/i }).first();
+        await mehrBtn.click();
         await page.waitForTimeout(800);
-        await page.getByText("Einstellungen").first().click();
+        console.log("  [delete] Body in Einstellungen:", (await page.innerText("body")).slice(0, 200).replace(/\n+/g, " | "));
+        const settingsText = page.getByText("Einstellungen").first();
+        await settingsText.click();
         await page.waitForTimeout(1000);
         const del = page.getByText("Konto löschen", { exact: true });
         await del.first().scrollIntoViewIfNeeded();
         await snap(page, "10-delete-before");
+
+        // RN-Web Alert.alert = window.confirm. Playwright dismisses without a
+        // handler. Accept the confirmation dialog so the code proceeds.
+        let dialogAccepted = false;
+        page.once("dialog", async (dialog) => {
+          console.log(`  [delete] Dialog: ${dialog.message().slice(0, 80)}`);
+          await dialog.accept();
+          dialogAccepted = true;
+        });
         await del.first().click();
-        await page.waitForTimeout(500);
+        await page.waitForTimeout(1500);
+        console.log("  [delete] Dialog accepted:", dialogAccepted);
         await snap(page, "11-delete-dialog");
-        const confirm = page.getByText("Konto löschen", { exact: true });
-        await confirm.last().click();
+        console.log("  [delete] Body nach Klick:", (await page.innerText("body")).slice(0, 300).replace(/\n+/g, " | "));
+
+        // Lokale Konten landen nach der Bestaetigung auf dem Passwort-Screen.
+        const passwordField = page.getByLabel("Aktuelles Passwort").first()
+          .or(page.getByPlaceholder("Aktuelles Passwort").first());
+        if (await passwordField.isVisible({ timeout: 4000 }).catch(() => false)) {
+          await passwordField.fill(PASSWORD);
+          const confirmBtn = page.getByText("Konto endgültig löschen", { exact: true });
+          await confirmBtn.click({ timeout: 4000 });
+        } else {
+          // OIDC/Apple ohne Passwort: direkt loeschen.
+          const confirmBtn = page.getByText("Konto löschen", { exact: true });
+          await confirmBtn.last().click();
+        }
         await page.waitForTimeout(3000);
         await snap(page, "12-after-delete");
-        record("Konto gelöscht", true);
+        console.log("  [delete] Body nach Loeschung:", (await page.innerText("body")).slice(0, 300).replace(/\n+/g, " | "));
+        const onLogin = await page.getByText("Anmelden", { exact: true }).first().isVisible({ timeout: 8000 }).catch(() => false);
+        record("Konto gelöscht", onLogin, onLogin ? "" : "Login-Seite nach Loeschung nicht erreicht");
       } catch (e) {
         record("Konto löschen", false, String(e.message).slice(0, 80));
       }
