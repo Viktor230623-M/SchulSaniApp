@@ -17,7 +17,11 @@ describe.skipIf(!DB_URL)("Mandantentrennung", () => {
   let db: typeof import("@workspace/db").db;
   let signToken: (payload: { userId: string; role: string; passwordVersion: number }) => string;
   let createNotifications: typeof import("./services/notifications").createNotificationForMultipleUsers;
-  let ids: { aAdmin: string; aSani: string; bAdmin: string; reportA: string; reportB: string };
+  let ids: {
+    aAdmin: string; aSani: string; bAdmin: string;
+    reportA: string; reportB: string;
+    newsB: string; exportB: string; missionB: string; shiftB: string; roleB: string;
+  };
 
   beforeAll(async () => {
     process.env["DATABASE_URL"] = DB_URL;
@@ -40,7 +44,11 @@ describe.skipIf(!DB_URL)("Mandantentrennung", () => {
     // Daten der anderen Integrationstest-Datei wegwerfen.
     await aufraeumen();
 
-    ids = { aAdmin: "u-a-admin", aSani: "u-a-sani", bAdmin: "u-b-admin", reportA: "r-a", reportB: "r-b" };
+    ids = {
+      aAdmin: "u-a-admin", aSani: "u-a-sani", bAdmin: "u-b-admin",
+      reportA: "r-a", reportB: "r-b",
+      newsB: "news-b", exportB: "export-b", missionB: "mission-b", shiftB: "shift-b", roleB: "role-b",
+    };
     const jetzt = new Date();
 
     // Zwei Schulen, jeweils mit freigeschaltetem Verwalter.
@@ -90,6 +98,36 @@ describe.skipIf(!DB_URL)("Mandantentrennung", () => {
         token: "fcm-token-b", platform: "android", createdAt: jetzt, updatedAt: jetzt,
       },
     ]);
+
+    // Fremde Ressourcen der Schule B: News (Meeting mit Anmeldung), Export,
+    // Einsatz, Schicht, Rolle und Schluesselmaterial.
+    const inZukunft = new Date(jetzt.getTime() + 24 * 60 * 60 * 1000);
+    await db.insert(dbMod.newsTable).values([{
+      id: ids.newsB, schoolId: "schule-b", title: "B-Treffen", summary: "Treffen B", content: "Inhalt B",
+      category: "announcement", status: "approved", publishedAt: jetzt,
+      author: "Bernd Betreiber", authorId: ids.bAdmin,
+      meetingAt: inZukunft, meetingNotifyOnSignup: true,
+      meetingSignupsJson: [{ userId: ids.bAdmin, name: "Bernd Betreiber", signedAt: jetzt.toISOString() }],
+    }]);
+    await db.insert(dbMod.schoolExportsTable).values([{
+      id: ids.exportB, schoolId: "schule-b", toAt: jetzt, reportCount: 1, status: "ready", createdAt: jetzt,
+    }]);
+    await db.insert(dbMod.missionsTable).values([{
+      id: ids.missionB, schoolId: "schule-b", title: "Einsatz B", description: "Beschreibung", location: "Aula",
+      priority: "medium", status: "pending", requestedAt: jetzt, scheduledFor: jetzt,
+    }]);
+    await db.insert(dbMod.shiftsTable).values([{
+      id: ids.shiftB, schoolId: "schule-b", title: "Schicht B", startsAt: jetzt, endsAt: inZukunft,
+      createdBy: ids.bAdmin, createdAt: jetzt, updatedAt: jetzt,
+    }]);
+    await db.insert(dbMod.rolesTable).values([{
+      id: ids.roleB, schoolId: "schule-b", key: "rolle-b", displayName: "Rolle B",
+      sortOrder: 0, isSystem: false, createdAt: jetzt, updatedAt: jetzt,
+    }]);
+    await db.insert(dbMod.userCryptoKeysTable).values([{
+      userId: ids.bAdmin, publicKey: "pub-b", encryptedPrivateKey: "priv-b",
+      saltEnc: "salt-b", keyVersion: 1, createdAt: jetzt, updatedAt: jetzt,
+    }]);
   });
 
   afterAll(async () => {
@@ -106,6 +144,13 @@ describe.skipIf(!DB_URL)("Mandantentrennung", () => {
       DELETE FROM shift_members WHERE user_id IN ('u-a-admin', 'u-a-sani', 'u-b-admin');
       DELETE FROM notifications WHERE user_id IN ('u-a-admin', 'u-a-sani', 'u-b-admin');
       DELETE FROM device_tokens WHERE user_id IN ('u-a-admin', 'u-a-sani', 'u-b-admin');
+      DELETE FROM news_reads WHERE news_id IN ('news-b');
+      DELETE FROM school_exports WHERE school_id IN ('schule-a', 'schule-b');
+      DELETE FROM shifts WHERE school_id IN ('schule-a', 'schule-b');
+      DELETE FROM missions WHERE school_id IN ('schule-a', 'schule-b');
+      DELETE FROM roles WHERE school_id IN ('schule-a', 'schule-b');
+      DELETE FROM news WHERE school_id IN ('schule-a', 'schule-b');
+      DELETE FROM user_crypto_keys WHERE user_id IN ('u-a-admin', 'u-a-sani', 'u-b-admin');
       DELETE FROM incident_reports WHERE school_id IN ('schule-a', 'schule-b');
       DELETE FROM sessions WHERE user_id IN ('u-a-admin', 'u-a-sani', 'u-b-admin');
       DELETE FROM user_identities WHERE user_id IN ('u-a-admin', 'u-a-sani', 'u-b-admin');
@@ -214,5 +259,59 @@ describe.skipIf(!DB_URL)("Mandantentrennung", () => {
       .from(dbMod.notificationsTable)
       .where(sql`school_id = 'schule-a' AND user_id = 'u-a-admin' AND type = 'high_priority_alert'`);
     expect(ownRows.length).toBe(1);
+  });
+
+  it("Schluesselliste der Schule zeigt keine fremden Schluessel", async () => {
+    const res = await request(app)
+      .get("/api/crypto/keys")
+      .set("Authorization", `Bearer ${token(ids.aAdmin, "admin")}`);
+    expect(res.status).toBe(200);
+    const keys = res.body as { keys: { userId: string }[] };
+    expect(keys.keys.map((k) => k.userId)).not.toContain(ids.bAdmin);
+  });
+
+  it("fremder Export ist weder gelistet noch abrufbar", async () => {
+    const res = await request(app)
+      .get("/api/exports")
+      .set("Authorization", `Bearer ${token(ids.aAdmin, "admin")}`);
+    expect(res.status).toBe(200);
+    const exports = res.body as { exports: { id: string }[] };
+    expect(exports.exports.map((e) => e.id)).not.toContain(ids.exportB);
+
+    const bundle = await request(app)
+      .get(`/api/exports/${ids.exportB}/bundle`)
+      .set("Authorization", `Bearer ${token(ids.aAdmin, "admin")}`);
+    expect(bundle.status).toBe(404);
+  });
+
+  it("fremdes Meeting ist unsichtbar, Anmeldung schlaegt fehl", async () => {
+    const res = await request(app)
+      .get("/api/news")
+      .set("Authorization", `Bearer ${token(ids.aAdmin, "admin")}`);
+    expect(res.status).toBe(200);
+    const news = res.body as { id: string }[];
+    expect(news.map((n) => n.id)).not.toContain(ids.newsB);
+
+    const signup = await request(app)
+      .post(`/api/news/${ids.newsB}/signup`)
+      .set("Authorization", `Bearer ${token(ids.aAdmin, "admin")}`);
+    expect(signup.status).toBe(404);
+  });
+
+  it("fremder Einsatz, fremde Schicht und fremde Rolle sind unsichtbar", async () => {
+    const missions = await request(app)
+      .get("/api/missions")
+      .set("Authorization", `Bearer ${token(ids.aAdmin, "admin")}`);
+    expect((missions.body as { id: string }[]).map((m) => m.id)).not.toContain(ids.missionB);
+
+    const shifts = await request(app)
+      .get("/api/roster")
+      .set("Authorization", `Bearer ${token(ids.aAdmin, "admin")}`);
+    expect((shifts.body as { id: string }[]).map((s) => s.id)).not.toContain(ids.shiftB);
+
+    const roles = await request(app)
+      .get("/api/roles")
+      .set("Authorization", `Bearer ${token(ids.aAdmin, "admin")}`);
+    expect((roles.body as { id: string }[]).map((r) => r.id)).not.toContain(ids.roleB);
   });
 });
