@@ -339,7 +339,7 @@ async function getRoleForUser(groups: string[], providerKey: string, schoolId: s
 // Baut die Nutzerprojektion, wie sie sowohl Login als auch Sitzungswiederherstellung
 // in der Antwort zurueckgeben. Die Rolle wird hier nicht vorbelegt — das bleibt
 // Sache der Aufrufer, da Login und Session unterschiedliche Standardwerte nutzen.
-async function buildUserResponse(user: { id: string; firstName: string | null; lastName: string | null; email: string | null; username?: string | null; role: string; schoolId: string | null; profileConfirmedAt: Date | null; mustChangePassword?: boolean }) {
+async function buildUserResponse(user: { id: string; firstName: string | null; lastName: string | null; email: string | null; username?: string | null; role: string; schoolId: string | null; profileConfirmedAt: Date | null; mustChangePassword?: boolean; hasPassword?: boolean }) {
   // Die Rechte kommen mit der Anmeldeantwort, damit der Client nicht mehr aus
   // dem Rollennamen ableiten muss, was sichtbar ist. Bereich ist die Schule
   // der Nutzerzeile, nicht der globale Bereich -- sonst ueberschreibt eine
@@ -350,6 +350,9 @@ async function buildUserResponse(user: { id: string; firstName: string | null; l
       id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email, username: user.username ?? null, role: user.role,
       profileConfirmedAt: user.profileConfirmedAt ? user.profileConfirmedAt.toISOString() : null,
       mustChangePassword: user.mustChangePassword ?? false,
+      // Lokale Konten haben ein Passwort; OIDC-/Apple-Konten keins. Der Client
+      // braucht das, um bei der Kontoloeschung nach dem Passwort zu fragen.
+      hasPassword: user.hasPassword ?? false,
     },
     permissions,
     isTealUnlocked: user.role === "owner",
@@ -479,6 +482,7 @@ router.post("/login", authLimiter, async (req, res) => {
         schoolId: user.schoolId,
         profileConfirmedAt: user.profileConfirmedAt,
         mustChangePassword: result.mustChangePassword,
+        hasPassword: !!user.passwordHash,
       })),
     });
   } catch {
@@ -828,7 +832,7 @@ router.post("/password/change", passwordChangeLimiter, requireAuthForPasswordCha
   res.cookie(SESSION_COOKIE, sessionToken, sessionCookieOptions());
   invalidateUserCache(req.user!.userId);
   const token = jwt.sign({ userId: req.user!.userId, role: user.role, passwordVersion: user.passwordVersion + 1, authTime: currentAuthTime() }, JWT_SECRET, { expiresIn: "2h" });
-  res.json({ token, ...(await buildUserResponse({ id: req.user!.userId, ...user, profileConfirmedAt: user.profileConfirmedAt, mustChangePassword: false })) });
+  res.json({ token, ...(await buildUserResponse({ id: req.user!.userId, ...user, profileConfirmedAt: user.profileConfirmedAt, mustChangePassword: false, hasPassword: !!user.passwordHash })) });
 });
 
 router.post("/native-session", sessionLimiter, async (req, res) => {
@@ -894,6 +898,7 @@ router.post("/native-session", sessionLimiter, async (req, res) => {
       schoolId: user.schoolId,
       profileConfirmedAt: user.profileConfirmedAt,
       mustChangePassword: user.mustChangePassword,
+      hasPassword: !!user.passwordHash,
     })),
   });
 });
@@ -951,6 +956,27 @@ router.post("/account/delete", authLimiter, requireAuth, async (req: AuthRequest
 
   const userId = req.user!.userId;
   const schoolId = schoolIdOf(req);
+  const proof = req.body?.proof;
+
+  // Kontoloeschung ist endgueltig: Wer sein Konto loeschen will, muss sein
+  // Passwort kennen (lokale Konten). OIDC-/Apple-Konten tragen keinen Hash;
+  // dort gilt die frische Sitzung allein. Der Check laeuft vor der Transaktion,
+  // damit ein falsches Passwort nichts in Gang setzt.
+  const [candidate] = await db
+    .select({ passwordHash: usersTable.passwordHash })
+    .from(usersTable)
+    .where(and(eq(usersTable.id, userId), eq(usersTable.schoolId, schoolId)))
+    .limit(1);
+  if (candidate?.passwordHash) {
+    if (!validProof(proof)) {
+      res.status(400).json({ error: "Passwort ist ungueltig.", code: "PASSWORD_REQUIRED" });
+      return;
+    }
+    if (!verifyLoginProof(proof, candidate.passwordHash)) {
+      res.status(403).json({ error: "Das Passwort ist falsch. Dein Konto bleibt bestehen.", code: "PASSWORD_WRONG" });
+      return;
+    }
+  }
 
   await db.transaction(async (tx) => {
     const [user] = await tx
@@ -1084,7 +1110,7 @@ router.patch("/profile", profileLimiter, requireAuthAllowUnconfirmedProfile, asy
       role: updated!.role,
       schoolId: updated!.schoolId,
       profileConfirmedAt: updated!.profileConfirmedAt,
-
+      hasPassword: !!updated!.passwordHash,
     }),
   );
 });
@@ -1149,6 +1175,7 @@ router.get("/session", sessionLimiter, async (req, res) => {
       schoolId: user.schoolId,
       profileConfirmedAt: user.profileConfirmedAt,
       mustChangePassword: user.mustChangePassword,
+      hasPassword: !!user.passwordHash,
     })),
   });
 });
@@ -1827,6 +1854,7 @@ router.post("/apple/native/complete", authLimiter, async (req, res) => {
       passwordVersion: usersTable.passwordVersion,
       profileConfirmedAt: usersTable.profileConfirmedAt,
       mustChangePassword: usersTable.mustChangePassword,
+      passwordHash: usersTable.passwordHash,
     }).from(usersTable).where(eq(usersTable.id, account.userId)).limit(1);
     if (!user) {
       res.status(500).json({ error: "Anmeldung fehlgeschlagen." });
@@ -1853,6 +1881,7 @@ router.post("/apple/native/complete", authLimiter, async (req, res) => {
         schoolId,
         profileConfirmedAt: user.profileConfirmedAt,
         mustChangePassword: user.mustChangePassword,
+        hasPassword: !!user.passwordHash,
       })),
     });
   } catch (err) {
@@ -1930,6 +1959,7 @@ router.post("/join-code", authLimiter, async (req, res) => {
       profileConfirmedAt: usersTable.profileConfirmedAt,
       mustChangePassword: usersTable.mustChangePassword,
       passwordVersion: usersTable.passwordVersion,
+      passwordHash: usersTable.passwordHash,
     })
     .from(usersTable)
     .where(eq(usersTable.id, entry.userId))
@@ -1958,6 +1988,7 @@ router.post("/join-code", authLimiter, async (req, res) => {
       schoolId: user.schoolId,
       profileConfirmedAt: user.profileConfirmedAt,
       mustChangePassword: user.mustChangePassword,
+      hasPassword: !!user.passwordHash,
     })),
   });
 });

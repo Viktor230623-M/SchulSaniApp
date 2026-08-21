@@ -22,6 +22,8 @@ export interface User {
   /** `null`: Name noch nicht bestaetigt, Sperre aktiv. Zeitstempel: bestaetigt. */
   profileConfirmedAt: string | null;
   mustChangePassword?: boolean;
+  /** Lokales Konto (Passwort vorhanden) vs. OIDC/Apple (kein Passwort). */
+  hasPassword?: boolean;
   createdAt: string;
   updatedAt: string;
 }

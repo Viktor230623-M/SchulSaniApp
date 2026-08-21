@@ -19,6 +19,7 @@ import * as ImagePicker from "expo-image-picker";
 import Constants from "expo-constants";
 import { IMPRESSUM_URL, PRIVACY_URL, SCHOOL_NAME } from "@/constants/appConfig";
 import { router, useLocalSearchParams } from "expo-router";
+import type { Href } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -409,8 +410,15 @@ export default function SettingsScreen() {
     });
     if (!confirmed) return;
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    // Lokale Konten bestaetigen ihr Passwort auf einem eigenen Screen; die
+    // Loeschung selbst passiert dort. OIDC-/Apple-Konten ohne Passwort loeschen
+    // direkt -- fuer sie gilt die frische Sitzung als Nachweis.
+    if (user?.hasPassword) {
+      router.push("/konto-loeschen" as Href);
+      return;
+    }
     try {
-      await ApiService.deleteAccount();
+      await ApiService.deleteAccount("");
       logout();
       router.replace("/");
     } catch (err) {

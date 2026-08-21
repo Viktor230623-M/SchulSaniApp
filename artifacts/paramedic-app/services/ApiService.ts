@@ -738,11 +738,23 @@ async changePassword(currentPassword: string, newPassword: string): Promise<stri
   },
 
   /** Loescht das eigene Konto (POST /auth/account/delete) und raeumt lokal auf. */
-  async deleteAccount(): Promise<void> {
+  async deleteAccount(password: string): Promise<void> {
+    // Das Passwort verlaesst das Geraet nie: nur der daraus abgeleitete Proof
+    // geht an den Server. Der Server verlangt ihn fuer lokale Konten, damit
+    // eine gestohlene Sitzung allein das Konto nicht loeschen kann.
+    // OIDC-/Apple-Konten haben kein Passwort und senden keinen Proof.
+    const body: Record<string, unknown> = {};
+    if (password) {
+      const loginSalt = await fetchAuthParamsForCurrentUser();
+      if (!loginSalt) throw new Error("Passwort kann nicht geprueft werden.");
+      const proof = await keyManager.deriveKey(password, loginSalt);
+      body["proof"] = toBase64(proof);
+    }
     const resp = await apiFetch(`${API_BASE}/auth/account/delete`, {
       method: "POST",
       headers: headers(),
       credentials: "include",
+      body: JSON.stringify(body),
     });
     if (!resp.ok && resp.status !== 204) {
       const data = await resp.json().catch(() => ({}));

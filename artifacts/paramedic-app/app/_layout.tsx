@@ -166,6 +166,7 @@ function RootLayoutNav() {
         <Stack.Screen name="admin/exports" options={{ headerShown: false }} />
         <Stack.Screen name="admin/crypto" options={{ headerShown: false }} />
         <Stack.Screen name="activity-log" />
+        <Stack.Screen name="konto-loeschen" options={{ headerShown: false }} />
       </Stack.Protected>
       <Stack.Protected guard={needsPasswordChange}>
         <Stack.Screen name="passwort-wechseln" options={{ headerShown: false }} />
