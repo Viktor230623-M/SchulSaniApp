@@ -94,7 +94,8 @@ function NewsCard({
   const cat = categoryConfig(item.category, theme.tint, lang);
   const canDelete = isOwner || canModerate;
   const isMeeting = !!item.meetingAt;
-  const meetingEnded = isMeeting && new Date(item.meetingAt!).getTime() < Date.now();
+  const meetingEnds = item.meetingEndAt ? new Date(item.meetingEndAt) : item.meetingAt ? new Date(item.meetingAt) : null;
+  const meetingEnded = isMeeting && !!meetingEnds && meetingEnds.getTime() < Date.now();
   const participants = item.meetingSignups ?? [];
 
   async function handleDelete() {

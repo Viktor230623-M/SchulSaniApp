@@ -285,6 +285,51 @@ async function main() {
         }
       }
 
+      // Step 6b: Treffen (Meeting) erstellen und Tracking pruefen
+      try {
+        // Auth-Header der App mitschneiden: der Session-Token liegt nur im
+        // Bundle-Speicher, page.evaluate-fetch hat ihn nicht.
+        let appAuthHeader = null;
+        const onApiReq = (r) => {
+          if (r.url().includes("/api/news") && !appAuthHeader) {
+            const h = r.headers()["authorization"];
+            if (h) appAuthHeader = h;
+          }
+        };
+        page.on("request", onApiReq);
+        await page.getByRole("button", { name: /Neuigkeiten/i }).first().click();
+        await page.waitForTimeout(800);
+        await page.getByTestId("news-add").click();
+        await page.waitForTimeout(600);
+        await fillField(page, "Titel", "E2E-Treffen");
+        await fillField(page, "Inhalt", "E2E-Treffen-Beschreibung");
+        await page.getByText("Als Meeting festlegen", { exact: true }).first().click();
+        await page.waitForTimeout(400);
+        await snap(page, "09b-meeting-form");
+        await page.getByText("Einreichen", { exact: true }).first().click();
+        await page.waitForTimeout(1500);
+        const meetingVisible = (await page.innerText("body")).includes("E2E-Treffen");
+        record("Treffen erstellt", meetingVisible);
+
+        // Anmeldung an einem noch nicht freigegebenen Treffen muss abgelehnt
+        // werden — das Tracking startet erst nach Freigabe.
+        const signupGate = await page.evaluate(async (authHeader) => {
+          const raw = await fetch("/api/news", { headers: authHeader ? { Authorization: authHeader } : {} });
+          const body = await raw.text();
+          let list;
+          try { list = JSON.parse(body); } catch { return `parse-err:${body.slice(0, 80)}`; }
+          if (!Array.isArray(list)) return `no-array:${String(body).slice(0, 80)}`;
+          const item = list.find((n) => n.title === "E2E-Treffen");
+          if (!item) return "not-found";
+          const resp = await fetch(`/api/news/${item.id}/signup`, { method: "POST", headers: authHeader ? { Authorization: authHeader } : {} });
+          return resp.status;
+        }, appAuthHeader);
+        page.off("request", onApiReq);
+        record("Signup-Sperre bei ausstehendem Treffen", signupGate === 400, `HTTP ${signupGate}`);
+      } catch (e) {
+        record("Treffen-Flow", false, String(e.message).slice(0, 80));
+      }
+
       // Step 7: Account deletion
       try {
         await page.getByRole("button", { name: /Mehr/i }).first().click();
