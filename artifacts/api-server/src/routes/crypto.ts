@@ -1,54 +1,20 @@
 import { Router } from "express";
-import { and, desc, eq, isNotNull, or } from "drizzle-orm";
-import { db, userCryptoKeysTable, schoolDeksTable, schoolDekWrapsTable, incidentReportsTable, usersTable, missionsTable } from "@workspace/db";
-import { requireAuth, requirePermission, schoolIdOf, type AuthRequest } from "../middlewares/auth";
+import { and, desc, eq } from "drizzle-orm";
+import { db, userCryptoKeysTable, schoolDeksTable, schoolDekWrapsTable, usersTable } from "@workspace/db";
+import { requireAuth, requireAuthAllowUnconfirmedProfile, requirePermission, schoolIdOf, type AuthRequest } from "../middlewares/auth";
 import {
   isValidCryptoBlob, isValidKeyVersion, isValidSalt,
   logCryptoGrant, schoolUserOrNull, upsertDekWrap, upsertUserCryptoKey,
 } from "../lib/userCrypto";
-import { logReportAccess } from "../lib/reportAccessLog";
 
 const router = Router();
 
-// Klartextspalten eines Alt-Protokolls, die bei der Migration geleert werden.
-// Alles, was Gesundheitsinhalt traegt, wandert in content_encrypted.
-const PLAINTEXT_COLUMNS = {
-  title: null,
-  patientType: null,
-  patientFirstName: null,
-  patientLastName: null,
-  patientClass: null,
-  patientAge: null,
-  emergencyContactName: null,
-  emergencyContactPhone: null,
-  category: null,
-  description: null,
-  injurySites: null,
-  measures: null,
-  treatmentNotes: null,
-  pulseBpm: null,
-  spo2: null,
-  respRate: null,
-  bloodPressure: null,
-  consciousnessAvpu: null,
-  painScore: null,
-  outcome: null,
-  outcomeNotes: null,
-  witnesses: null,
-  addendaJson: null,
-} as const;
-
-async function withMissionTitle(report: typeof incidentReportsTable.$inferSelect) {
-  if (!report.missionId) return { ...report, missionTitle: null };
-  const [mission] = await db
-    .select({ title: missionsTable.title })
-    .from(missionsTable)
-    .where(eq(missionsTable.id, report.missionId));
-  return { ...report, missionTitle: mission?.title ?? null };
-}
-
-// GET /crypto/key — eigenes Schluesselmaterial (nur Chiffrat und oeffentliche Teile)
-router.get("/key", requireAuth, async (req: AuthRequest, res) => {
+// GET /crypto/key — eigenes Schluesselmaterial (nur Chiffrat und oeffentliche Teile).
+// Bewusst ohne Namensbestaetigung: Der Erst-Login erzeugt das Paar, bevor der
+// Name bestaetigt ist (frisches lokales oder OIDC-Konto). Es ist ausschliesslich
+// das eigene Material des Nutzers; die Sperre gilt weiterhin fuer alle Routen,
+// die fremde oder Gesundheitsdaten beruehren.
+router.get("/key", requireAuthAllowUnconfirmedProfile, async (req: AuthRequest, res) => {
   const [row] = await db
     .select()
     .from(userCryptoKeysTable)
@@ -69,7 +35,9 @@ router.get("/key", requireAuth, async (req: AuthRequest, res) => {
 
 // PUT /crypto/key — eigenes Schluesselpaar registrieren oder ersetzen.
 // Der private Schluessel kommt nur verschluesselt an; der KEK bleibt auf dem Geraet.
-router.put("/key", requireAuth, async (req: AuthRequest, res) => {
+// Wie GET ohne Namensbestaetigung, damit Erst-Login und Entsperr-Screen das
+// Paar anlegen koennen.
+router.put("/key", requireAuthAllowUnconfirmedProfile, async (req: AuthRequest, res) => {
   const body = req.body as { publicKey?: unknown; encryptedPrivateKey?: unknown; saltEnc?: unknown };
   if (!isValidCryptoBlob(body.publicKey) || !isValidCryptoBlob(body.encryptedPrivateKey) || !isValidSalt(body.saltEnc)) {
     res.status(400).json({ error: "Schluesselmaterial ist ungueltig." });
@@ -201,62 +169,6 @@ router.post("/dek/grant", requireAuth, requirePermission("reports.read_all", "re
     });
   });
   res.status(201).json({ dekVersion });
-});
-
-// --- Migration von Alt-Protokollen (einmalig, nur mit Patientenrecht) ---
-
-// GET /crypto/legacy-reports — Protokolle, deren Klartext noch nicht verschluesselt ist.
-router.get("/legacy-reports", requireAuth, requirePermission("reports.see_patient_info"), async (req: AuthRequest, res) => {
-  const schoolId = schoolIdOf(req);
-  const rows = await db
-    .select({ id: incidentReportsTable.id })
-    .from(incidentReportsTable)
-    .where(and(
-      eq(incidentReportsTable.schoolId, schoolId),
-      or(
-        isNotNull(incidentReportsTable.description),
-        isNotNull(incidentReportsTable.patientFirstName),
-        isNotNull(incidentReportsTable.patientLastName),
-      ),
-    ));
-  logReportAccess({ schoolId, userId: req.user!.userId, action: "list", patientVisible: true, count: rows.length });
-  res.json({ reports: rows });
-});
-
-// GET /crypto/legacy-reports/:id — Klartext eines Alt-Protokolls fuer den Migrations-Client.
-// Der Endpunkt bleibt bewusst zeitlich begrenzt: Nach der Migration existiert
-// kein Klartext mehr auf dem Server.
-router.get("/legacy-reports/:id", requireAuth, requirePermission("reports.see_patient_info"), async (req: AuthRequest, res) => {
-  const schoolId = schoolIdOf(req);
-  const [report] = await db
-    .select()
-    .from(incidentReportsTable)
-    .where(and(eq(incidentReportsTable.id, (req.params.id as string)), eq(incidentReportsTable.schoolId, schoolId)));
-  if (!report) { res.status(404).json({ error: "Not found" }); return; }
-  logReportAccess({ schoolId, userId: req.user!.userId, reportId: report.id, action: "detail", patientVisible: true });
-  res.json(await withMissionTitle(report));
-});
-
-// PUT /crypto/legacy-reports/:id — Chiffrat speichern und Klartextspalten leeren.
-router.put("/legacy-reports/:id", requireAuth, requirePermission("reports.see_patient_info"), async (req: AuthRequest, res) => {
-  const body = req.body as { contentEncrypted?: unknown; contentKeyVersion?: unknown };
-  if (!isValidCryptoBlob(body.contentEncrypted, 200_000) || !isValidKeyVersion(body.contentKeyVersion)) {
-    res.status(400).json({ error: "Chiffrat oder Version ist ungueltig." });
-    return;
-  }
-  const schoolId = schoolIdOf(req);
-  const [report] = await db
-    .select({ id: incidentReportsTable.id })
-    .from(incidentReportsTable)
-    .where(and(eq(incidentReportsTable.id, (req.params.id as string)), eq(incidentReportsTable.schoolId, schoolId)));
-  if (!report) { res.status(404).json({ error: "Not found" }); return; }
-
-  // Klartextspalten leeren: Nach der Migration existiert kein Klartext mehr
-  // auf dem Server, auch nicht in den Alt-Spalten.
-  await db.update(incidentReportsTable)
-    .set({ contentEncrypted: body.contentEncrypted, contentKeyVersion: body.contentKeyVersion, ...PLAINTEXT_COLUMNS, updatedAt: new Date() })
-    .where(eq(incidentReportsTable.id, report.id));
-  res.json({ ok: true });
 });
 
 export default router;

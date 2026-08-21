@@ -13,6 +13,12 @@ export const missionStatusEnum = pgEnum("mission_status", ["pending", "accepted"
 export const newsCategoryEnum = pgEnum("news_category", ["announcement", "training", "update", "alert"]);
 export const newsStatusEnum = pgEnum("news_status", ["pending", "approved", "rejected"]);
 export const authTokenKindEnum = pgEnum("auth_token_kind", ["email_verify", "password_reset"]);
+export const privacyRequestTypeEnum = pgEnum("privacy_request_type", [
+  "access", "rectification", "erasure", "restriction", "portability", "objection",
+]);
+export const privacyRequestStatusEnum = pgEnum("privacy_request_status", [
+  "pending", "in_review", "fulfilled", "rejected",
+]);
 export const notificationTypeEnum = pgEnum("notification_type", [
   "mission_assigned", "mission_cancelled", "status_changed", "news", "loa_update",
   "reminder", "high_priority_alert", "mission_completed", "mission_created",
@@ -149,6 +155,14 @@ export const newsTable = pgTable("news", {
   authorId: text("author_id").notNull(),
   rejectionReason: text("rejection_reason"),
   translationsJson: text("translations_json"),
+  // Meetings: ein News-Beitrag kann ein Termin sein, zu dem sich Nutzer an- und
+  // abmelden. Die Teilnehmerliste liegt als JSON auf der Zeile (kleine Schule,
+  // keine separaten Joins noetig): [{userId, name, signedAt}].
+  meetingAt: timestamp("meeting_at"),
+  meetingEndAt: timestamp("meeting_end_at"),
+  meetingLocation: text("meeting_location"),
+  meetingNotifyOnSignup: boolean("meeting_notify_on_signup").default(false).notNull(),
+  meetingSignupsJson: json("meeting_signups_json"),
 });
 
 // Missions table
@@ -411,6 +425,27 @@ export const reportAccessLogTable = pgTable("report_access_log", {
   createdAt: timestamp("created_at").defaultNow(),
 }, (t) => [index("report_access_log_created_idx").on(t.createdAt)]);
 
+// Betroffenenanfragen enthalten nur die fuer die Zuordnung noetigen Angaben,
+// nie Gesundheitsdaten oder eine Antwort. Die Schule bearbeitet die Anfrage;
+// der Betreiber kann ueber die Kontaktadresse Rueckfragen beantworten.
+export const privacyRequestsTable = pgTable("privacy_requests", {
+  id: text("id").primaryKey(),
+  schoolId: text("school_id").notNull(),
+  requesterId: text("requester_id").notNull(),
+  requesterEmail: text("requester_email"),
+  requestType: privacyRequestTypeEnum("request_type").notNull(),
+  subjectName: text("subject_name").notNull(),
+  subjectRelation: text("subject_relation"),
+  status: privacyRequestStatusEnum("status").notNull().default("pending"),
+  handledBy: text("handled_by"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  resolvedAt: timestamp("resolved_at"),
+}, (t) => [
+  index("privacy_requests_school_created_idx").on(t.schoolId, t.createdAt),
+  index("privacy_requests_requester_idx").on(t.requesterId, t.createdAt),
+]);
+
 // Kryptografisches Material fuer die Ende-zu-Ende-Verschluesselung.
 //
 // Der Server lagert ausschliesslich Werte, mit denen er selbst nicht
@@ -544,6 +579,8 @@ export type IncidentReport = typeof incidentReportsTable.$inferSelect;
 export type NewIncidentReport = typeof incidentReportsTable.$inferInsert;
 export type ReportAccessLog = typeof reportAccessLogTable.$inferSelect;
 export type NewReportAccessLog = typeof reportAccessLogTable.$inferInsert;
+export type PrivacyRequest = typeof privacyRequestsTable.$inferSelect;
+export type NewPrivacyRequest = typeof privacyRequestsTable.$inferInsert;
 export type ProfileChangeLog = typeof profileChangeLogTable.$inferSelect;
 export type NewProfileChangeLog = typeof profileChangeLogTable.$inferInsert;
 export type IdentityChangeLog = typeof identityChangeLogTable.$inferSelect;

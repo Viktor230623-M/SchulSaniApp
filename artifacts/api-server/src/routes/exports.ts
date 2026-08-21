@@ -3,6 +3,7 @@ import { Router } from "express";
 import { and, desc, eq, gte, inArray, lt, lte } from "drizzle-orm";
 import { db, incidentReportsTable, schoolExportsTable, schoolSettingsTable, missionsTable } from "@workspace/db";
 import { requireAuth, requirePermission, schoolIdOf, type AuthRequest } from "../middlewares/auth";
+import { hasReportPlaintext, withoutReportPlaintext } from "../lib/reportSerialization";
 import { EXPORT_INTERVALS, type ExportInterval } from "../lib/exportIntervals";
 
 // Die PDF-Erzeugung liegt mit der Ende-zu-Ende-Verschluesselung beim Client:
@@ -149,12 +150,16 @@ router.get("/:id/bundle", requireAuth, EXPORT_PERMS, async (req: AuthRequest, re
     res.status(409).json({ error: "Keine Protokolle in diesem Export" });
     return;
   }
+  if (reports.some((report) => hasReportPlaintext(report))) {
+    res.status(409).json({ error: "Export erst nach der Datenmigration moeglich" });
+    return;
+  }
 
   res.json({
     id: exp.id,
     fromAt: exp.fromAt?.toISOString() ?? null,
     toAt: exp.toAt.toISOString(),
-    reports: await withMissionTitles(reports),
+    reports: (await withMissionTitles(reports)).map((report) => withoutReportPlaintext(report)),
   });
 });
 

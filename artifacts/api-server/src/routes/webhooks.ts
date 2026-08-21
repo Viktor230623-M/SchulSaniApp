@@ -1,34 +1,21 @@
-import { Router, type IRouter } from "express";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { appendFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-
-// Empfaengt Resend-Webhook-Events (bounce, delivery_error) und schreibt sie
-// in eine Log-Datei. Kein Request-Handling im engeren Sinne: Der Endpoint
-// dient nur der Ueberwachung, damit unguelstige Empfaenger auffallen, bevor
-// sie die Sender-Reputation belasten.
-//
-// Absicherung: Resend signiert Webhooks (Svix). Wir verifizieren die
-// Signatur hier nicht, sondern vergleichen optional ein Secret aus der
-// .env (WEBHOOK_SECRET), falls gesetzt. Ohne gesetztes Secret akzeptiert
-// der Endpoint jeden Request -- er schreibt nur in ein Log, es passiert
-// nichts Gefaehrliches.
+import { Router, type IRouter, type Request } from "express";
 
 const router: IRouter = Router();
-
-// Nach dem Build liegt das Bundle in dist/, daher relativ zum Prozess-CWD
-// (artifacts/api-server) aufloesen statt __dirname zu nutzen.
 const logDir = join(process.cwd(), "logs");
 const bounceLog = join(logDir, "resend-webhooks.log");
+const MAX_SIGNATURE_AGE_SECONDS = 5 * 60;
+
+type RawRequest = Request & { rawBody?: Buffer };
 
 interface BounceData {
   bounce_type?: string | null;
-  diagnostic_code?: string | null;
 }
 
 interface WebhookData {
   email_id?: string | null;
-  email?: string | null;
-  to?: string | null;
   created_at?: string | null;
   bounce?: BounceData | null;
   [key: string]: unknown;
@@ -49,31 +36,47 @@ function logEvent(entry: Record<string, unknown>): void {
   }
 }
 
+export function hasValidResendSignature(req: RawRequest, now = Date.now()): boolean {
+  const secret = process.env["RESEND_WEBHOOK_SECRET"]?.trim();
+  const webhookId = req.header("svix-id");
+  const timestamp = req.header("svix-timestamp");
+  const signatures = req.header("svix-signature")?.split(" ") ?? [];
+  if (!secret || !webhookId || !timestamp || !req.rawBody || signatures.length === 0) return false;
+
+  const timestampSeconds = Number(timestamp);
+  if (!Number.isInteger(timestampSeconds) || Math.abs(Math.floor(now / 1000) - timestampSeconds) > MAX_SIGNATURE_AGE_SECONDS) {
+    return false;
+  }
+
+  const encodedSecret = secret.startsWith("whsec_") ? secret.slice("whsec_".length) : secret;
+  const key = Buffer.from(encodedSecret, "base64");
+  const expected = createHmac("sha256", key)
+    .update(`${webhookId}.${timestamp}.${req.rawBody.toString("utf8")}`)
+    .digest("base64");
+  const expectedBytes = Buffer.from(expected);
+
+  return signatures.some((signature) => {
+    const [version, value] = signature.split(",", 2);
+    if (version !== "v1" || !value) return false;
+    const actualBytes = Buffer.from(value);
+    return actualBytes.length === expectedBytes.length && timingSafeEqual(actualBytes, expectedBytes);
+  });
+}
+
 router.post("/webhooks/resend", (req, res) => {
-  const secret = process.env["WEBHOOK_SECRET"];
-  if (secret && req.header("x-webhook-secret") !== secret) {
+  if (!hasValidResendSignature(req as RawRequest)) {
     res.status(401).json({ error: "unauthorized" });
     return;
   }
 
   const body = req.body as WebhookBody;
-  const eventType = String(body.type ?? "");
   const data = body.data ?? {};
-
   logEvent({
-    type: eventType,
+    type: String(body.type ?? ""),
     emailId: data.email_id ?? null,
-    to: data.email ?? data.to ?? null,
     createdAt: data.created_at ?? null,
     bounceType: data.bounce?.bounce_type ?? null,
-    bounceSubType: data.bounce?.bounce_type ?? null,
-    diagnosticCode: data.bounce?.diagnostic_code ?? null,
-  } satisfies Record<string, unknown>);
-
-  // Nur Bounces/Sendefehler prominent loggen, Rest ist Laufgeraeusch.
-  if (eventType === "email.bounced" || eventType === "email.delivery_error") {
-    console.warn(`[webhook] ${eventType} für ${String(data.email ?? "?")}`);
-  }
+  });
 
   res.status(200).json({ ok: true });
 });

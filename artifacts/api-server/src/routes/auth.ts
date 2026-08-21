@@ -25,6 +25,7 @@ import {
   shiftsTable,
   missionActivityLogTable,
   reportAccessLogTable,
+  privacyRequestsTable,
   roleChangeLogTable,
   profileChangeLogTable,
   identityChangeLogTable,
@@ -993,6 +994,8 @@ router.post("/account/delete", authLimiter, requireAuth, async (req: AuthRequest
     await tx.update(profileChangeLogTable).set({ actorId: DELETED_USER }).where(eq(profileChangeLogTable.actorId, userId));
     await tx.update(profileChangeLogTable).set({ targetUserId: DELETED_USER }).where(eq(profileChangeLogTable.targetUserId, userId));
     await tx.update(identityChangeLogTable).set({ userId: DELETED_USER }).where(eq(identityChangeLogTable.userId, userId));
+    await tx.update(privacyRequestsTable).set({ requesterId: DELETED_USER, requesterEmail: null }).where(eq(privacyRequestsTable.requesterId, userId));
+    await tx.update(privacyRequestsTable).set({ handledBy: DELETED_USER }).where(eq(privacyRequestsTable.handledBy, userId));
     await tx.update(cryptoGrantLogTable).set({ actorId: DELETED_USER, actorName: null }).where(eq(cryptoGrantLogTable.actorId, userId));
     await tx.update(cryptoGrantLogTable).set({ targetUserId: DELETED_USER }).where(eq(cryptoGrantLogTable.targetUserId, userId));
 

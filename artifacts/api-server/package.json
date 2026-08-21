@@ -24,11 +24,10 @@
     "jsonwebtoken": "^9.0.3",
     "libsodium-wrappers": "^0.7.15",
     "libsodium-wrappers-sumo": "^0.8.4",
-    "nodemailer": "^7.0.13",
+    "nodemailer": "^9.0.1",
     "web-push": "^3.6.7"
   },
   "devDependencies": {
-    "@types/bcryptjs": "^3.0.0",
     "@types/compression": "^1.8.1",
     "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",

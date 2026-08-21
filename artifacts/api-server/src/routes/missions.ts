@@ -87,11 +87,16 @@ router.post("/", requireAuth, requirePermission("missions.create"), validate({ b
   };
   await db.insert(missionsTable).values(m);
 
-  const t = await translateToLanguages({ title, description: description ?? "", location }, "de").catch(() => ({}));
-  if (Object.keys(t).length > 0) {
-    await db.update(missionsTable).set({ translationsJson: JSON.stringify(t) }).where(and(eq(missionsTable.id, m.id), eq(missionsTable.schoolId, schoolId)));
-    m.translationsJson = JSON.stringify(t);
-  }
+  // Uebersetzung ist Beiwerk: Der Einsatz darf nicht auf den MT-Dienst warten.
+  // Fehler und Zeitueberschreitungen (3 s) landen im Nichts, die Antwort kommt
+  // sofort.
+  void translateToLanguages({ title, description: description ?? "", location }, "de")
+    .then((t) => {
+      if (Object.keys(t).length === 0) return;
+      return db.update(missionsTable).set({ translationsJson: JSON.stringify(t) })
+        .where(and(eq(missionsTable.id, m.id), eq(missionsTable.schoolId, schoolId)));
+    })
+    .catch(() => {});
 
   notifyOnDutyUsers({
     schoolId,

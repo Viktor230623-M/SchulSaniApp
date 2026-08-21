@@ -1,5 +1,6 @@
-import { and, eq, lt, or, sql } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, lt, ne, or, sql } from "drizzle-orm";
 import {
+  authTokensTable,
   db,
   identityChangeLogTable,
   incidentReportsTable,
@@ -94,6 +95,30 @@ export async function runRetention(now: Date = new Date()): Promise<RetentionRes
     .where(lt(identityChangeLogTable.createdAt, cutoffs.identityChangeLog))
     .returning({ id: identityChangeLogTable.id });
   results.push({ table: "identity_change_log", action: "deleted", count: identityChanges.length });
+
+  // Auth-Links: sieben Tage nach Ablauf entfernen (Loeschkonzept). Verbrauchte
+  // wie abgelaufene Tokens, sobald der Stichtag passiert ist.
+  const authTokens = await db
+    .delete(authTokensTable)
+    .where(lt(authTokensTable.expiresAt, cutoffs.authTokens))
+    .returning({ id: authTokensTable.id });
+  results.push({ table: "auth_tokens", action: "deleted", count: authTokens.length });
+
+  // Unbestaetigte lokale Registrierungen: 30 Tage nach Anlage entfernen
+  // (Loeschkonzept). Erkennung ueber login_salt/password_hash -- nur lokale
+  // Konten tragen beides; OIDC-/Apple-Konten nie. Der Stichtag liegt weit vor
+  // der 24-Stunden-Laufzeit eines Bestaetigungslinks, ein versehentliches
+  // Loeschen waehrend der Bestaetigung ist damit ausgeschlossen.
+  const unverified = await db
+    .delete(usersTable)
+    .where(and(
+      isNull(usersTable.emailVerifiedAt),
+      isNotNull(usersTable.loginSalt),
+      ne(usersTable.passwordHash, ""),
+      lt(usersTable.createdAt, cutoffs.unverifiedAccounts),
+    ))
+    .returning({ id: usersTable.id });
+  results.push({ table: "users (unbestaetigte lokale Konten)", action: "deleted", count: unverified.length });
 
   // Einsatzhistorie wird anonymisiert, nicht geloescht: die Statistik bleibt
   // erhalten, der Personenbezug entfaellt.

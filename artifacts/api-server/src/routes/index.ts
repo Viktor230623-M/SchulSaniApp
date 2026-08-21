@@ -14,6 +14,7 @@ import rosterRouter from "./roster";
 import exportsRouter from "./exports";
 import cryptoRouter from "./crypto";
 import webhooksRouter from "./webhooks";
+import privacyRequestsRouter from "./privacyRequests";
 
 const router: IRouter = Router();
 
@@ -31,6 +32,7 @@ router.use("/roles", rolesRouter);
 router.use("/roster", rosterRouter);
 router.use("/exports", exportsRouter);
 router.use("/crypto", cryptoRouter);
+router.use("/privacy/requests", privacyRequestsRouter);
 router.use(webhooksRouter);
 
 export default router;

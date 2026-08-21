@@ -1,10 +1,12 @@
 import { randomUUID } from "crypto";
 import { Router } from "express";
+import rateLimit from "express-rate-limit";
 import { and, desc, eq, inArray } from "drizzle-orm";
-import { db, incidentReportsTable, missionsTable, usersTable } from "@workspace/db";
+import { db, incidentReportsTable, missionsTable } from "@workspace/db";
 import { requireAuth, schoolIdOf, type AuthRequest } from "../middlewares/auth";
 import { notifyUser } from "../services/notifications";
 import { logReportAccess } from "../lib/reportAccessLog";
+import { withoutReportPlaintext } from "../lib/reportSerialization";
 
 // Der Server sieht den Inhalt eines Einsatzprotokolls nie im Klartext: Alle
 // Gesundheitsfelder liegen nur als Chiffrat (content_encrypted) vor, das der
@@ -48,6 +50,11 @@ async function withMissionTitles<T extends ReportLike>(
 }
 
 const router = Router();
+const reportCreateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  message: { error: "Zu viele Protokolle, bitte kurz warten." },
+});
 
 // GET / — list reports (scope by access). Nur Metadaten plus Chiffrat; die
 // Klartextfelder sind Teil von content_encrypted und bleiben auf dem Geraet.
@@ -81,7 +88,8 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
     count: accessible.length,
   });
 
-  res.json(await withMissionTitles(accessible));
+  const withTitles = await withMissionTitles(accessible);
+  res.json(withTitles.map((report) => withoutReportPlaintext(report)));
 });
 
 // GET /:id — single report
@@ -106,12 +114,12 @@ router.get("/:id", requireAuth, async (req: AuthRequest, res) => {
   });
 
   const [withTitle] = await withMissionTitles([report]);
-  res.json(withTitle);
+  res.json(withoutReportPlaintext(withTitle));
 });
 
 // POST / — create draft. Der Client verschluesselt den gesamten Inhalt und
 // schickt nur Metadaten plus Chiffrat; der Titel liegt im Chiffrat.
-router.post("/", requireAuth, async (req: AuthRequest, res) => {
+router.post("/", requireAuth, reportCreateLimiter, async (req: AuthRequest, res) => {
   const { userId } = req.user!;
   const schoolId = schoolIdOf(req);
   const body = req.body as Record<string, unknown>;
@@ -124,6 +132,31 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
   }
 
   const missionId = typeof body["missionId"] === "string" ? body["missionId"] : null;
+  const suppliedClientDraftId = body["clientDraftId"];
+  const clientDraftId = suppliedClientDraftId === undefined ? null :
+    typeof suppliedClientDraftId === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(suppliedClientDraftId)
+      ? suppliedClientDraftId
+      : null;
+  if (suppliedClientDraftId !== undefined && !clientDraftId) {
+    res.status(400).json({ error: "clientDraftId muss eine UUID sein." });
+    return;
+  }
+
+  if (clientDraftId) {
+    const [existing] = await db.select().from(incidentReportsTable).where(and(
+      eq(incidentReportsTable.id, clientDraftId),
+      eq(incidentReportsTable.schoolId, schoolId),
+    ));
+    if (existing) {
+      if (existing.authorId !== userId) {
+        res.status(409).json({ error: "clientDraftId wird bereits verwendet." });
+        return;
+      }
+      const [withTitle] = await withMissionTitles([existing]);
+      res.json(withoutReportPlaintext(withTitle));
+      return;
+    }
+  }
 
   // If linked to a mission, verify it exists and user has some relation to it
   if (missionId) {
@@ -132,7 +165,7 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
   }
 
   const now = new Date();
-  const id = randomUUID();
+  const id = clientDraftId ?? randomUUID();
 
   const incidentAt = body["incidentAt"] ? new Date(body["incidentAt"] as string) : now;
   if (isNaN(incidentAt.getTime())) {
@@ -160,7 +193,7 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
 
   await db.insert(incidentReportsTable).values(report);
   const [withTitle] = await withMissionTitles([report]);
-  res.status(201).json(withTitle);
+  res.status(201).json(withoutReportPlaintext(withTitle));
 });
 
 // PUT /:id — update draft
@@ -181,6 +214,15 @@ router.put("/:id", requireAuth, async (req: AuthRequest, res) => {
   if (!isAuthor && !isLeadership) { res.status(403).json({ error: "Forbidden" }); return; }
 
   const body = req.body as Record<string, unknown>;
+  const expectedUpdatedAt = typeof body["updatedAt"] === "string" ? new Date(body["updatedAt"]) : null;
+  if (!expectedUpdatedAt || isNaN(expectedUpdatedAt.getTime())) {
+    res.status(400).json({ error: "updatedAt ist fuer Entwurfsaenderungen erforderlich." });
+    return;
+  }
+  if (!existing.updatedAt || existing.updatedAt.getTime() !== expectedUpdatedAt.getTime()) {
+    res.status(409).json({ error: "Das Protokoll wurde inzwischen geaendert. Bitte neu laden." });
+    return;
+  }
   const updates: Partial<typeof incidentReportsTable.$inferInsert> = { updatedAt: new Date() };
 
   const contentEncrypted = isValidContent(body["contentEncrypted"]) ? body["contentEncrypted"] : null;
@@ -189,17 +231,33 @@ router.put("/:id", requireAuth, async (req: AuthRequest, res) => {
   if (contentKeyVersion) updates.contentKeyVersion = contentKeyVersion;
 
   if (body["location"] !== undefined) updates.location = typeof body["location"] === "string" ? body["location"].slice(0, 200) : null;
-  if (body["incidentAt"] !== undefined) updates.incidentAt = new Date(body["incidentAt"] as string);
+  if (body["incidentAt"] !== undefined) {
+    const incidentAt = new Date(body["incidentAt"] as string);
+    if (isNaN(incidentAt.getTime())) {
+      res.status(400).json({ error: "incidentAt muss ein gueltiges Datum sein." });
+      return;
+    }
+    updates.incidentAt = incidentAt;
+  }
   if (body["responders"] !== undefined) updates.responderIdsJson = Array.isArray(body["responders"]) ? body["responders"] as string[] : [userId];
 
   const [updated] = await db
     .update(incidentReportsTable)
     .set(updates)
-    .where(and(eq(incidentReportsTable.id, (req.params.id as string)), eq(incidentReportsTable.schoolId, schoolId)))
+    .where(and(
+      eq(incidentReportsTable.id, (req.params.id as string)),
+      eq(incidentReportsTable.schoolId, schoolId),
+      eq(incidentReportsTable.updatedAt, existing.updatedAt),
+    ))
     .returning();
 
+  if (!updated) {
+    res.status(409).json({ error: "Das Protokoll wurde inzwischen geaendert. Bitte neu laden." });
+    return;
+  }
+
   const [withTitle] = await withMissionTitles([updated]);
-  res.json(withTitle);
+  res.json(withoutReportPlaintext(withTitle));
 });
 
 // POST /:id/submit — submit and lock. Pflichtfelder prueft der Client vor dem
@@ -230,8 +288,17 @@ router.post("/:id/submit", requireAuth, async (req: AuthRequest, res) => {
   const [report] = await db
     .update(incidentReportsTable)
     .set({ status: "submitted", submittedAt: now, updatedAt: now })
-    .where(and(eq(incidentReportsTable.id, (req.params.id as string)), eq(incidentReportsTable.schoolId, schoolId)))
+    .where(and(
+      eq(incidentReportsTable.id, (req.params.id as string)),
+      eq(incidentReportsTable.schoolId, schoolId),
+      eq(incidentReportsTable.status, "draft"),
+    ))
     .returning();
+
+  if (!report) {
+    res.status(409).json({ error: "Das Protokoll wurde inzwischen eingereicht." });
+    return;
+  }
 
   // If linked to a mission, complete it
   if (report.missionId) {
@@ -259,7 +326,7 @@ router.post("/:id/submit", requireAuth, async (req: AuthRequest, res) => {
     }
   }
 
-  res.json(report);
+  res.json(withoutReportPlaintext(report));
 });
 
 // POST /:id/addendum — Nachrichten nach dem Sperren. Der Client entschluesselt
@@ -279,18 +346,28 @@ router.post("/:id/addendum", requireAuth, async (req: AuthRequest, res) => {
   const body = req.body as Record<string, unknown>;
   const contentEncrypted = isValidContent(body["contentEncrypted"]) ? body["contentEncrypted"] : null;
   const contentKeyVersion = isValidKeyVersion(body["contentKeyVersion"]) ? body["contentKeyVersion"] : null;
-  if (!contentEncrypted || !contentKeyVersion) {
-    res.status(400).json({ error: "contentEncrypted und contentKeyVersion sind erforderlich." });
+  const expectedUpdatedAt = typeof body["updatedAt"] === "string" ? new Date(body["updatedAt"]) : null;
+  if (!contentEncrypted || !contentKeyVersion || !expectedUpdatedAt || isNaN(expectedUpdatedAt.getTime())) {
+    res.status(400).json({ error: "contentEncrypted, contentKeyVersion und updatedAt sind erforderlich." });
     return;
   }
 
   const [updated] = await db
     .update(incidentReportsTable)
     .set({ contentEncrypted, contentKeyVersion, updatedAt: new Date() })
-    .where(and(eq(incidentReportsTable.id, (req.params.id as string)), eq(incidentReportsTable.schoolId, schoolId)))
+    .where(and(
+      eq(incidentReportsTable.id, (req.params.id as string)),
+      eq(incidentReportsTable.schoolId, schoolId),
+      eq(incidentReportsTable.updatedAt, expectedUpdatedAt),
+    ))
     .returning();
 
-  res.json(updated);
+  if (!updated) {
+    res.status(409).json({ error: "Das Protokoll wurde inzwischen geaendert. Bitte neu laden." });
+    return;
+  }
+
+  res.json(withoutReportPlaintext(updated));
 });
 
 export default router;

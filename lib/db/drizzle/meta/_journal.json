@@ -169,6 +169,20 @@
       "when": 1787186686232,
       "tag": "0023_windy_peter_parker",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1787201515300,
+      "tag": "0024_orange_gateway",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1787271170035,
+      "tag": "0025_shallow_praxagora",
+      "breakpoints": true
     }
   ]
 }

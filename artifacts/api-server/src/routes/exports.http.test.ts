@@ -22,14 +22,15 @@ function makeReport(id: string, schoolId: string, createdAt: Date, status = "sub
   return {
     id, schoolId, status, createdAt,
     missionId: null, title: null, authorId: "u1",
-    category: "Kopfschmerzen", outcome: "back_to_class",
+    category: null, outcome: null,
+    contentEncrypted: "ciphertext", contentKeyVersion: 1,
     incidentAt: createdAt, location: "Aula", description: null, injurySites: null,
     patientType: null, patientFirstName: null, patientLastName: null, patientClass: null,
     patientAge: null, emergencyContactName: null, emergencyContactPhone: null,
     careStartedAt: null, careEndedAt: null, measures: null, treatmentNotes: null,
     pulseBpm: null, spo2: null, respRate: null, bloodPressure: null,
     consciousnessAvpu: null, painScore: null, outcomeNotes: null,
-    responderIdsJson: [], witnesses: null, addendaJson: [],
+    responderIdsJson: [], witnesses: null, addendaJson: null,
   };
 }
 
