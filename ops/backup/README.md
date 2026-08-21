@@ -46,5 +46,6 @@ eintragen (siehe `schulsani-backup.service`).
 
 Die Sicherungen liegen auf derselben Platte wie die Produktivdatenbank. Sie
 schuetzen gegen versehentliches Loeschen, fehlerhafte Migrationen und
-Datenbankdefekte, **nicht** gegen einen Ausfall des Speichermediums. Eine
-raeumlich getrennte Ablage steht noch aus.
+Datenbankdefekte, **nicht** gegen einen Ausfall des Speichermediums. Vor dem
+Produktivbetrieb muss eine verschluesselte, raeumlich getrennte Kopie mit
+regelmaessiger Wiederherstellungsprobe eingerichtet und nachgewiesen werden.

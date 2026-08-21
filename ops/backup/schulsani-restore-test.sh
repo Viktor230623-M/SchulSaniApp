@@ -5,7 +5,6 @@ set -euo pipefail
 
 BACKUP_DIR="/var/backups/schulsani"
 KEY_FILE="/root/.schulsani-backup.key"
-# Ueberschreibbar, falls die Instanz einen anderen Datenbanknamen verwendet.
 SOURCE_DB="${SCHULSANI_DB_NAME:-schulSani}"
 TEST_DB="schulsani_restore_test"
 
@@ -18,11 +17,16 @@ fi
 echo "Pruefe: $LATEST"
 
 TMP_DUMP="$(mktemp /tmp/schulsani-restore-XXXXXX.dump)"
-trap 'rm -f "$TMP_DUMP"' EXIT
+cleanup() {
+  rm -f "$TMP_DUMP"
+  sudo -u postgres dropdb --if-exists "$TEST_DB" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
 
 gpg --batch --yes --decrypt --passphrase-file "$KEY_FILE" \
     --output "$TMP_DUMP" "$LATEST"
-chmod 644 "$TMP_DUMP"
+chown postgres:postgres "$TMP_DUMP"
+chmod 600 "$TMP_DUMP"
 
 sudo -u postgres dropdb --if-exists "$TEST_DB"
 sudo -u postgres createdb "$TEST_DB"
@@ -39,8 +43,6 @@ for TABLE in incident_reports users missions news loa; do
     FAILED=1
   fi
 done
-
-sudo -u postgres dropdb "$TEST_DB"
 
 if [[ "$FAILED" -ne 0 ]]; then
   echo "Wiederherstellungsprobe fehlgeschlagen." >&2

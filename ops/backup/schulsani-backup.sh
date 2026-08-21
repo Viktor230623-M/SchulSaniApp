@@ -3,9 +3,7 @@
 # Sicherungen, die aelter als die im Loeschkonzept festgelegten 30 Tage sind.
 set -euo pipefail
 
-# Ueberschreibbar, falls die Instanz einen anderen Datenbanknamen verwendet.
 DB_NAME="${SCHULSANI_DB_NAME:-schulSani}"
-DB_USER="saniadmin"
 BACKUP_DIR="/var/backups/schulsani"
 KEY_FILE="/root/.schulsani-backup.key"
 RETENTION_DAYS=30
@@ -20,18 +18,22 @@ chmod 700 "$BACKUP_DIR"
 
 STAMP="$(date +%Y-%m-%d-%H%M)"
 TARGET="$BACKUP_DIR/schulsani-$STAMP.dump.gpg"
+TMP_TARGET="$(mktemp "$BACKUP_DIR/.schulsani-$STAMP.XXXXXX.tmp")"
+trap 'rm -f "$TMP_TARGET"' EXIT
 
 sudo -u postgres pg_dump --format=custom --no-owner "$DB_NAME" \
   | gpg --batch --yes --symmetric --cipher-algo AES256 \
-        --passphrase-file "$KEY_FILE" --output "$TARGET"
+        --passphrase-file "$KEY_FILE" --output "$TMP_TARGET"
 
-chmod 600 "$TARGET"
-
-SIZE="$(stat -c %s "$TARGET")"
+SIZE="$(stat -c %s "$TMP_TARGET")"
 if [[ "$SIZE" -lt 1024 ]]; then
-  echo "Sicherung $TARGET ist nur $SIZE Bytes gross — Abbruch." >&2
+  echo "Sicherung $TMP_TARGET ist nur $SIZE Bytes gross — Abbruch." >&2
   exit 1
 fi
+
+chmod 600 "$TMP_TARGET"
+mv -f "$TMP_TARGET" "$TARGET"
+trap - EXIT
 
 find "$BACKUP_DIR" -name 'schulsani-*.dump.gpg' -type f -mtime "+$RETENTION_DAYS" -delete
 
