@@ -488,7 +488,7 @@ export default function LoginScreen() {
             )}
             {isLocal && (
               <Pressable accessibilityRole="link" onPress={() => router.push("/registrieren")} style={styles.localLink}>
-                <Text style={[styles.localLinkText, { color: theme.tint }]}>{t("auth.register", lang)}</Text>
+                <Text style={[styles.localLinkText, { color: theme.text, textDecorationLine: "underline" }]}>{t("auth.register", lang)}</Text>
               </Pressable>
             )}
           </View>
@@ -503,7 +503,7 @@ export default function LoginScreen() {
               style={styles.footerLink}
             >
               <Ionicons name="key-outline" size={17} color={theme.tint} />
-              <Text style={[styles.footerLinkText, { color: theme.tint }]}>{t("auth.loginWithSchoolId", lang)}</Text>
+              <Text style={[styles.footerLinkText, { color: theme.text, textDecorationLine: "underline" }]}>{t("auth.loginWithSchoolId", lang)}</Text>
             </Pressable>
           )}
           <Pressable
@@ -513,7 +513,7 @@ export default function LoginScreen() {
             style={styles.footerLink}
           >
             <Ionicons name="help-circle-outline" size={17} color={theme.tint} />
-            <Text style={[styles.footerLinkText, { color: theme.tint }]}>{t("auth.schoolNotIncluded", lang)}</Text>
+            <Text style={[styles.footerLinkText, { color: theme.text, textDecorationLine: "underline" }]}>{t("auth.schoolNotIncluded", lang)}</Text>
           </Pressable>
         </View>
       </ScrollView>

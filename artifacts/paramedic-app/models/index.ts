@@ -74,6 +74,12 @@ export interface DutyStatus {
 
 export type NewsStatus = "pending" | "approved" | "rejected";
 
+export interface MeetingSignup {
+  userId: string;
+  name: string;
+  signedAt: string;
+}
+
 export interface NewsItem {
   id: string;
   title: string;
@@ -88,6 +94,13 @@ export interface NewsItem {
   isRead: boolean;
   rejectionReason?: string;
   translationsJson?: string | null;
+  // Meeting: ein Beitrag kann ein Termin sein, zu dem sich Nutzer anmelden.
+  meetingAt?: string | null;
+  meetingEndAt?: string | null;
+  meetingLocation?: string | null;
+  meetingNotifyOnSignup?: boolean;
+  meetingSignups?: MeetingSignup[] | null;
+  signedUp?: boolean;
 }
 
 export type NotificationType =
@@ -210,8 +223,9 @@ export const CATEGORY_SUGGESTIONS = [
 
 export const MEASURE_SUGGESTIONS = [
   "wound_cleaning", "plaster", "bandage", "cooling", "elevation",
-  "recovery_position", "rest", "fluids", "reassurance", "immobilization",
-  "cpr", "aed", "epipen", "inhaler",
+  "recovery_position", "warmth_maintenance", "head_to_toe_exam",
+  "infection_risk_explained", "rest", "fluids", "reassurance",
+  "immobilization", "cpr", "aed", "epipen", "inhaler",
 ] as const;
 
 export const BODY_REGIONS_FRONT = [
@@ -258,6 +272,9 @@ export interface IncidentReport {
   patientLastName?: string | null;
   patientClass?: string | null;
   patientAge?: number | null;
+  patientSex?: string | null;
+  patientBirthDate?: string | null;
+  teacherName?: string | null;
   emergencyContactName?: string | null;
   emergencyContactPhone?: string | null;
   // Incident
@@ -271,6 +288,18 @@ export interface IncidentReport {
   // Treatment
   measures?: string | null;
   treatmentNotes?: string | null;
+  // Erstbefund (A–E)
+  breathing?: string | null;
+  skinColor?: string | null;
+  pulseRegular?: string | null;
+  orientation?: string | null;
+  pupilsLeft?: string | null;
+  pupilsRight?: string | null;
+  pupilReaction?: string | null;
+  // Befragung
+  complaintHistory?: string | null;
+  medications?: string | null;
+  allergies?: string | null;
   // Vitals
   pulseBpm?: number | null;
   spo2?: number | null;
@@ -278,12 +307,24 @@ export interface IncidentReport {
   bloodPressure?: string | null;
   consciousnessAvpu?: AvpuScore | null;
   painScore?: number | null;
+  // Verlauf (Wiederholungsmessungen)
+  recheckTime2?: string | null;
+  recheckPulse2?: number | null;
+  recheckRegular2?: string | null;
+  recheckTime3?: string | null;
+  recheckPulse3?: number | null;
+  recheckRegular3?: string | null;
+  progressNotes?: string | null;
   // Outcome
   outcome?: IncidentOutcome | null;
   outcomeNotes?: string | null;
+  leadingSymptom?: string | null;
+  handoverProperty?: string | null;
+  accompaniedBy?: string | null;
   // People
   responderIds?: string[] | null;
   witnesses?: string | null;
+  signatures?: string[] | null;
   // Meta
   addenda?: ReportAddendum[] | null;
   createdAt: string;

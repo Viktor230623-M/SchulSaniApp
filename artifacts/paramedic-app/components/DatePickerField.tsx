@@ -62,6 +62,7 @@ export function DatePickerField({ value, onChange, label }: Props) {
   return (
     <>
       <Pressable
+        testID="date-picker-field"
         onPress={() => { setViewDate(new Date(value)); setOpen(true); }}
         style={[styles.field, { backgroundColor: theme.inputBackground, borderColor: theme.inputBorder }]}
       >
@@ -81,7 +82,7 @@ export function DatePickerField({ value, onChange, label }: Props) {
                 <Ionicons name="chevron-back" size={20} color={theme.text} />
               </Pressable>
               <Text style={[styles.monthLabel, { color: theme.text }]}>{MONTHS[month]} {year}</Text>
-              <Pressable onPress={nextMonth} style={styles.navBtn}>
+              <Pressable testID="date-picker-next" onPress={nextMonth} style={styles.navBtn}>
                 <Ionicons name="chevron-forward" size={20} color={theme.text} />
               </Pressable>
             </View>
@@ -101,6 +102,7 @@ export function DatePickerField({ value, onChange, label }: Props) {
                 return (
                   <Pressable
                     key={day}
+                    testID={`date-day-${day}`}
                     onPress={() => select(day)}
                     style={styles.cell}
                   >

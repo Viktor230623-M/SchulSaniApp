@@ -3,7 +3,9 @@ import * as Haptics from "expo-haptics";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Linking,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -395,6 +397,27 @@ export default function DutyScreen() {
     }
   }
 
+  // Notruf mit Sicherheitsabfrage: Ein eigener Modal statt der Standard-Dialoge,
+  // damit klar ist, was gleich passiert, und versehentliche/faelschliche Notrufe
+  // (strafbar nach § 145 StGB) vermieden werden. Die App setzt selbst keinen
+  // Notruf ab -- sie oeffnet nur die Telefon-App des Geraets mit der 112.
+  const [emergencyOpen, setEmergencyOpen] = useState(false);
+
+  async function dialEmergency() {
+    setEmergencyOpen(false);
+    try {
+      if (Platform.OS === "web") {
+        // tel: funktioniert in mobilen Browsern (iPad/Smartphone); auf dem
+        // Desktop ist es ein No-op, daher der Fallback mit angezeigter Nummer.
+        window.open("tel:112", "_self");
+      } else {
+        await Linking.openURL("tel:112");
+      }
+    } catch {
+      notify(t("common.error", lang), t("emergency.callFailed", lang));
+    }
+  }
+
   const topPad = useTopPad();
 
   const byDay = new Map<string, Shift[]>();
@@ -437,9 +460,23 @@ export default function DutyScreen() {
         }}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={[styles.heading, { color: theme.text, alignSelf: "flex-start" }]}>
-          {t("duty.title", lang)}
-        </Text>
+        <View style={styles.headingRow}>
+          <Text style={[styles.heading, { color: theme.text, flex: 1 }]}>
+            {t("duty.title", lang)}
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t("emergency.call", lang)}
+            onPress={() => setEmergencyOpen(true)}
+            style={({ pressed }) => [
+              styles.emergencyBtn,
+              { borderColor: theme.danger, opacity: pressed ? 0.8 : 1 },
+            ]}
+          >
+            <Ionicons name="call" size={16} color={theme.danger} />
+            <Text style={[styles.emergencyText, { color: theme.danger }]}>{t("emergency.call", lang)}</Text>
+          </Pressable>
+        </View>
 
         <View style={{ alignItems: "center", gap: 24 }}>
           <MedicalCross size={80} color={isOnDuty ? theme.tint : theme.textTertiary} animate={isOnDuty} />
@@ -701,6 +738,30 @@ export default function DutyScreen() {
           }}
         />
       )}
+
+      {emergencyOpen && (
+        <Modal visible transparent animationType="fade" onRequestClose={() => setEmergencyOpen(false)}>
+          <View style={styles.modalBackdrop}>
+            <View style={[styles.emergencyCard, { backgroundColor: theme.card, borderColor: theme.danger }]}>
+              <View style={[styles.emergencyBadge, { backgroundColor: theme.danger + "1A" }]}>
+                <Ionicons name="warning" size={26} color={theme.danger} />
+              </View>
+              <Text style={[styles.emergencyTitle, { color: theme.text }]}>{t("emergency.callConfirm", lang)}</Text>
+              <Text style={[styles.emergencyBody, { color: theme.textSecondary }]}>{t("emergency.callBody", lang)}</Text>
+              <Pressable
+                onPress={dialEmergency}
+                style={({ pressed }) => [styles.emergencyCallBtn, { backgroundColor: theme.danger, opacity: pressed ? 0.85 : 1 }]}
+              >
+                <Ionicons name="call" size={18} color="#fff" />
+                <Text style={styles.emergencyCallBtnText}>{t("emergency.callNow", lang)}</Text>
+              </Pressable>
+              <Pressable onPress={() => setEmergencyOpen(false)} style={[styles.emergencyCancelBtn, { borderColor: theme.cardBorder }]}>
+                <Text style={[styles.emergencyCancelText, { color: theme.textSecondary }]}>{t("emergency.cancel", lang)}</Text>
+              </Pressable>
+            </View>
+          </View>
+        </Modal>
+      )}
     </View>
   );
 }
@@ -708,6 +769,28 @@ export default function DutyScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   heading: { fontSize: 28, fontFamily: "Inter_700Bold" },
+  headingRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  emergencyBtn: {
+    minHeight: 40,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1.5,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  emergencyText: { fontSize: 13, fontFamily: "Inter_700Bold" },
+  emergencyCard: { width: "100%", maxWidth: 420, borderRadius: 20, padding: 22, borderWidth: 1.5, gap: 12, alignItems: "center" },
+  emergencyBadge: { width: 52, height: 52, borderRadius: 26, alignItems: "center", justifyContent: "center" },
+  emergencyTitle: { fontSize: 18, fontFamily: "Inter_700Bold" },
+  emergencyBody: { fontSize: 14, fontFamily: "Inter_400Regular", textAlign: "center", lineHeight: 20 },
+  emergencyCallBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    alignSelf: "stretch", paddingVertical: 14, borderRadius: 14,
+  },
+  emergencyCallBtnText: { color: "#fff", fontSize: 15, fontFamily: "Inter_700Bold" },
+  emergencyCancelBtn: { alignSelf: "stretch", paddingVertical: 12, borderRadius: 14, borderWidth: 1, alignItems: "center" },
+  emergencyCancelText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
   toggleBtn: {
     width: 220, paddingVertical: 28, borderRadius: 24, alignItems: "center", gap: 8,
     shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.10, shadowRadius: 10, elevation: 6,

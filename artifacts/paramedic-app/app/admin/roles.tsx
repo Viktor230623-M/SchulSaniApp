@@ -17,6 +17,7 @@ import { useTopPad } from "@/hooks/useTopPad";
 import { getTheme } from "@/constants/theme";
 import type { PermissionDef, RoleInfo } from "@/models";
 import { confirmAction, notify } from "@/lib/dialog";
+import { t } from "@/constants/i18n";
 import ApiService from "@/services/ApiService";
 import { has, useAppStore } from "@/store/useAppStore";
 
@@ -34,6 +35,7 @@ export default function RolesScreen() {
   const themeKey = useAppStore((s) => s.theme);
   const theme = getTheme(themeKey);
   const topPad = useTopPad();
+  const lang = useAppStore((s) => s.language);
   const canManage = has("roles.manage");
 
   const [roles, setRoles] = useState<RoleInfo[]>([]);
@@ -58,7 +60,7 @@ export default function RolesScreen() {
       const data = await ApiService.getRoles();
       setRoles(Array.isArray(data) ? data.slice().sort((a, b) => a.sortOrder - b.sortOrder) : []);
     } catch (err) {
-      await notify("Fehler", err instanceof Error ? err.message : "Rollen konnten nicht geladen werden");
+      await notify(t("common.error", lang), err instanceof Error ? err.message : t("settings.roleLoadFailed", lang));
     } finally {
       setLoading(false);
     }
@@ -83,7 +85,7 @@ export default function RolesScreen() {
         const perms = await ApiService.getRolePermissions(roleId);
         setRolePermissions((prev) => ({ ...prev, [roleId]: perms }));
       } catch (err) {
-        await notify("Fehler", err instanceof Error ? err.message : "Berechtigungen konnten nicht geladen werden");
+        await notify(t("common.error", lang), err instanceof Error ? err.message : t("settings.permissionsLoadFailed", lang));
       } finally {
         setLoadingPermissions(false);
       }
@@ -97,9 +99,9 @@ export default function RolesScreen() {
 
     if (!alreadyGranted && PATIENT_DATA_PERMISSIONS.has(permKey)) {
       const confirmed = await confirmAction({
-        title: "Zugriff auf Patientendaten",
-        message: `Diese Aenderung gibt der Rolle ${role.displayName} Zugriff auf Patientendaten in Einsatzprotokollen.`,
-        confirmLabel: "Zugriff gewaehren",
+        title: t("settings.patientDataAccessTitle", lang),
+        message: t("settings.patientDataAccessMessage", lang).replace("{name}", role.displayName),
+        confirmLabel: t("settings.grantPatientDataAccess", lang),
         destructive: true,
       });
       if (!confirmed) return;
@@ -115,7 +117,7 @@ export default function RolesScreen() {
       // Serverfehler im Klartext, u.a. die Aussperrsicherung (409) — keine
       // Vorab-Ausgrauung, die Fehlermeldung ist die einzige Anzeige davon.
       setRolePermissions((prev) => ({ ...prev, [role.id]: current }));
-      await notify("Fehler", err instanceof Error ? err.message : "Berechtigung konnte nicht geaendert werden");
+      await notify(t("common.error", lang), err instanceof Error ? err.message : t("settings.permissionChangeFailed", lang));
     }
   }
 
@@ -130,7 +132,7 @@ export default function RolesScreen() {
       await loadRoles();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (err) {
-      await notify("Fehler", err instanceof Error ? err.message : "Rolle konnte nicht angelegt werden");
+      await notify(t("common.error", lang), err instanceof Error ? err.message : t("settings.roleCreateFailed", lang));
     } finally {
       setBusyRoleId(null);
     }
@@ -152,7 +154,7 @@ export default function RolesScreen() {
       await loadRoles();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (err) {
-      await notify("Fehler", err instanceof Error ? err.message : "Rolle konnte nicht geaendert werden");
+      await notify(t("common.error", lang), err instanceof Error ? err.message : t("settings.roleUpdateFailed", lang));
     } finally {
       setBusyRoleId(null);
     }
@@ -160,9 +162,9 @@ export default function RolesScreen() {
 
   async function handleDelete(role: RoleInfo) {
     const confirmed = await confirmAction({
-      title: "Rolle loeschen",
-      message: `Rolle "${role.displayName}" wirklich loeschen?`,
-      confirmLabel: "Loeschen",
+      title: t("settings.roleDeleteTitle", lang),
+      message: t("settings.roleDeleteConfirm", lang).replace("{name}", role.displayName),
+      confirmLabel: t("common.delete", lang),
       destructive: true,
     });
     if (!confirmed) return;
@@ -175,7 +177,7 @@ export default function RolesScreen() {
       // 409: entweder noch Nutzer zugeordnet oder die letzte Traegerin einer
       // essenziellen Berechtigung — kein automatisches Umhaengen, der Server
       // sagt im Klartext, warum es nicht geht.
-      await notify("Loeschen nicht moeglich", err instanceof Error ? err.message : "Rolle konnte nicht geloescht werden");
+      await notify(t("settings.roleDeleteUnavailable", lang), err instanceof Error ? err.message : t("settings.roleDeleteFailed", lang));
     } finally {
       setBusyRoleId(null);
     }
@@ -184,7 +186,7 @@ export default function RolesScreen() {
   if (!canManage) {
     return (
       <View style={[styles.container, { backgroundColor: theme.background, paddingTop: topPad + 40 }]}>
-        <Text style={[styles.notAllowed, { color: theme.textSecondary }]}>Kein Zugriff.</Text>
+        <Text style={[styles.notAllowed, { color: theme.textSecondary }]}>{t("common.accessDenied", lang)}.</Text>
       </View>
     );
   }
@@ -206,7 +208,7 @@ export default function RolesScreen() {
           >
             <Ionicons name="chevron-back" size={28} color={theme.text} />
           </Pressable>
-          <Text style={[styles.headerTitle, { color: theme.text }]}>Rollen</Text>
+          <Text style={[styles.headerTitle, { color: theme.text }]}>{t("settings.manageRoles", lang)}</Text>
         </View>
 
         {loading ? (
@@ -227,7 +229,7 @@ export default function RolesScreen() {
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.roleName, { color: theme.text }]}>{role.displayName}</Text>
                       <Text style={[styles.roleMeta, { color: theme.textSecondary }]}>
-                        {role.key} · {role.userCount} {role.userCount === 1 ? "Nutzer" : "Nutzer"}
+                        {role.key} · {role.userCount} {t("settings.userCount", lang)}
                       </Text>
                     </View>
                     <Ionicons name={expanded ? "chevron-up" : "chevron-down"} size={18} color={theme.textTertiary} />
@@ -239,7 +241,7 @@ export default function RolesScreen() {
                       style={[styles.smallBtn, { borderColor: theme.cardBorder }]}
                     >
                       <Ionicons name="pencil-outline" size={14} color={theme.text} />
-                      <Text style={[styles.smallBtnText, { color: theme.text }]}>Bearbeiten</Text>
+                      <Text style={[styles.smallBtnText, { color: theme.text }]}>{t("common.edit", lang)}</Text>
                     </Pressable>
                     {!role.isSystem && (
                       <Pressable
@@ -252,7 +254,7 @@ export default function RolesScreen() {
                         ) : (
                           <>
                             <Ionicons name="trash-outline" size={14} color={theme.danger} />
-                            <Text style={[styles.smallBtnText, { color: theme.danger }]}>Loeschen</Text>
+                            <Text style={[styles.smallBtnText, { color: theme.danger }]}>{t("common.delete", lang)}</Text>
                           </>
                         )}
                       </Pressable>
@@ -264,7 +266,7 @@ export default function RolesScreen() {
                       <TextInput
                         value={editName}
                         onChangeText={setEditName}
-                        placeholder="Anzeigename"
+                        placeholder={t("settings.roleDisplayNamePlaceholder", lang)}
                         placeholderTextColor={theme.textTertiary}
                         style={[styles.input, { backgroundColor: theme.background, borderColor: theme.cardBorder, color: theme.text }]}
                       />
@@ -285,14 +287,14 @@ export default function RolesScreen() {
                           onPress={() => setEditingId(null)}
                           style={[styles.secondaryBtn, { borderColor: theme.cardBorder }]}
                         >
-                          <Text style={[styles.secondaryBtnText, { color: theme.textSecondary }]}>Abbrechen</Text>
+                          <Text style={[styles.secondaryBtnText, { color: theme.textSecondary }]}>{t("common.cancel", lang)}</Text>
                         </Pressable>
                         <Pressable
                           onPress={() => saveEdit(role)}
                           disabled={busy}
                           style={[styles.primaryBtn, { backgroundColor: theme.tint, opacity: busy ? 0.5 : 1 }]}
                         >
-                          {busy ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.primaryBtnText}>Speichern</Text>}
+                          {busy ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.primaryBtnText}>{t("common.save", lang)}</Text>}
                         </Pressable>
                       </View>
                     </View>
@@ -325,7 +327,7 @@ export default function RolesScreen() {
                                 </Text>
                                 {locked && (
                                   <Text style={[styles.permLockedHint, { color: theme.textTertiary }]}>
-                                    Diese Berechtigung kann nur ueber den Betreiber vergeben werden.
+                                    {t("settings.roleLockedHint", lang)}
                                   </Text>
                                 )}
                               </View>
@@ -341,11 +343,11 @@ export default function RolesScreen() {
 
             {creating ? (
               <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
-                <Text style={[styles.cardTitle, { color: theme.tint }]}>Neue Rolle</Text>
+                <Text style={[styles.cardTitle, { color: theme.tint }]}>{t("settings.newRole", lang)}</Text>
                 <TextInput
                   value={newKey}
                   onChangeText={setNewKey}
-                  placeholder="Schluessel (z. B. ausbildungsleitung)"
+                  placeholder={t("settings.roleKeyPlaceholder", lang)}
                   placeholderTextColor={theme.textTertiary}
                   autoCapitalize="none"
                   autoCorrect={false}
@@ -363,7 +365,7 @@ export default function RolesScreen() {
                     onPress={() => { setCreating(false); setNewKey(""); setNewName(""); }}
                     style={[styles.secondaryBtn, { borderColor: theme.cardBorder }]}
                   >
-                    <Text style={[styles.secondaryBtnText, { color: theme.textSecondary }]}>Abbrechen</Text>
+                    <Text style={[styles.secondaryBtnText, { color: theme.textSecondary }]}>{t("common.cancel", lang)}</Text>
                   </Pressable>
                   <Pressable
                     onPress={handleCreate}
@@ -376,7 +378,7 @@ export default function RolesScreen() {
                     {busyRoleId === "__create__" ? (
                       <ActivityIndicator size="small" color="#fff" />
                     ) : (
-                      <Text style={styles.primaryBtnText}>Anlegen</Text>
+                      <Text style={styles.primaryBtnText}>{t("settings.roleCreate", lang)}</Text>
                     )}
                   </Pressable>
                 </View>
@@ -387,7 +389,7 @@ export default function RolesScreen() {
                 style={[styles.addBtn, { borderColor: theme.tint }]}
               >
                 <Ionicons name="add" size={18} color={theme.tint} />
-                <Text style={[styles.addBtnText, { color: theme.tint }]}>Rolle anlegen</Text>
+                <Text style={[styles.addBtnText, { color: theme.tint }]}>{t("settings.createRole", lang)}</Text>
               </Pressable>
             )}
           </>

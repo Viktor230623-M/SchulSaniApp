@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useTopPad } from "@/hooks/useTopPad";
 import { GlassLoader } from "@/components/GlassLoader";
+import { DatePickerField } from "@/components/DatePickerField";
 import { appleCardStyle } from "@/components/AppleSurface";
 import { t } from "@/constants/i18n";
 import { getTheme, type ThemeColors, istDunklesThema, withAlpha } from "@/constants/theme";
@@ -27,6 +28,21 @@ import { has, useAppStore } from "@/store/useAppStore";
 import { localized } from "@/utils/localize";
 
 type Filter = "all" | NewsStatus;
+
+function fmtMeetingWhen(item: NewsItem, lang: AppLanguage): string {
+  if (!item.meetingAt) return "";
+  const start = new Date(item.meetingAt);
+  const dateStr = start.toLocaleDateString(lang === "de" ? "de-DE" : "en-GB", {
+    weekday: "short", day: "2-digit", month: "2-digit",
+  });
+  const startTime = `${String(start.getHours()).padStart(2, "0")}:${String(start.getMinutes()).padStart(2, "0")}`;
+  if (item.meetingEndAt) {
+    const end = new Date(item.meetingEndAt);
+    const endTime = `${String(end.getHours()).padStart(2, "0")}:${String(end.getMinutes()).padStart(2, "0")}`;
+    return t("news.meetingRange", lang).replace("{date}", dateStr).replace("{start}", startTime).replace("{end}", endTime);
+  }
+  return t("news.meetingAt", lang).replace("{date}", dateStr).replace("{time}", startTime);
+}
 
 function categoryConfig(cat: NewsItem["category"], tint: string, lang: AppLanguage) {
   return {
@@ -54,23 +70,32 @@ interface NewsCardProps {
   item: NewsItem;
   canModerate: boolean;
   isOwner: boolean;
+  userId: string | undefined;
   onMarkRead: (id: string) => void;
   onApprove: (id: string) => void;
   onReject: (id: string) => void;
   onDelete: (id: string) => void;
   onEdit: (item: NewsItem) => void;
+  onSignup: (id: string) => void;
+  onUnsign: (id: string) => void;
+  onToggleNotify: (id: string, enabled: boolean) => void;
   theme: ThemeColors;
   lang: AppLanguage;
 }
 
 function NewsCard({
-  item, canModerate, isOwner,
+  item, canModerate, isOwner, userId,
   onMarkRead, onApprove, onReject, onDelete, onEdit,
+  onSignup, onUnsign, onToggleNotify,
   theme, lang,
 }: NewsCardProps) {
   const [expanded, setExpanded] = useState(false);
+  const [showParticipants, setShowParticipants] = useState(false);
   const cat = categoryConfig(item.category, theme.tint, lang);
   const canDelete = isOwner || canModerate;
+  const isMeeting = !!item.meetingAt;
+  const meetingEnded = isMeeting && new Date(item.meetingAt!).getTime() < Date.now();
+  const participants = item.meetingSignups ?? [];
 
   async function handleDelete() {
     const confirmed = await confirmAction({
@@ -113,6 +138,80 @@ function NewsCard({
 
       <Text style={[styles.title, { color: theme.text }]}>{localized(item, "title", lang, item.title)}</Text>
       <Text style={[styles.summary, { color: theme.textSecondary }]}>{localized(item, "summary", lang, item.summary)}</Text>
+
+      {isMeeting && (
+        <View style={[styles.meetingBox, { backgroundColor: withAlpha("#8B5CF6", 0.08), borderColor: "#8B5CF6" + "33" }]}>
+          <View style={styles.meetingRow}>
+            <Ionicons name="calendar" size={15} color="#8B5CF6" />
+            <Text style={[styles.meetingText, { color: theme.text }]}>{fmtMeetingWhen(item, lang)}</Text>
+          </View>
+          {item.meetingLocation ? (
+            <View style={styles.meetingRow}>
+              <Ionicons name="location-outline" size={15} color="#8B5CF6" />
+              <Text style={[styles.meetingText, { color: theme.textSecondary }]}>{item.meetingLocation}</Text>
+            </View>
+          ) : null}
+          {item.status === "approved" && !meetingEnded && (
+            <View style={styles.meetingActions}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => (item.signedUp ? onUnsign(item.id) : onSignup(item.id))}
+                style={[
+                  styles.meetingSignBtn,
+                  { backgroundColor: item.signedUp ? theme.backgroundTertiary : "#8B5CF6", borderColor: "#8B5CF6" },
+                ]}
+              >
+                <Ionicons name={item.signedUp ? "checkmark-circle" : "person-add"} size={14} color={item.signedUp ? theme.text : "#fff"} />
+                <Text style={[styles.meetingSignText, { color: item.signedUp ? theme.text : "#fff" }]}>
+                  {item.signedUp ? t("news.meetingSignOut", lang) : t("news.meetingSignUp", lang)}
+                </Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setShowParticipants(!showParticipants)}
+                hitSlop={8}
+                style={styles.meetingCountBtn}
+              >
+                <Text style={[styles.meetingCountText, { color: theme.textSecondary }]}>
+                  {t("news.meetingParticipants", lang).replace("{n}", String(participants.length))}
+                </Text>
+                <Ionicons name={showParticipants ? "chevron-up" : "chevron-down"} size={13} color={theme.textTertiary} />
+              </Pressable>
+            </View>
+          )}
+          {isOwner && item.status === "approved" && (
+            <Pressable
+              onPress={() => onToggleNotify(item.id, !item.meetingNotifyOnSignup)}
+              hitSlop={8}
+              style={styles.meetingNotifyRow}
+            >
+              <Ionicons name={item.meetingNotifyOnSignup ? "notifications" : "notifications-off-outline"} size={13} color={theme.textTertiary} />
+              <Text style={[styles.meetingNotifyText, { color: theme.textTertiary }]}>
+                {item.meetingNotifyOnSignup ? t("news.meetingNotifyOn", lang) : t("news.meetingNotifyOff", lang)}
+              </Text>
+            </Pressable>
+          )}
+          {showParticipants && (
+            <View style={styles.participantList}>
+              {participants.length === 0 ? (
+                <Text style={[styles.participantText, { color: theme.textTertiary }]}>{t("news.noParticipants", lang)}</Text>
+              ) : (
+                participants.map((p) => (
+                  <Text key={p.userId} style={[styles.participantText, { color: theme.textSecondary }]}>
+                    {p.userId === userId ? `${p.name} ${t("news.meetingYou", lang)}` : p.name}
+                  </Text>
+                ))
+              )}
+            </View>
+          )}
+          {meetingEnded && (
+            <View style={styles.meetingEndedRow}>
+              <Ionicons name="time-outline" size={13} color={theme.textTertiary} />
+              <Text style={[styles.meetingEndedText, { color: theme.textTertiary }]}>{t("news.meetingEnded", lang)}</Text>
+            </View>
+          )}
+        </View>
+      )}
 
       {expanded && (
         <Text style={[styles.content, { color: theme.text, borderTopColor: theme.cardBorder }]}>
@@ -197,8 +296,41 @@ export default function NewsScreen() {
   const [editSubmitting, setEditSubmitting] = useState(false);
   const [rejectNewsId, setRejectNewsId] = useState<string | null>(null);
   const [rejectNewsReason, setRejectNewsReason] = useState("");
+  // Meeting (create)
+  const [isMeeting, setIsMeeting] = useState(false);
+  const [meetingDate, setMeetingDate] = useState<Date>(new Date());
+  const [meetingStartTime, setMeetingStartTime] = useState("15:00");
+  const [meetingEndTime, setMeetingEndTime] = useState("");
+  const [meetingLocation, setMeetingLocation] = useState("");
+  const [meetingNotify, setMeetingNotify] = useState(false);
+  // Meeting (edit)
+  const [editIsMeeting, setEditIsMeeting] = useState(false);
+  const [editMeetingDate, setEditMeetingDate] = useState<Date>(new Date());
+  const [editMeetingStartTime, setEditMeetingStartTime] = useState("15:00");
+  const [editMeetingEndTime, setEditMeetingEndTime] = useState("");
+  const [editMeetingLocation, setEditMeetingLocation] = useState("");
+  const [editMeetingNotify, setEditMeetingNotify] = useState(false);
 
   const canModerate = has("news.moderate");
+
+  const TIME_RE = /^([01]?\d|2[0-3]):[0-5]\d$/;
+
+  function dateWithTime(d: Date, time: string): Date {
+    const [h, m] = time.split(":").map(Number);
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate(), h ?? 0, m ?? 0);
+  }
+
+  function buildMeetingPayload() {
+    if (!isMeeting) return {};
+    const start = dateWithTime(meetingDate, meetingStartTime);
+    const end = meetingEndTime ? dateWithTime(meetingDate, meetingEndTime) : null;
+    return {
+      meetingAt: start.toISOString(),
+      meetingEndAt: end && end.getTime() > start.getTime() ? end.toISOString() : undefined,
+      meetingLocation: meetingLocation.trim() || undefined,
+      meetingNotifyOnSignup: meetingNotify,
+    };
+  }
 
   useEffect(() => { load(); }, []);
 
@@ -274,15 +406,37 @@ export default function NewsScreen() {
     setEditTitle(item.title);
     setEditSummary(item.summary);
     setEditContent(item.content);
+    setEditIsMeeting(!!item.meetingAt);
+    if (item.meetingAt) {
+      setEditMeetingDate(new Date(item.meetingAt));
+      setEditMeetingStartTime(fmtTimeOnly(item.meetingAt));
+      setEditMeetingEndTime(item.meetingEndAt ? fmtTimeOnly(item.meetingEndAt) : "");
+      setEditMeetingLocation(item.meetingLocation ?? "");
+    }
+    setEditMeetingNotify(!!item.meetingNotifyOnSignup);
+  }
+
+  function fmtTimeOnly(iso: string): string {
+    const d = new Date(iso);
+    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
   }
 
   async function handleEditSubmit() {
     if (!editItem || !editTitle.trim() || !editContent.trim()) return;
     setEditSubmitting(true);
+    const meeting = editIsMeeting
+      ? {
+          meetingAt: dateWithTime(editMeetingDate, editMeetingStartTime).toISOString(),
+          meetingEndAt: editMeetingEndTime ? dateWithTime(editMeetingDate, editMeetingEndTime).toISOString() : null,
+          meetingLocation: editMeetingLocation.trim() || null,
+          meetingNotifyOnSignup: editMeetingNotify,
+        }
+      : { meetingAt: null as string | null, meetingEndAt: null as string | null, meetingLocation: null as string | null };
     const updated = await ApiService.editNews(editItem.id, {
       title: editTitle,
       summary: editSummary || editContent.substring(0, 80) + "...",
       content: editContent,
+      ...meeting,
     });
     updateNewsItem(editItem.id, updated);
     setEditItem(null);
@@ -292,6 +446,14 @@ export default function NewsScreen() {
 
   async function handleCreate() {
     if (!newTitle.trim() || !newContent.trim()) return;
+    if (isMeeting && !TIME_RE.test(meetingStartTime)) {
+      notify(t("common.error", lang), t("news.meetingInvalidTime", lang));
+      return;
+    }
+    if (isMeeting && meetingEndTime && !TIME_RE.test(meetingEndTime)) {
+      notify(t("common.error", lang), t("news.meetingInvalidTime", lang));
+      return;
+    }
     setSubmitting(true);
     const item = await ApiService.createNews({
       title: newTitle,
@@ -300,14 +462,50 @@ export default function NewsScreen() {
       category: "announcement",
       author: user ? `${user.firstName} ${user.lastName}` : t("common.unknown", lang),
       authorId: user?.id ?? "",
+      ...buildMeetingPayload(),
     });
     addNewsItem(item);
     setNewTitle("");
     setNewSummary("");
     setNewContent("");
+    setIsMeeting(false);
+    setMeetingLocation("");
+    setMeetingEndTime("");
+    setMeetingNotify(false);
     setSubmitting(false);
     setShowCreate(false);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }
+
+  async function handleSignup(id: string) {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    try {
+      const updated = await ApiService.signupNews(id);
+      updateNewsItem(id, { meetingSignups: updated.meetingSignups, signedUp: true });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (err) {
+      notify(t("common.error", lang), err instanceof Error ? err.message : "Anmeldung fehlgeschlagen");
+    }
+  }
+
+  async function handleUnsign(id: string) {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    try {
+      const updated = await ApiService.unsignNews(id);
+      updateNewsItem(id, { meetingSignups: updated.meetingSignups, signedUp: false });
+    } catch (err) {
+      notify(t("common.error", lang), err instanceof Error ? err.message : "Abmeldung fehlgeschlagen");
+    }
+  }
+
+  async function handleToggleNotify(id: string, enabled: boolean) {
+    try {
+      const updated = await ApiService.setMeetingNotify(id, enabled);
+      updateNewsItem(id, { meetingNotifyOnSignup: updated.meetingNotifyOnSignup });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (err) {
+      notify(t("common.error", lang), err instanceof Error ? err.message : "Einstellung konnte nicht gespeichert werden");
+    }
   }
 
   const filtered = news.filter((n) => {
@@ -359,6 +557,7 @@ export default function NewsScreen() {
                   </Pressable>
                 )}
                 <Pressable
+                  testID="news-add"
                   onPress={() => setShowCreate(true)}
                   style={[styles.iconBtn, { backgroundColor: theme.tint }]}
                 >
@@ -404,11 +603,15 @@ export default function NewsScreen() {
             item={item}
             canModerate={canModerate}
             isOwner={item.authorId === user?.id}
+            userId={user?.id}
             onMarkRead={handleMarkRead}
             onApprove={handleApprove}
             onReject={handleReject}
             onDelete={handleDelete}
             onEdit={handleEdit}
+            onSignup={handleSignup}
+            onUnsign={handleUnsign}
+            onToggleNotify={handleToggleNotify}
             theme={theme}
             lang={lang}
           />
@@ -449,8 +652,69 @@ export default function NewsScreen() {
               numberOfLines={6}
               style={[styles.textIn, { backgroundColor: theme.inputBackground, borderColor: theme.inputBorder, color: theme.text, height: 120, textAlignVertical: "top" }]}
             />
+            <Pressable
+              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setIsMeeting(!isMeeting); }}
+              style={[styles.meetingToggleRow, { borderColor: isMeeting ? "#8B5CF6" : theme.inputBorder, backgroundColor: isMeeting ? withAlpha("#8B5CF6", 0.08) : theme.inputBackground }]}
+            >
+              <Ionicons name="calendar" size={18} color={isMeeting ? "#8B5CF6" : theme.textTertiary} />
+              <Text style={[styles.meetingToggleText, { color: isMeeting ? "#8B5CF6" : theme.text }]}>
+                {t("news.meetingToggle", lang)}
+              </Text>
+              <Ionicons name={isMeeting ? "checkmark-circle" : "ellipse-outline"} size={20} color={isMeeting ? "#8B5CF6" : theme.textTertiary} />
+            </Pressable>
+
+            {isMeeting && (
+              <View style={styles.meetingForm}>
+                <DatePickerField value={meetingDate} onChange={setMeetingDate} label={t("news.meetingStart", lang)} />
+                <View style={styles.timeRow}>
+                  <View style={[styles.textInWrap, { backgroundColor: theme.inputBackground, borderColor: theme.inputBorder }]}>
+                    <Text style={[styles.meetingTimeLabel, { color: theme.textTertiary }]}>{t("news.meetingStart", lang)}</Text>
+                    <TextInput
+                      value={meetingStartTime}
+                      onChangeText={setMeetingStartTime}
+                      placeholder="15:00"
+                      placeholderTextColor={theme.textTertiary}
+                      style={[styles.textInNoBorder, { color: theme.text }]}
+                      autoCapitalize="none"
+                    />
+                  </View>
+                  <View style={[styles.textInWrap, { backgroundColor: theme.inputBackground, borderColor: theme.inputBorder }]}>
+                    <Text style={[styles.meetingTimeLabel, { color: theme.textTertiary }]}>{t("news.meetingEnd", lang)}</Text>
+                    <TextInput
+                      value={meetingEndTime}
+                      onChangeText={setMeetingEndTime}
+                      placeholder="–"
+                      placeholderTextColor={theme.textTertiary}
+                      style={[styles.textInNoBorder, { color: theme.text }]}
+                      autoCapitalize="none"
+                    />
+                  </View>
+                </View>
+                <TextInput
+                  value={meetingLocation}
+                  onChangeText={setMeetingLocation}
+                  placeholder={t("news.meetingLocationPlaceholder", lang)}
+                  placeholderTextColor={theme.textTertiary}
+                  style={[styles.textIn, { backgroundColor: theme.inputBackground, borderColor: theme.inputBorder, color: theme.text }]}
+                />
+                <Pressable onPress={() => setMeetingNotify(!meetingNotify)} style={styles.meetingNotifyToggle}>
+                  <Ionicons name={meetingNotify ? "notifications" : "notifications-off-outline"} size={18} color={meetingNotify ? "#8B5CF6" : theme.textTertiary} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.meetingToggleText, { color: meetingNotify ? "#8B5CF6" : theme.text }]}>{t("news.meetingNotify", lang)}</Text>
+                    <Text style={[styles.hint, { color: theme.textTertiary }]}>{t("news.meetingNotifyHint", lang)}</Text>
+                  </View>
+                  <Ionicons name={meetingNotify ? "toggle" : "toggle-outline"} size={22} color={meetingNotify ? "#8B5CF6" : theme.textTertiary} />
+                </Pressable>
+              </View>
+            )}
+
             <Text style={[styles.hint, { color: theme.textTertiary }]}>{t("news.submitHint", lang)}</Text>
-            <Pressable onPress={handleCreate} disabled={submitting} style={[styles.submitBtn, { backgroundColor: theme.tint }]}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={handleCreate}
+              disabled={submitting}
+              style={[styles.submitBtn, { backgroundColor: theme.tint }]}
+            >
               {submitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitBtnText}>{t("news.submit", lang)}</Text>}
             </Pressable>
           </ScrollView>
@@ -520,6 +784,62 @@ export default function NewsScreen() {
               numberOfLines={6}
               style={[styles.textIn, { backgroundColor: theme.inputBackground, borderColor: theme.inputBorder, color: theme.text, height: 120, textAlignVertical: "top" }]}
             />
+            <Pressable
+              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setEditIsMeeting(!editIsMeeting); }}
+              style={[styles.meetingToggleRow, { borderColor: editIsMeeting ? "#8B5CF6" : theme.inputBorder, backgroundColor: editIsMeeting ? withAlpha("#8B5CF6", 0.08) : theme.inputBackground }]}
+            >
+              <Ionicons name="calendar" size={18} color={editIsMeeting ? "#8B5CF6" : theme.textTertiary} />
+              <Text style={[styles.meetingToggleText, { color: editIsMeeting ? "#8B5CF6" : theme.text }]}>
+                {t("news.meetingToggle", lang)}
+              </Text>
+              <Ionicons name={editIsMeeting ? "checkmark-circle" : "ellipse-outline"} size={20} color={editIsMeeting ? "#8B5CF6" : theme.textTertiary} />
+            </Pressable>
+
+            {editIsMeeting && (
+              <View style={styles.meetingForm}>
+                <DatePickerField value={editMeetingDate} onChange={setEditMeetingDate} label={t("news.meetingStart", lang)} />
+                <View style={styles.timeRow}>
+                  <View style={[styles.textInWrap, { backgroundColor: theme.inputBackground, borderColor: theme.inputBorder }]}>
+                    <Text style={[styles.meetingTimeLabel, { color: theme.textTertiary }]}>{t("news.meetingStart", lang)}</Text>
+                    <TextInput
+                      value={editMeetingStartTime}
+                      onChangeText={setEditMeetingStartTime}
+                      placeholder="15:00"
+                      placeholderTextColor={theme.textTertiary}
+                      style={[styles.textInNoBorder, { color: theme.text }]}
+                      autoCapitalize="none"
+                    />
+                  </View>
+                  <View style={[styles.textInWrap, { backgroundColor: theme.inputBackground, borderColor: theme.inputBorder }]}>
+                    <Text style={[styles.meetingTimeLabel, { color: theme.textTertiary }]}>{t("news.meetingEnd", lang)}</Text>
+                    <TextInput
+                      value={editMeetingEndTime}
+                      onChangeText={setEditMeetingEndTime}
+                      placeholder="–"
+                      placeholderTextColor={theme.textTertiary}
+                      style={[styles.textInNoBorder, { color: theme.text }]}
+                      autoCapitalize="none"
+                    />
+                  </View>
+                </View>
+                <TextInput
+                  value={editMeetingLocation}
+                  onChangeText={setEditMeetingLocation}
+                  placeholder={t("news.meetingLocationPlaceholder", lang)}
+                  placeholderTextColor={theme.textTertiary}
+                  style={[styles.textIn, { backgroundColor: theme.inputBackground, borderColor: theme.inputBorder, color: theme.text }]}
+                />
+                <Pressable onPress={() => setEditMeetingNotify(!editMeetingNotify)} style={styles.meetingNotifyToggle}>
+                  <Ionicons name={editMeetingNotify ? "notifications" : "notifications-off-outline"} size={18} color={editMeetingNotify ? "#8B5CF6" : theme.textTertiary} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.meetingToggleText, { color: editMeetingNotify ? "#8B5CF6" : theme.text }]}>{t("news.meetingNotify", lang)}</Text>
+                    <Text style={[styles.hint, { color: theme.textTertiary }]}>{t("news.meetingNotifyHint", lang)}</Text>
+                  </View>
+                  <Ionicons name={editMeetingNotify ? "toggle" : "toggle-outline"} size={22} color={editMeetingNotify ? "#8B5CF6" : theme.textTertiary} />
+                </Pressable>
+              </View>
+            )}
+
             <Text style={[styles.hint, { color: theme.textTertiary }]}>{t("news.editSubmitHint", lang)}</Text>
             <Pressable onPress={handleEditSubmit} disabled={editSubmitting} style={[styles.submitBtn, { backgroundColor: "#8B5CF6" }]}>
               {editSubmitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitBtnText}>{t("news.resubmit", lang)}</Text>}
@@ -570,4 +890,35 @@ const styles = StyleSheet.create({
   hint: { fontSize: 12, fontFamily: "Inter_400Regular" },
   submitBtn: { paddingVertical: 15, borderRadius: 12, alignItems: "center" },
   submitBtnText: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: "#fff" },
+  meetingToggleRow: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    padding: 14, borderRadius: 12, borderWidth: 1,
+  },
+  meetingToggleText: { fontSize: 14, fontFamily: "Inter_600SemiBold", flex: 1 },
+  meetingForm: { gap: 12 },
+  timeRow: { flexDirection: "row", gap: 10 },
+  textInWrap: { flex: 1, paddingHorizontal: 12, paddingTop: 8, paddingBottom: 10, borderRadius: 12, borderWidth: 1 },
+  meetingTimeLabel: { fontSize: 11, fontFamily: "Inter_400Regular", marginBottom: 2 },
+  textInNoBorder: { fontSize: 15, fontFamily: "Inter_500Medium", padding: 0 },
+  meetingNotifyToggle: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    paddingVertical: 4,
+  },
+  meetingBox: { borderWidth: 1, borderRadius: 12, padding: 10, gap: 6 },
+  meetingRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  meetingText: { fontSize: 13, fontFamily: "Inter_500Medium", flex: 1 },
+  meetingActions: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 2 },
+  meetingSignBtn: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, borderWidth: 1,
+  },
+  meetingSignText: { fontSize: 13, fontFamily: "Inter_700Bold" },
+  meetingCountBtn: { flexDirection: "row", alignItems: "center", gap: 4, padding: 4 },
+  meetingCountText: { fontSize: 12, fontFamily: "Inter_500Medium" },
+  meetingNotifyRow: { flexDirection: "row", alignItems: "center", gap: 6, paddingTop: 2 },
+  meetingNotifyText: { fontSize: 11, fontFamily: "Inter_500Medium" },
+  participantList: { gap: 2, paddingTop: 2, borderTopWidth: 1, borderTopColor: "rgba(128,128,128,0.15)" },
+  participantText: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17 },
+  meetingEndedRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  meetingEndedText: { fontSize: 11, fontFamily: "Inter_500Medium" },
 });

@@ -17,7 +17,7 @@ import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
 import * as ImagePicker from "expo-image-picker";
 import Constants from "expo-constants";
-import { SCHOOL_NAME } from "@/constants/appConfig";
+import { IMPRESSUM_URL, PRIVACY_URL, SCHOOL_NAME } from "@/constants/appConfig";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
@@ -1127,6 +1127,40 @@ export default function SettingsScreen() {
         <Text style={styles.logoutText}>{t("settings.deleteAccount", lang)}</Text>
       </Pressable>
 
+      <View style={[styles.privacySection, appleCardStyle(theme)]}>
+        <Text style={[styles.sectionTitle, { color: theme.textTertiary }]}>{t("settings.legal", lang)}</Text>
+        <Pressable
+          onPress={() => router.push("/privacy-request")}
+          accessibilityRole="button"
+          accessibilityLabel={t("settings.privacyRequestHint", lang)}
+          style={({ pressed }) => [styles.privacyRow, { opacity: pressed ? 0.7 : 1 }]}
+        >
+          <Ionicons name="person-outline" size={20} color={theme.tint} />
+          <Text style={[styles.privacyText, { color: theme.tint }]}>{t("settings.privacyRequest", lang)}</Text>
+          <Ionicons name="chevron-forward" size={16} color={theme.textTertiary} />
+        </Pressable>
+        <Pressable
+          onPress={() => Linking.openURL(PRIVACY_URL)}
+          accessibilityRole="link"
+          accessibilityLabel={t("settings.privacyHint", lang)}
+          style={({ pressed }) => [styles.privacyRow, { opacity: pressed ? 0.7 : 1 }]}
+        >
+          <Ionicons name="shield-checkmark-outline" size={20} color={theme.tint} />
+          <Text style={[styles.privacyText, { color: theme.tint }]}>{t("settings.privacy", lang)}</Text>
+          <Ionicons name="open-outline" size={16} color={theme.textTertiary} />
+        </Pressable>
+        <Pressable
+          onPress={() => Linking.openURL(IMPRESSUM_URL)}
+          accessibilityRole="link"
+          accessibilityLabel={t("settings.impressumHint", lang)}
+          style={({ pressed }) => [styles.privacyRow, { opacity: pressed ? 0.7 : 1 }]}
+        >
+          <Ionicons name="document-text-outline" size={20} color={theme.tint} />
+          <Text style={[styles.privacyText, { color: theme.tint }]}>{t("settings.impressum", lang)}</Text>
+          <Ionicons name="open-outline" size={16} color={theme.textTertiary} />
+        </Pressable>
+      </View>
+
       <Text style={[styles.version, { color: theme.textTertiary }]}>
         {t("settings.version", lang)} {Constants.expoConfig?.version ?? "2.0.0"} · {SCHOOL_NAME}
       </Text>
@@ -1137,6 +1171,9 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   heading: { fontSize: 28, fontFamily: "Inter_700Bold" },
+  privacySection: { padding: 16, gap: 10 },
+  privacyRow: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 44 },
+  privacyText: { flex: 1, fontSize: 15, fontFamily: "Inter_500Medium" },
   profileCard: { padding: 16, flexDirection: "row", alignItems: "flex-start", gap: 16 },
   avatarWrap: { position: "relative" },
   avatar: { width: 72, height: 72, borderRadius: 20 },

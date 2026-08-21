@@ -221,7 +221,7 @@ export default function ActivityLogScreen() {
 
                             <View style={styles.activityInfo}>
                               <Text style={[styles.activityTitle, { color: theme.text }]} numberOfLines={1}>
-                                {activity.missionTitle || "Mission"}
+                                {activity.missionTitle || t("activityLog.missionLabel", lang)}
                               </Text>
                               <Text style={[styles.activityMeta, { color: theme.textTertiary }]}>
                                 {formatDate(activity.createdAt)}

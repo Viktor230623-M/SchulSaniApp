@@ -25,8 +25,26 @@ const LABELS: Record<Lang, Record<string, string>> = {
     patientName: "Name",
     patientClass: "Klasse",
     patientAge: "Alter",
+    patientSex: "Geschlecht",
+    patientBirthDate: "Geburtsdatum",
+    teacherName: "Lehrer",
     emergencyContact: "Notfallkontakt",
     injurySites: "Verletzungsstellen",
+    assessment: "Erstbefund",
+    breathing: "Atmung",
+    skinColor: "Hautfarbe",
+    pulseRegularity: "Puls regelmäßig",
+    orientation: "Orientierung",
+    pupils: "Pupillen",
+    pupilReaction: "Lichtreaktion",
+    interview: "Befragung",
+    complaintHistory: "Beschwerdebeginn und -verlauf",
+    medications: "Medikamente",
+    allergies: "Allergien",
+    progress: "Verlauf",
+    progressNotes: "Verlauf während der Hilfeleistung",
+    recheckMeasurement: "Messung",
+    recheckTime: "Zeit",
     vitals: "Vitalzeichen",
     pulse: "Puls",
     respRate: "Atemfrequenz",
@@ -37,11 +55,16 @@ const LABELS: Record<Lang, Record<string, string>> = {
     treatmentNotes: "Anmerkungen",
     outcome: "Ergebnis",
     outcomeNotes: "Anmerkungen",
+    leadingSymptom: "Leitsymptom",
+    handoverProperty: "Patienteneigentum übergeben",
+    accompaniedBy: "In Begleitung",
+    signatures: "Unterschriften",
     responders: "Einsatzkräfte",
     witnesses: "Zeugen",
     addenda: "Nachträge",
     generated: "Erstellt",
     confidential: "Vertraulich – nur für den Schulbetrieb",
+    disclaimer: "Keine ärztliche Anleitung: führe nur Maßnahmen durch, die du aus deiner Ausbildung kennst. Im Notfall: 112 anrufen.",
     draft: "Entwurf",
     submitted: "Eingereicht",
   },
@@ -58,8 +81,26 @@ const LABELS: Record<Lang, Record<string, string>> = {
     patientName: "Name",
     patientClass: "Class",
     patientAge: "Age",
+    patientSex: "Sex",
+    patientBirthDate: "Date of birth",
+    teacherName: "Teacher",
     emergencyContact: "Emergency contact",
     injurySites: "Injury sites",
+    assessment: "Initial Assessment",
+    breathing: "Breathing",
+    skinColor: "Skin colour",
+    pulseRegularity: "Pulse regular",
+    orientation: "Orientation",
+    pupils: "Pupils",
+    pupilReaction: "Light reaction",
+    interview: "Interview",
+    complaintHistory: "Onset and course of complaints",
+    medications: "Medication",
+    allergies: "Allergies",
+    progress: "Progress",
+    progressNotes: "Progress during care",
+    recheckMeasurement: "Measurement",
+    recheckTime: "Time",
     vitals: "Vital Signs",
     pulse: "Pulse",
     respRate: "Resp. rate",
@@ -70,11 +111,16 @@ const LABELS: Record<Lang, Record<string, string>> = {
     treatmentNotes: "Notes",
     outcome: "Outcome",
     outcomeNotes: "Notes",
+    leadingSymptom: "Leading symptom",
+    handoverProperty: "Patient property handed over",
+    accompaniedBy: "Accompanied by",
+    signatures: "Signatures",
     responders: "Responders",
     witnesses: "Witnesses",
     addenda: "Addenda",
     generated: "Generated",
     confidential: "Confidential – internal school use only",
+    disclaimer: "Not medical instruction: only perform measures you know from your training. In an emergency, call 112.",
     draft: "Draft",
     submitted: "Submitted",
   },
@@ -85,6 +131,57 @@ const PATIENT_TYPES: Record<string, Record<Lang, string>> = {
   teacher: { de: "Lehrkraft", en: "Teacher" },
   visitor: { de: "Besucher/in", en: "Visitor" },
   other: { de: "Sonstige", en: "Other" },
+};
+
+const SEXES: Record<string, Record<Lang, string>> = {
+  female: { de: "weiblich", en: "female" },
+  male: { de: "männlich", en: "male" },
+  diverse: { de: "divers", en: "diverse" },
+  unspecified: { de: "keine Angabe", en: "not specified" },
+};
+
+const BREATHING: Record<string, Record<Lang, string>> = {
+  spontaneous: { de: "spontan / frei", en: "spontaneous / free" },
+  respiratory_distress: { de: "Atemnot", en: "respiratory distress" },
+  hyperventilation: { de: "Hyperventilation", en: "hyperventilation" },
+  apnea: { de: "Atemstillstand", en: "apnoea" },
+};
+
+const SKIN_COLORS: Record<string, Record<Lang, string>> = {
+  normal: { de: "normal", en: "normal" },
+  pale: { de: "blass", en: "pale" },
+  flushed: { de: "gerötet", en: "flushed" },
+  bluish: { de: "bläulich", en: "bluish" },
+};
+
+const PULSE_REGULAR: Record<string, Record<Lang, string>> = {
+  regular: { de: "regelmäßig", en: "regular" },
+  irregular: { de: "unregelmäßig", en: "irregular" },
+};
+
+const ORIENTATIONS: Record<string, Record<Lang, string>> = {
+  responsive: { de: "ansprechbar", en: "responsive" },
+  person: { de: "zur Person orientiert", en: "oriented to person" },
+  place: { de: "örtlich orientiert", en: "oriented to place" },
+  time: { de: "zeitlich orientiert", en: "oriented to time" },
+};
+
+const PUPIL_SIZES: Record<string, Record<Lang, string>> = {
+  constricted: { de: "eng", en: "constricted" },
+  normal: { de: "mittel", en: "normal" },
+  dilated: { de: "weit", en: "dilated" },
+};
+
+const PUPIL_REACTIONS: Record<string, Record<Lang, string>> = {
+  normal: { de: "vorhanden", en: "reactive" },
+  sluggish: { de: "träge", en: "sluggish" },
+  absent: { de: "keine Reaktion", en: "no reaction" },
+};
+
+const PROPERTY: Record<string, Record<Lang, string>> = {
+  jacket: { de: "Jacke", en: "Jacket" },
+  bag: { de: "Tasche", en: "Bag" },
+  other: { de: "Sonstiges", en: "Other" },
 };
 
 const OUTCOMES: Record<string, Record<Lang, string>> = {
@@ -173,8 +270,56 @@ function renderOne(doc: PdfKitLike, report: DecryptedReport, lang: Lang): void {
   }
   y = row(doc, l.patientClass, report.patientClass, MARGIN, y, { name: "Helvetica", size: 10 });
   y = row(doc, l.patientAge, report.patientAge, MARGIN, y, { name: "Helvetica", size: 10 });
+  y = row(doc, l.patientSex, report.patientSex ? (SEXES[report.patientSex]?.[lang] ?? report.patientSex) : null, MARGIN, y, { name: "Helvetica", size: 10 });
+  y = row(doc, l.patientBirthDate, report.patientBirthDate, MARGIN, y, { name: "Helvetica", size: 10 });
+  y = row(doc, l.teacherName, report.teacherName, MARGIN, y, { name: "Helvetica", size: 10 });
   if (report.emergencyContactName || report.emergencyContactPhone) {
     y = row(doc, l.emergencyContact, [report.emergencyContactName, report.emergencyContactPhone].filter(Boolean).join(" · "), MARGIN, y, { name: "Helvetica", size: 10 });
+  }
+
+  const hasAssessment = report.breathing || report.skinColor || report.pulseRegular || report.orientation || report.pupilsLeft || report.pupilsRight || report.pupilReaction;
+  if (hasAssessment) {
+    section(l.assessment);
+    y = row(doc, l.breathing, report.breathing ? (BREATHING[report.breathing]?.[lang] ?? report.breathing) : null, MARGIN, y, { name: "Helvetica", size: 10 });
+    y = row(doc, l.skinColor, report.skinColor ? (SKIN_COLORS[report.skinColor]?.[lang] ?? report.skinColor) : null, MARGIN, y, { name: "Helvetica", size: 10 });
+    y = row(doc, l.pulseRegularity, report.pulseRegular ? (PULSE_REGULAR[report.pulseRegular]?.[lang] ?? report.pulseRegular) : null, MARGIN, y, { name: "Helvetica", size: 10 });
+    y = row(doc, l.orientation, report.orientation ? (ORIENTATIONS[report.orientation]?.[lang] ?? report.orientation) : null, MARGIN, y, { name: "Helvetica", size: 10 });
+    const pupils = [
+      report.pupilsLeft ? `L: ${PUPIL_SIZES[report.pupilsLeft]?.[lang] ?? report.pupilsLeft}` : null,
+      report.pupilsRight ? `R: ${PUPIL_SIZES[report.pupilsRight]?.[lang] ?? report.pupilsRight}` : null,
+      report.pupilReaction ? `${l.pupilReaction}: ${PUPIL_REACTIONS[report.pupilReaction]?.[lang] ?? report.pupilReaction}` : null,
+    ].filter(Boolean).join(" · ");
+    y = row(doc, l.pupils, pupils || null, MARGIN, y, { name: "Helvetica", size: 10 });
+  }
+
+  const hasInterview = report.complaintHistory || report.medications || report.allergies;
+  if (hasInterview) {
+    section(l.interview);
+    y = row(doc, l.complaintHistory, report.complaintHistory, MARGIN, y, { name: "Helvetica", size: 10 });
+    y = row(doc, l.medications, report.medications, MARGIN, y, { name: "Helvetica", size: 10 });
+    y = row(doc, l.allergies, report.allergies, MARGIN, y, { name: "Helvetica", size: 10 });
+  }
+
+  const hasProgress = report.recheckTime2 || report.recheckPulse2 || report.recheckRegular2 || report.recheckTime3 || report.recheckPulse3 || report.recheckRegular3 || report.progressNotes;
+  if (hasProgress) {
+    section(l.progress);
+    if (report.recheckTime2 || report.recheckPulse2 || report.recheckRegular2) {
+      const parts = [
+        report.recheckTime2 ? `${l.recheckTime}: ${report.recheckTime2}` : null,
+        report.recheckPulse2 ? `${l.pulse}: ${report.recheckPulse2} bpm` : null,
+        report.recheckRegular2 ? `${l.pulseRegularity}: ${PULSE_REGULAR[report.recheckRegular2]?.[lang] ?? report.recheckRegular2}` : null,
+      ].filter(Boolean).join(" · ");
+      y = row(doc, `${l.recheckMeasurement} 2`, parts || null, MARGIN, y, { name: "Helvetica", size: 10 });
+    }
+    if (report.recheckTime3 || report.recheckPulse3 || report.recheckRegular3) {
+      const parts = [
+        report.recheckTime3 ? `${l.recheckTime}: ${report.recheckTime3}` : null,
+        report.recheckPulse3 ? `${l.pulse}: ${report.recheckPulse3} bpm` : null,
+        report.recheckRegular3 ? `${l.pulseRegularity}: ${PULSE_REGULAR[report.recheckRegular3]?.[lang] ?? report.recheckRegular3}` : null,
+      ].filter(Boolean).join(" · ");
+      y = row(doc, `${l.recheckMeasurement} 3`, parts || null, MARGIN, y, { name: "Helvetica", size: 10 });
+    }
+    y = row(doc, l.progressNotes, report.progressNotes, MARGIN, y, { name: "Helvetica", size: 10 });
   }
 
   const hasVitals = report.pulseBpm || report.spo2 || report.respRate || report.bloodPressure || report.consciousnessAvpu || report.painScore !== null;
@@ -195,6 +340,19 @@ function renderOne(doc: PdfKitLike, report: DecryptedReport, lang: Lang): void {
   section(l.outcome);
   y = row(doc, l.outcome, report.outcome ? (OUTCOMES[report.outcome]?.[lang] ?? report.outcome) : null, MARGIN, y, { name: "Helvetica", size: 10 });
   y = row(doc, l.outcomeNotes, report.outcomeNotes, MARGIN, y, { name: "Helvetica", size: 10 });
+  y = row(doc, l.leadingSymptom, report.leadingSymptom, MARGIN, y, { name: "Helvetica", size: 10 });
+  y = row(doc, l.accompaniedBy, report.accompaniedBy, MARGIN, y, { name: "Helvetica", size: 10 });
+  if (report.handoverProperty) {
+    const parts = report.handoverProperty.split(",").map((p) => p.trim()).map((p) => PROPERTY[p]?.[lang] ?? p).join(", ");
+    y = row(doc, l.handoverProperty, parts, MARGIN, y, { name: "Helvetica", size: 10 });
+  }
+
+  if (report.signatures && report.signatures.length > 0) {
+    section(l.signatures);
+    const names = report.signatures.filter(Boolean).join(", ");
+    doc.drawText(names, { x: MARGIN, y, size: 10, font: "Helvetica", color: rgb(0.2, 0.2, 0.2) });
+    y += 16;
+  }
 
   const responderIds = report.responderIds ?? [];
   if (responderIds.length > 0) {
@@ -218,6 +376,10 @@ function renderOne(doc: PdfKitLike, report: DecryptedReport, lang: Lang): void {
   y += 10;
   doc.drawText(`${l.generated}: ${new Date().toLocaleString(lang === "de" ? "de-DE" : "en-US")}  |  ${l.confidential}`, {
     x: MARGIN, y, size: 8, font: "Helvetica", color: rgb(0.6, 0.6, 0.6),
+  });
+  y += 12;
+  doc.drawText(l.disclaimer, {
+    x: MARGIN, y, size: 7, font: "Helvetica", color: rgb(0.55, 0.55, 0.55),
   });
 }
 

@@ -49,3 +49,9 @@ export const THEME_COLOR = pflicht(
 
 /** Kontaktadresse fuer Lizenzanfragen (Lizenz-Screen, mailto-Link). */
 export const LICENSE_EMAIL = "team@schulsaniapp.com";
+
+/** Veroeffentlichte Datenschutzerklaerung (App-Store-Listing und In-App-Link). */
+export const PRIVACY_URL = "https://demo.schulsaniapp.com/datenschutz.html";
+
+/** Veroeffentlichtes Impressum (App-Store-Listing und In-App-Link). */
+export const IMPRESSUM_URL = "https://demo.schulsaniapp.com/impressum.html";

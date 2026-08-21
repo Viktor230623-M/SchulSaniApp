@@ -53,12 +53,22 @@ function mitRouterOrigin(plugins: PluginEntry[] | undefined): PluginEntry[] {
 export default (): ExpoConfig => {
   const basis = appJson.expo as unknown as ExpoConfig;
 
+  // aps-environment gehoert zum Build-Profil, nicht fest verdrahtet: Ein
+  // Store-/TestFlight-Build mit "development" bekäme tote Push-Zustellung.
+  // EAS setzt die Variable je Profil; lokal (Expo Go / prebuild) bleibt development.
+  const pushProfile =
+    process.env["EAS_BUILD_PROFILE"] === "production" ? "production" : "development";
+
   return {
     ...basis,
     name: appName,
     ios: {
       ...basis.ios,
       bundleIdentifier: bundleId,
+      entitlements: {
+        ...basis.ios?.entitlements,
+        "aps-environment": pushProfile,
+      },
     },
     android: {
       ...basis.android,

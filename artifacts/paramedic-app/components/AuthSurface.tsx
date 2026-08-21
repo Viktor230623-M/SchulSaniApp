@@ -135,7 +135,7 @@ export function AuthMessage({ text, error, theme }: { text: string; error?: bool
 export function AuthLink({ label, onPress, theme }: { label: string; onPress: () => void; theme: AuthTheme }) {
   return (
     <Pressable accessibilityRole="link" onPress={onPress} style={({ pressed }) => [styles.link, { opacity: pressed ? 0.55 : 1 }]}>
-      <Text style={[styles.linkText, { color: theme.tint }]}>{label}</Text>
+      <Text style={[styles.linkText, { color: theme.text, textDecorationLine: "underline" }]}>{label}</Text>
     </Pressable>
   );
 }

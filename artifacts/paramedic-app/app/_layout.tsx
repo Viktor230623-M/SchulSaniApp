@@ -8,7 +8,7 @@ import {
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { router, Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
@@ -50,6 +50,13 @@ function notificationTarget(type: string):
 }
 
 function RootLayoutNav() {
+  // Signal an das Kompatibilitaets-Script in +html.tsx: React ist erfolgreich
+  // gestartet, die Seite ist kein Whitescreen. Das Script zeigt sonst bei
+  // einem erfassten Startfehler eine Fehlermeldung statt einer weissen Seite.
+  useEffect(() => {
+    (window as any).__schulsaniMounted = true;
+  }, []);
+
   const authStatus = useAppStore((s) => s.authStatus);
   const token = useAppStore((s) => s.token);
   const setAuthStatus = useAppStore((s) => s.setAuthStatus);
@@ -193,13 +200,26 @@ export default function RootLayout() {
     Inter_700Bold,
   });
 
+  // Faengt den Fall ab, dass das Laden der Schriften weder erfolgreich endet
+  // noch mit einem Fehler abbricht (z.B. haengende Anfrage in einem
+  // Schulnetz). Ohne dieses Limit bliebe die App dauerhaft weiss: RootLayout
+  // gibt null zurueck und der weisse Splash-Screen wird nie ausgeblendet.
+  const [fontTimeout, setFontTimeout] = useState(false);
+
   useEffect(() => {
-    if (fontsLoaded || fontError) {
+    const timer = setTimeout(() => setFontTimeout(true), 4000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (fontsLoaded || fontError || fontTimeout) {
       SplashScreen.hideAsync();
     }
-  }, [fontsLoaded, fontError]);
+  }, [fontsLoaded, fontError, fontTimeout]);
 
-  if (!fontsLoaded && !fontError) return null;
+  // Erst nach dem Timeout mit System-Schrift rendern; sobald Inter nachgeladen
+  // ist, wechselt der Text automatisch (wie font-display: swap).
+  if (!fontsLoaded && !fontError && !fontTimeout) return null;
 
   return (
     <SafeAreaProvider>

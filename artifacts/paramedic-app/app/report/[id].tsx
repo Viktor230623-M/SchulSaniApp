@@ -2,7 +2,8 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { router, useLocalSearchParams } from "expo-router";
 import * as Sharing from "expo-sharing";
-import * as FileSystem from "expo-file-system";
+import { File, Paths } from "expo-file-system";
+import * as Crypto from "expo-crypto";
 import React, { useEffect, useRef, useState } from "react";
 import {
   Platform,
@@ -32,6 +33,11 @@ import ChipTextField from "@/components/ChipTextField";
 import BodyMap, { BODY_REGION_KEYS } from "@/components/BodyMap";
 import { confirmAction, notify } from "@/lib/dialog";
 import ApiService from "@/services/ApiService";
+import {
+  clearIncidentDraft,
+  loadIncidentDraft,
+  saveIncidentDraft,
+} from "@/services/incidentDraftStore";
 import { toBase64 } from "@/services/crypto/encoding";
 import { renderReportPdf, type DecryptedReport } from "@/services/reportPdfClient";
 import { has, useAppStore } from "@/store/useAppStore";
@@ -72,6 +78,9 @@ export default function ReportScreen() {
   const [addingAddendum, setAddingAddendum] = useState(false);
   const [showAddendum, setShowAddendum] = useState(false);
   const [vitalsExpanded, setVitalsExpanded] = useState(false);
+  const [clientDraftId, setClientDraftId] = useState(() => isNew ? Crypto.randomUUID() : "");
+  const [localDraftStatus, setLocalDraftStatus] = useState<"restored" | "error" | null>(null);
+  const hydratedRef = useRef(false);
 
   // Form state
   const [reportTitle, setReportTitle] = useState("");
@@ -97,55 +106,154 @@ export default function ReportScreen() {
   const [outcome, setOutcome] = useState<IncidentOutcome | null>(null);
   const [outcomeNotes, setOutcomeNotes] = useState("");
   const [witnesses, setWitnesses] = useState("");
+  // Patient (Ergaenzungen zum Papierprotokoll)
+  const [patientSex, setPatientSex] = useState("");
+  const [patientBirthDate, setPatientBirthDate] = useState("");
+  const [teacherName, setTeacherName] = useState("");
+  // Erstbefund A–E
+  const [breathing, setBreathing] = useState("");
+  const [skinColor, setSkinColor] = useState("");
+  const [pulseRegular, setPulseRegular] = useState("");
+  const [orientation, setOrientation] = useState("");
+  const [pupilsLeft, setPupilsLeft] = useState("");
+  const [pupilsRight, setPupilsRight] = useState("");
+  const [pupilReaction, setPupilReaction] = useState("");
+  // Befragung
+  const [complaintHistory, setComplaintHistory] = useState("");
+  const [medications, setMedications] = useState("");
+  const [allergies, setAllergies] = useState("");
+  // Verlauf (Wiederholungsmessungen)
+  const [recheckTime2, setRecheckTime2] = useState("");
+  const [recheckPulse2, setRecheckPulse2] = useState("");
+  const [recheckRegular2, setRecheckRegular2] = useState("");
+  const [recheckTime3, setRecheckTime3] = useState("");
+  const [recheckPulse3, setRecheckPulse3] = useState("");
+  const [recheckRegular3, setRecheckRegular3] = useState("");
+  const [progressNotes, setProgressNotes] = useState("");
+  // Entlassung / Uebergabe
+  const [leadingSymptom, setLeadingSymptom] = useState("");
+  const [handoverProperty, setHandoverProperty] = useState("");
+  const [accompaniedBy, setAccompaniedBy] = useState("");
+  // Unterschriften (bis zu drei Einsatzkraefte)
+  const [signatures, setSignatures] = useState<string[]>(["", "", ""]);
 
   const missionId = paramMissionId ?? (report?.missionId ?? null);
   const isLocked = report?.status === "submitted";
   const isAuthor = report?.authorId === user?.id;
   const canEdit = !isLocked && (isNew || isAuthor || isLeadership);
 
+  function applyDraft(payload: Partial<IncidentReport>) {
+    setReportTitle(payload.title ?? "");
+    setPatientType(payload.patientType ?? null);
+    setPatientFirstName(payload.patientFirstName ?? "");
+    setPatientLastName(payload.patientLastName ?? "");
+    setPatientClass(payload.patientClass ?? "");
+    setPatientAge(payload.patientAge == null ? "" : String(payload.patientAge));
+    setPatientSex(payload.patientSex ?? "");
+    setPatientBirthDate(payload.patientBirthDate ?? "");
+    setTeacherName(payload.teacherName ?? "");
+    setEmergencyContactName(payload.emergencyContactName ?? "");
+    setEmergencyContactPhone(payload.emergencyContactPhone ?? "");
+    setLocation(payload.location ?? "");
+    setCategory(payload.category ?? "");
+    setDescription(payload.description ?? "");
+    setInjurySites(payload.injurySites ?? "");
+    setMeasures(payload.measures ?? "");
+    setTreatmentNotes(payload.treatmentNotes ?? "");
+    setBreathing(payload.breathing ?? "");
+    setSkinColor(payload.skinColor ?? "");
+    setPulseRegular(payload.pulseRegular ?? "");
+    setOrientation(payload.orientation ?? "");
+    setPupilsLeft(payload.pupilsLeft ?? "");
+    setPupilsRight(payload.pupilsRight ?? "");
+    setPupilReaction(payload.pupilReaction ?? "");
+    setComplaintHistory(payload.complaintHistory ?? "");
+    setMedications(payload.medications ?? "");
+    setAllergies(payload.allergies ?? "");
+    setRecheckTime2(payload.recheckTime2 ?? "");
+    setRecheckPulse2(payload.recheckPulse2 == null ? "" : String(payload.recheckPulse2));
+    setRecheckRegular2(payload.recheckRegular2 ?? "");
+    setRecheckTime3(payload.recheckTime3 ?? "");
+    setRecheckPulse3(payload.recheckPulse3 == null ? "" : String(payload.recheckPulse3));
+    setRecheckRegular3(payload.recheckRegular3 ?? "");
+    setProgressNotes(payload.progressNotes ?? "");
+    setLeadingSymptom(payload.leadingSymptom ?? "");
+    setHandoverProperty(payload.handoverProperty ?? "");
+    setAccompaniedBy(payload.accompaniedBy ?? "");
+    if (Array.isArray(payload.signatures)) {
+      const sigs = (payload.signatures as unknown[]).filter((s): s is string => typeof s === "string");
+      setSignatures([sigs[0] ?? "", sigs[1] ?? "", sigs[2] ?? ""]);
+    }
+    setPulseBpm(payload.pulseBpm == null ? "" : String(payload.pulseBpm));
+    setSpo2(payload.spo2 == null ? "" : String(payload.spo2));
+    setRespRate(payload.respRate == null ? "" : String(payload.respRate));
+    setBloodPressure(payload.bloodPressure ?? "");
+    setAvpu(payload.consciousnessAvpu ?? null);
+    setPainScore(payload.painScore ?? null);
+    setOutcome(payload.outcome ?? null);
+    setOutcomeNotes(payload.outcomeNotes ?? "");
+    setWitnesses(payload.witnesses ?? "");
+    const savedClientDraftId = (payload as { clientDraftId?: unknown }).clientDraftId;
+    if (typeof savedClientDraftId === "string" && savedClientDraftId) {
+      setClientDraftId(savedClientDraftId);
+    }
+  }
+
+  async function restoreLocalDraft(reportId: string): Promise<boolean> {
+    if (!user?.id) return false;
+    const draft = await loadIncidentDraft(user.id, reportId);
+    if (!draft) return false;
+    applyDraft(draft.payload);
+    setLocalDraftStatus("restored");
+    return true;
+  }
+
   useEffect(() => {
-    if (!isNew) loadReport();
-  }, [id]);
+    hydratedRef.current = false;
+    let cancelled = false;
+    (async () => {
+      if (isNew) {
+        try {
+          if (!cancelled) await restoreLocalDraft("new");
+        } catch (e) {
+          if (!cancelled) setLocalDraftStatus("error");
+        } finally {
+          if (!cancelled) hydratedRef.current = true;
+        }
+        return;
+      }
+      await loadReport();
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [id, user?.id]);
 
   async function loadReport() {
     try {
       const r = await ApiService.getIncidentReport(id);
       setReport(r);
-      setReportTitle(r.title ?? "");
-      setPatientType(r.patientType ?? null);
-      setPatientFirstName(r.patientFirstName ?? "");
-      setPatientLastName(r.patientLastName ?? "");
-      setPatientClass(r.patientClass ?? "");
-      setPatientAge(r.patientAge ? String(r.patientAge) : "");
-      setEmergencyContactName(r.emergencyContactName ?? "");
-      setEmergencyContactPhone(r.emergencyContactPhone ?? "");
-      setLocation(r.location ?? "");
-      setCategory(r.category ?? "");
-      setDescription(r.description ?? "");
-      setInjurySites(r.injurySites ?? "");
-      setMeasures(r.measures ?? "");
-      setTreatmentNotes(r.treatmentNotes ?? "");
-      setPulseBpm(r.pulseBpm ? String(r.pulseBpm) : "");
-      setSpo2(r.spo2 ? String(r.spo2) : "");
-      setRespRate(r.respRate ? String(r.respRate) : "");
-      setBloodPressure(r.bloodPressure ?? "");
-      setAvpu(r.consciousnessAvpu ?? null);
-      setPainScore(r.painScore ?? null);
-      setOutcome(r.outcome ?? null);
-      setOutcomeNotes(r.outcomeNotes ?? "");
-      setWitnesses(r.witnesses ?? "");
+      applyDraft(r);
       if (r.pulseBpm || r.spo2 || r.respRate || r.bloodPressure || r.consciousnessAvpu || r.painScore !== null) {
         setVitalsExpanded(true);
+      }
+      if (r.status === "submitted") {
+        if (user?.id) await clearIncidentDraft(user.id, id).catch(() => {});
+      } else {
+        await restoreLocalDraft(id);
       }
     } catch (e) {
       notify(t("common.error", lang), String(e));
     } finally {
       setLoading(false);
+      hydratedRef.current = true;
     }
   }
 
   function buildPayload() {
     return {
+      updatedAt: report?.updatedAt,
+      clientDraftId: isNew ? clientDraftId : undefined,
       missionId: missionId ?? undefined,
       title: reportTitle.trim() || undefined,
       patientType: patientType ?? undefined,
@@ -153,6 +261,9 @@ export default function ReportScreen() {
       patientLastName: patientLastName.trim() || undefined,
       patientClass: patientClass.trim() || undefined,
       patientAge: patientAge ? parseInt(patientAge, 10) : undefined,
+      patientSex: patientSex.trim() || undefined,
+      patientBirthDate: patientBirthDate.trim() || undefined,
+      teacherName: teacherName.trim() || undefined,
       emergencyContactName: emergencyContactName.trim() || undefined,
       emergencyContactPhone: emergencyContactPhone.trim() || undefined,
       location: location.trim() || undefined,
@@ -161,6 +272,27 @@ export default function ReportScreen() {
       injurySites: injurySites.trim() || undefined,
       measures: measures.trim() || undefined,
       treatmentNotes: treatmentNotes.trim() || undefined,
+      breathing: breathing.trim() || undefined,
+      skinColor: skinColor.trim() || undefined,
+      pulseRegular: pulseRegular.trim() || undefined,
+      orientation: orientation.trim() || undefined,
+      pupilsLeft: pupilsLeft.trim() || undefined,
+      pupilsRight: pupilsRight.trim() || undefined,
+      pupilReaction: pupilReaction.trim() || undefined,
+      complaintHistory: complaintHistory.trim() || undefined,
+      medications: medications.trim() || undefined,
+      allergies: allergies.trim() || undefined,
+      recheckTime2: recheckTime2.trim() || undefined,
+      recheckPulse2: recheckPulse2 ? parseInt(recheckPulse2, 10) : undefined,
+      recheckRegular2: recheckRegular2.trim() || undefined,
+      recheckTime3: recheckTime3.trim() || undefined,
+      recheckPulse3: recheckPulse3 ? parseInt(recheckPulse3, 10) : undefined,
+      recheckRegular3: recheckRegular3.trim() || undefined,
+      progressNotes: progressNotes.trim() || undefined,
+      leadingSymptom: leadingSymptom.trim() || undefined,
+      handoverProperty: handoverProperty.trim() || undefined,
+      accompaniedBy: accompaniedBy.trim() || undefined,
+      signatures: signatures.map((s) => s.trim()).filter(Boolean).length > 0 ? signatures.map((s) => s.trim()).filter(Boolean) : undefined,
       pulseBpm: pulseBpm ? parseInt(pulseBpm, 10) : undefined,
       spo2: spo2 ? parseInt(spo2, 10) : undefined,
       respRate: respRate ? parseInt(respRate, 10) : undefined,
@@ -173,25 +305,95 @@ export default function ReportScreen() {
     };
   }
 
+  async function persistLocalDraft() {
+    if (!user?.id || isLocked) return;
+    await saveIncidentDraft(user.id, id, buildPayload());
+  }
+
+  useEffect(() => {
+    if (!hydratedRef.current || !canEdit || !user?.id) return;
+    const timer = setTimeout(() => {
+      persistLocalDraft().catch(() => setLocalDraftStatus("error"));
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [
+    canEdit,
+    category,
+    description,
+    emergencyContactName,
+    emergencyContactPhone,
+    injurySites,
+    location,
+    measures,
+    outcome,
+    outcomeNotes,
+    painScore,
+    patientAge,
+    patientClass,
+    patientFirstName,
+    patientLastName,
+    patientType,
+    pulseBpm,
+    reportTitle,
+    respRate,
+    spo2,
+    treatmentNotes,
+    user?.id,
+    witnesses,
+    avpu,
+    patientSex,
+    patientBirthDate,
+    teacherName,
+    breathing,
+    skinColor,
+    pulseRegular,
+    orientation,
+    pupilsLeft,
+    pupilsRight,
+    pupilReaction,
+    complaintHistory,
+    medications,
+    allergies,
+    recheckTime2,
+    recheckPulse2,
+    recheckRegular2,
+    recheckTime3,
+    recheckPulse3,
+    recheckRegular3,
+    progressNotes,
+    leadingSymptom,
+    handoverProperty,
+    accompaniedBy,
+    signatures,
+  ]);
+
   async function handleSaveDraft() {
     setSaving(true);
+    let localSaved = false;
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      await persistLocalDraft();
+      localSaved = true;
       const payload = buildPayload();
       if (isNew) {
         const r = await ApiService.createIncidentReport(payload);
+        if (user?.id) await clearIncidentDraft(user.id, "new").catch(() => {});
         setReport(r);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         router.replace(`/report/${r.id}`);
       } else {
         const r = await ApiService.updateIncidentReport(id, payload);
+        if (user?.id) await clearIncidentDraft(user.id, id).catch(() => {});
         setReport(r);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
-      // Saving used to succeed without any visible feedback, which read as failure.
+      setLocalDraftStatus(null);
       await notify(t("report.draftSaved", lang));
     } catch (e) {
-      notify(t("common.error", lang), String(e));
+      notify(
+        t("common.error", lang),
+        `${String(e)}${localSaved ? `\n\n${t("report.offlineDraftSaved", lang)}` : ""}`,
+      );
     } finally {
       setSaving(false);
     }
@@ -211,23 +413,31 @@ export default function ReportScreen() {
     if (!confirmed) return;
 
     setSubmitting(true);
+    let localSaved = false;
     try {
-      // Save current state first, then submit
+      await persistLocalDraft();
+      localSaved = true;
       let reportId = id;
+      let alreadySubmitted = false;
       if (isNew) {
-        const r = await ApiService.createIncidentReport(buildPayload());
-        reportId = r.id;
+        const created = await ApiService.createIncidentReport(buildPayload());
+        reportId = created.id;
+        alreadySubmitted = created.status === "submitted";
       } else {
         await ApiService.updateIncidentReport(id, buildPayload());
       }
-      const r = await ApiService.submitIncidentReport(reportId);
+      const r = alreadySubmitted ? await ApiService.getIncidentReport(reportId) : await ApiService.submitIncidentReport(reportId);
+      if (user?.id) await clearIncidentDraft(user.id, isNew ? "new" : id).catch(() => {});
       setReport(r);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       await notify(t("report.submitSuccess", lang));
       if (!isNew) loadReport();
       else router.replace(`/report/${reportId}`);
     } catch (e) {
-      await notify(t("common.error", lang), String(e));
+      await notify(
+        t("common.error", lang),
+        `${String(e)}${localSaved ? `\n\n${t("report.offlineDraftSaved", lang)}` : ""}`,
+      );
     } finally {
       setSubmitting(false);
     }
@@ -258,12 +468,10 @@ export default function ReportScreen() {
       // cacheDirectory ist app-privat und wird weder in iCloud gespiegelt
       // noch mit anderen Geraeten synchronisiert. Das PDF verlaesst das Geraet
       // nur ueber das Teilen-Menue und wird nie zum Server hochgeladen.
-      const dest = `${FileSystem.cacheDirectory}${filename}`;
-      await FileSystem.writeAsStringAsync(dest, toBase64(bytes), {
-        encoding: FileSystem.EncodingType.Base64,
-      });
+      const dest = new File(Paths.cache, filename);
+      dest.write(toBase64(bytes), { encoding: "base64" });
       if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(dest, { mimeType: "application/pdf" });
+        await Sharing.shareAsync(dest.uri, { mimeType: "application/pdf" });
       }
     } catch (e) {
       notify(t("common.error", lang), String(e));
@@ -389,6 +597,23 @@ export default function ReportScreen() {
     key: k,
     label: getBodyRegionLabel(k),
   }));
+  const sexOptions = ["female", "male", "diverse", "unspecified"].map((k) => ({ key: k, label: t(`report.sexes.${k}`, lang) }));
+  const breathingOptions = ["spontaneous", "respiratory_distress", "hyperventilation", "apnea"].map((k) => ({ key: k, label: t(`report.breathingOptions.${k}`, lang) }));
+  const skinColorOptions = ["normal", "pale", "flushed", "bluish"].map((k) => ({ key: k, label: t(`report.skinColors.${k}`, lang) }));
+  const pulseRegularOptions = ["regular", "irregular"].map((k) => ({ key: k, label: t(`report.pulseRegularOptions.${k}`, lang) }));
+  const orientationOptions = ["responsive", "person", "place", "time"].map((k) => ({ key: k, label: t(`report.orientationOptions.${k}`, lang) }));
+  const pupilSizeOptions = ["constricted", "normal", "dilated"].map((k) => ({ key: k, label: t(`report.pupilSizes.${k}`, lang) }));
+  const pupilReactionOptions = ["normal", "sluggish", "absent"].map((k) => ({ key: k, label: t(`report.pupilReactions.${k}`, lang) }));
+  const propertyOptions = ["jacket", "bag", "other"].map((k) => ({ key: k, label: t(`report.propertyOptions.${k}`, lang) }));
+
+  // Mehrfachauswahl als Komma-Liste (wie injurySites/measures).
+  const toggleInList = (list: string, item: string) => {
+    const parts = list.split(",").map((s) => s.trim()).filter(Boolean);
+    const idx = parts.indexOf(item);
+    if (idx >= 0) parts.splice(idx, 1);
+    else parts.push(item);
+    return parts.join(", ");
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -429,6 +654,25 @@ export default function ReportScreen() {
           <View style={[styles.lockedBanner, { backgroundColor: "#22C55E15", borderColor: "#22C55E40" }]}>
             <Ionicons name="lock-closed" size={14} color="#22C55E" />
             <Text style={[styles.lockedText, { color: "#22C55E" }]}>{tReport("lockedNotice")}</Text>
+          </View>
+        )}
+
+        {/* Disclaimer: keine medizinische Anleitung, Notruf-Hinweis */}
+        <View style={[styles.disclaimerCard, { backgroundColor: theme.backgroundTertiary, borderColor: theme.cardBorder }]}>
+          <Ionicons name="medical" size={16} color={theme.tint} />
+          <Text style={[styles.disclaimerText, { color: theme.textSecondary }]}>{tReport("disclaimer")}</Text>
+        </View>
+
+        {localDraftStatus && (
+          <View style={[styles.disclaimerCard, { backgroundColor: localDraftStatus === "error" ? theme.danger + "14" : theme.tintLight, borderColor: theme.cardBorder }]}>
+            <Ionicons
+              name={localDraftStatus === "error" ? "alert-circle-outline" : "cloud-done-outline"}
+              size={16}
+              color={localDraftStatus === "error" ? theme.danger : theme.tint}
+            />
+            <Text style={[styles.disclaimerText, { color: localDraftStatus === "error" ? theme.danger : theme.textSecondary }]}>
+              {t(localDraftStatus === "error" ? "report.draftSaveFailed" : "report.draftRestored", lang)}
+            </Text>
           </View>
         )}
 
@@ -496,8 +740,12 @@ export default function ReportScreen() {
             {chipRow(PATIENT_TYPES, patientType, (p) => setPatientType(patientType === p ? null : p), getPatientTypeLabel)}
             {field(tReport("patientFirstName"), patientFirstName, setPatientFirstName)}
             {field(tReport("patientLastName"), patientLastName, setPatientLastName)}
-            {field(tReport("patientClass"), patientClass, setPatientClass, { placeholder: "z.B. 10a / e.g. 10a" })}
-            {field(tReport("patientAge"), patientAge, setPatientAge, { keyboardType: "numeric", placeholder: "z.B. 14" })}
+            {field(tReport("patientClass"), patientClass, setPatientClass, { placeholder: tReport("placeholders.patientClass") })}
+            {field(tReport("patientAge"), patientAge, setPatientAge, { keyboardType: "numeric", placeholder: tReport("placeholders.patientAge") })}
+            <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>{tReport("patientSex")}</Text>
+            {chipRow(sexOptions.map((o) => o.key), patientSex, (k) => setPatientSex(patientSex === k ? "" : k), (k) => sexOptions.find((o) => o.key === k)?.label ?? k)}
+            {field(tReport("patientBirthDate"), patientBirthDate, setPatientBirthDate, { placeholder: tReport("placeholders.patientBirthDate") })}
+            {field(tReport("teacherName"), teacherName, setTeacherName, { placeholder: tReport("placeholders.teacherName") })}
             <Text style={[styles.fieldLabel, { color: theme.textSecondary, marginTop: 8 }]}>
               {patientType === "student" ? tReport("emergencyContactParents") : tReport("emergencyContact")}
             </Text>
@@ -506,7 +754,7 @@ export default function ReportScreen() {
             })}
             {field(tReport("emergencyContactPhone"), emergencyContactPhone, setEmergencyContactPhone, {
               keyboardType: "phone-pad",
-              placeholder: "0171 1234567",
+              placeholder: tReport("placeholders.phone"),
             })}
             {emergencyContactPhone.trim().length > 0 && (
               <Pressable
@@ -538,7 +786,7 @@ export default function ReportScreen() {
             placeholder: tReport("descriptionPlaceholder"),
             multiline: true,
           })}
-          {field(t("common.location", lang), location, setLocation, { placeholder: "z.B. Sporthalle / Gym" })}
+          {field(t("common.location", lang), location, setLocation, { placeholder: tReport("placeholders.location") })}
         </View>
 
         {/* Section: Injury sites */}
@@ -563,6 +811,58 @@ export default function ReportScreen() {
           />
         </View>
 
+        {/* Section: Erstbefund (A–E) */}
+        <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
+          {sectionLabel(tReport("sectionAssessment"))}
+          <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>{tReport("breathing")}</Text>
+          {chipRow(breathingOptions.map((o) => o.key), breathing, (k) => setBreathing(breathing === k ? "" : k), (k) => breathingOptions.find((o) => o.key === k)?.label ?? k)}
+          <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>{tReport("skinColor")}</Text>
+          {chipRow(skinColorOptions.map((o) => o.key), skinColor, (k) => setSkinColor(skinColor === k ? "" : k), (k) => skinColorOptions.find((o) => o.key === k)?.label ?? k)}
+          <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>{tReport("pulseRegularity")}</Text>
+          {chipRow(pulseRegularOptions.map((o) => o.key), pulseRegular, (k) => setPulseRegular(pulseRegular === k ? "" : k), (k) => pulseRegularOptions.find((o) => o.key === k)?.label ?? k)}
+          <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>{tReport("orientationLabel")}</Text>
+          {chipRow(orientationOptions.map((o) => o.key), orientation, (k) => setOrientation(orientation === k ? "" : k), (k) => orientationOptions.find((o) => o.key === k)?.label ?? k)}
+          <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>{tReport("pupils")}</Text>
+          <View style={{ flexDirection: "row", gap: 16, flexWrap: "wrap" }}>
+            <View style={{ flex: 1, minWidth: 130, gap: 4 }}>
+              <Text style={[styles.fieldLabel, { color: theme.textTertiary }]}>{tReport("pupilLeft")}</Text>
+              {chipRow(pupilSizeOptions.map((o) => o.key), pupilsLeft, (k) => setPupilsLeft(pupilsLeft === k ? "" : k), (k) => pupilSizeOptions.find((o) => o.key === k)?.label ?? k)}
+            </View>
+            <View style={{ flex: 1, minWidth: 130, gap: 4 }}>
+              <Text style={[styles.fieldLabel, { color: theme.textTertiary }]}>{tReport("pupilRight")}</Text>
+              {chipRow(pupilSizeOptions.map((o) => o.key), pupilsRight, (k) => setPupilsRight(pupilsRight === k ? "" : k), (k) => pupilSizeOptions.find((o) => o.key === k)?.label ?? k)}
+            </View>
+          </View>
+          <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>{tReport("pupilReactionLabel")}</Text>
+          {chipRow(pupilReactionOptions.map((o) => o.key), pupilReaction, (k) => setPupilReaction(pupilReaction === k ? "" : k), (k) => pupilReactionOptions.find((o) => o.key === k)?.label ?? k)}
+        </View>
+
+        {/* Section: Befragung */}
+        <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
+          {sectionLabel(tReport("sectionInterview"))}
+          {field(tReport("complaintHistory"), complaintHistory, setComplaintHistory, { placeholder: tReport("descriptionPlaceholder"), multiline: true })}
+          {field(tReport("medications"), medications, setMedications)}
+          {field(tReport("allergies"), allergies, setAllergies)}
+        </View>
+
+        {/* Section: Verlauf */}
+        <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
+          {sectionLabel(tReport("sectionProgress"))}
+          <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>{tReport("recheckMeasurement")} 2</Text>
+          <View style={{ flexDirection: "row", gap: 10 }}>
+            <View style={{ flex: 1 }}>{field(tReport("recheckTime"), recheckTime2, setRecheckTime2, { keyboardType: "default" })}</View>
+            <View style={{ flex: 1 }}>{field(tReport("recheckPulse"), recheckPulse2, setRecheckPulse2, { keyboardType: "numeric" })}</View>
+          </View>
+          {chipRow(pulseRegularOptions.map((o) => o.key), recheckRegular2, (k) => setRecheckRegular2(recheckRegular2 === k ? "" : k), (k) => pulseRegularOptions.find((o) => o.key === k)?.label ?? k)}
+          <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>{tReport("recheckMeasurement")} 3</Text>
+          <View style={{ flexDirection: "row", gap: 10 }}>
+            <View style={{ flex: 1 }}>{field(tReport("recheckTime"), recheckTime3, setRecheckTime3)}</View>
+            <View style={{ flex: 1 }}>{field(tReport("recheckPulse"), recheckPulse3, setRecheckPulse3, { keyboardType: "numeric" })}</View>
+          </View>
+          {chipRow(pulseRegularOptions.map((o) => o.key), recheckRegular3, (k) => setRecheckRegular3(recheckRegular3 === k ? "" : k), (k) => pulseRegularOptions.find((o) => o.key === k)?.label ?? k)}
+          {field(tReport("progressNotes"), progressNotes, setProgressNotes, { placeholder: tReport("treatmentNotesPlaceholder"), multiline: true })}
+        </View>
+
         {/* Section: Vitals (collapsible) */}
         <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
           <Pressable
@@ -574,10 +874,10 @@ export default function ReportScreen() {
           </Pressable>
           {vitalsExpanded && (
             <View style={{ gap: 8 }}>
-              {field(tReport("pulse"), pulseBpm, setPulseBpm, { keyboardType: "numeric", placeholder: "z.B. 72" })}
-              {field(tReport("spo2"), spo2, setSpo2, { keyboardType: "numeric", placeholder: "z.B. 98" })}
-              {field(tReport("respRate"), respRate, setRespRate, { keyboardType: "numeric", placeholder: "z.B. 16" })}
-              {field(tReport("bloodPressure"), bloodPressure, setBloodPressure, { placeholder: "z.B. 120/80" })}
+              {field(tReport("pulse"), pulseBpm, setPulseBpm, { keyboardType: "numeric", placeholder: tReport("placeholders.pulse") })}
+              {field(tReport("spo2"), spo2, setSpo2, { keyboardType: "numeric", placeholder: tReport("placeholders.spo2") })}
+              {field(tReport("respRate"), respRate, setRespRate, { keyboardType: "numeric", placeholder: tReport("placeholders.respRate") })}
+              {field(tReport("bloodPressure"), bloodPressure, setBloodPressure, { placeholder: tReport("placeholders.bloodPressure") })}
               <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>{tReport("consciousness")}</Text>
               {chipRow(AVPU, avpu, (a) => setAvpu(avpu === a ? null : a), (a) => a)}
               <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>{tReport("pain")} {painScore !== null ? `— ${painScore}` : ""}</Text>
@@ -630,6 +930,26 @@ export default function ReportScreen() {
             placeholder: tReport("outcomeNotesPlaceholder"),
             multiline: true,
           })}
+          {field(tReport("leadingSymptom"), leadingSymptom, setLeadingSymptom)}
+          <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>{tReport("handoverProperty")}</Text>
+          <View style={styles.chipWrap}>
+            {propertyOptions.map((o) => {
+              const active = handoverProperty.split(",").map((s) => s.trim()).includes(o.key);
+              return (
+                <Pressable
+                  key={o.key}
+                  onPress={() => { if (canEdit) { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setHandoverProperty(toggleInList(handoverProperty, o.key)); } }}
+                  style={[
+                    styles.chip,
+                    { backgroundColor: active ? theme.tint : theme.card, borderColor: active ? theme.tint : theme.cardBorder },
+                  ]}
+                >
+                  <Text style={[styles.chipText, { color: active ? "#fff" : theme.textSecondary }]}>{o.label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          {field(tReport("accompaniedBy"), accompaniedBy, setAccompaniedBy, { placeholder: tReport("placeholders.accompaniedBy") })}
           {field(tReport("witnesses"), witnesses, setWitnesses, {
             placeholder: tReport("witnessesPlaceholder"),
           })}
@@ -649,6 +969,22 @@ export default function ReportScreen() {
             ))}
           </View>
         )}
+
+        {/* Section: Unterschriften */}
+        <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
+          {sectionLabel(tReport("sectionSignature"))}
+          <Text style={[styles.hintText, { color: theme.textSecondary }]}>{tReport("signaturesHint")}</Text>
+          {[0, 1, 2].map((i) => (
+            <View key={i} style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <Text style={[styles.sigNum, { color: theme.textTertiary }]}>{i + 1}.</Text>
+              <View style={{ flex: 1 }}>
+                {field(tReport("signatureLabel"), signatures[i], (v) => setSignatures((prev) => prev.map((s, j) => (j === i ? v : s))), {
+                  placeholder: tReport("placeholders.signatureName"),
+                })}
+              </View>
+            </View>
+          ))}
+        </View>
 
         {/* Save / Submit buttons */}
         {canEdit && (
@@ -713,6 +1049,16 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   lockedText: { fontSize: 13, fontFamily: "Inter_500Medium" },
+  disclaimerCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 4,
+  },
+  disclaimerText: { flex: 1, fontSize: 12, lineHeight: 17, fontFamily: "Inter_400Regular" },
   actionRow: { flexDirection: "row", gap: 8, marginBottom: 8 },
   actionBtn: {
     flexDirection: "row",
@@ -762,12 +1108,14 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
   },
   inputMulti: { minHeight: 80, textAlignVertical: "top" },
+  hintText: { fontSize: 12, lineHeight: 17, fontFamily: "Inter_400Regular" },
+  sigNum: { fontSize: 14, fontFamily: "Inter_700Bold", width: 22 },
   chipWrap: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   chip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1 },
   chipText: { fontSize: 12, fontFamily: "Inter_500Medium" },
   painRow: { flexDirection: "row", flexWrap: "wrap", gap: 4 },
-  painBtn: { width: 32, height: 32, borderRadius: 8, borderWidth: 1, alignItems: "center", justifyContent: "center" },
-  painBtnText: { fontSize: 12, fontFamily: "Inter_700Bold" },
+  painBtn: { width: 44, height: 44, borderRadius: 8, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  painBtnText: { fontSize: 14, fontFamily: "Inter_700Bold" },
   addendumItem: { paddingTop: 8, borderTopWidth: 1, gap: 4 },
   addendumMeta: { fontSize: 11, fontFamily: "Inter_400Regular" },
   addendumBody: { fontSize: 13, fontFamily: "Inter_400Regular", lineHeight: 18 },

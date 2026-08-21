@@ -8,6 +8,7 @@ node_modules/
 # Expo
 .expo/
 dist/
+dist.bak-*/
 web-build/
 static-build/
 expo-env.d.ts
@@ -38,6 +39,9 @@ yarn-error.*
 # local env files (Secrets nie hochladen)
 .env
 .env*.local
+# Instanz-Secrets (OIDC-Client-Geheimnisse, laufen nicht ueber Git)
+auth-providers.json
+logs/
 
 # typescript
 *.tsbuildinfo

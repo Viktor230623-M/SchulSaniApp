@@ -1,7 +1,9 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Notifications from "expo-notifications";
 import * as Device from "expo-device";
-import { Platform } from "react-native";
+import { Alert, Platform } from "react-native";
+import { t } from "@/constants/i18n";
+import { useAppStore } from "@/store/useAppStore";
 import ApiService from "./ApiService";
 
 // Native Benachrichtigungen laufen ueber die zentralen Konten des Anbieters:
@@ -22,6 +24,30 @@ Notifications.setNotificationHandler({
 
 let deviceToken: string | null = null;
 
+// Vorab-Nachfrage (HIG: Permission mit Begruendung): die Entscheidung wird
+// pro Sitzung gemerkt. Hat die Person abgelehnt, wird nicht bei jedem Start
+// erneut gefragt -- das Betriebssystem zeigt seinen Dialog ohnehin nur einmal.
+let prePromptDecision: boolean | null = null;
+
+function prePrompt(): Promise<boolean> {
+  if (prePromptDecision !== null) return Promise.resolve(prePromptDecision);
+  const lang = useAppStore.getState().language;
+  return new Promise<boolean>((resolve) => {
+    Alert.alert(
+      t("notifications.promptTitle", lang),
+      t("notifications.promptBody", lang),
+      [
+        { text: t("notifications.promptLater", lang), style: "cancel", onPress: () => resolve(false) },
+        { text: t("notifications.promptAllow", lang), onPress: () => resolve(true) },
+      ],
+      { cancelable: true, onDismiss: () => resolve(false) },
+    );
+  }).then((agreed) => {
+    prePromptDecision = agreed;
+    return agreed;
+  });
+}
+
 // Das Token uebersteht App-Neustarts: Bei einer Abmeldung nach einem Kaltstart
 // ist es nicht mehr im Speicher, aber der Server kennt es noch.
 const TOKEN_STORAGE_KEY = "push-device-token";
@@ -37,15 +63,20 @@ export async function requestNotificationPermissions(): Promise<boolean> {
     return false;
   }
 
-  const { status: existingStatus } = await Notifications.getPermissionsAsync();
-  let finalStatus = existingStatus;
+  const existingPermissions = await Notifications.getPermissionsAsync();
+  let granted = (existingPermissions as { granted: boolean }).granted;
 
-  if (existingStatus !== "granted") {
-    const { status } = await Notifications.requestPermissionsAsync();
-    finalStatus = status;
+  if (!granted) {
+    // Vorab erklaeren, wozu die Berechtigung dient, bevor der Systemdialog
+    // kommt. Verweigert die Person hier, wird gar nicht erst gefragt.
+    if (!(await prePrompt())) {
+      return false;
+    }
+    const requestedPermissions = await Notifications.requestPermissionsAsync();
+    granted = (requestedPermissions as { granted: boolean }).granted;
   }
 
-  if (finalStatus !== "granted") {
+  if (!granted) {
     console.log("Notification permission not granted");
     return false;
   }

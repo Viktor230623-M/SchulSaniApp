@@ -16,6 +16,7 @@ import type {
 } from "@/models";
 import * as keyManager from "./crypto/keyManager";
 import * as secureStore from "./crypto/secureStore";
+import { clearIncidentDraftsForUser } from "./incidentDraftStore";
 import { fromBase64, toBase64 } from "./crypto/encoding";
 
 const API_BASE = `https://${process.env["EXPO_PUBLIC_DOMAIN"]}/api`;
@@ -52,6 +53,24 @@ export interface AuthIdentityInfo {
   type: AuthProviderInfo["type"] | "unknown";
   createdAt: string;
   lastUsedAt: string | null;
+}
+
+export type PrivacyRequestType = "access" | "rectification" | "erasure" | "restriction" | "portability" | "objection";
+export type PrivacyRequestStatus = "pending" | "in_review" | "fulfilled" | "rejected";
+
+export interface PrivacyRequest {
+  id: string;
+  schoolId: string;
+  requesterId: string;
+  requesterEmail: string | null;
+  requestType: PrivacyRequestType;
+  subjectName: string;
+  subjectRelation: string | null;
+  status: PrivacyRequestStatus;
+  handledBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+  resolvedAt: string | null;
 }
 
 let authToken: string | null = null;
@@ -133,10 +152,16 @@ async function getDek(version?: number): Promise<{ dek: Uint8Array; dekVersion: 
 // Felder, die verschluesselt werden -- der komplette Gesundheitsinhalt.
 const ENCRYPTED_FIELDS = [
   "title", "patientType", "patientFirstName", "patientLastName", "patientClass",
-  "patientAge", "emergencyContactName", "emergencyContactPhone", "category",
+  "patientAge", "patientSex", "patientBirthDate", "teacherName",
+  "emergencyContactName", "emergencyContactPhone", "category",
   "description", "injurySites", "measures", "treatmentNotes", "pulseBpm", "spo2",
   "respRate", "bloodPressure", "consciousnessAvpu", "painScore", "outcome",
   "outcomeNotes", "witnesses", "addenda",
+  "breathing", "skinColor", "pulseRegular", "orientation", "pupilsLeft",
+  "pupilsRight", "pupilReaction", "complaintHistory", "medications",
+  "allergies", "recheckTime2", "recheckPulse2", "recheckRegular2",
+  "recheckTime3", "recheckPulse3", "recheckRegular3", "progressNotes",
+  "leadingSymptom", "handoverProperty", "accompaniedBy", "signatures",
 ] as const;
 
 type EncryptedReportRow = Record<string, unknown> & {
@@ -194,13 +219,33 @@ export class AuthError extends Error {
   }
 }
 
+// Standard-Timeout fuer alle API-Aufrufe. Ohne Zeitlimit bleibt eine
+// haengende Anfrage (Treppenhaus, Funkloch) ein endloser Lade-Spinner.
+const FETCH_TIMEOUT_MS = 15_000;
+
+export async function fetchWithTimeout(url: string, init?: RequestInit, timeoutMs = FETCH_TIMEOUT_MS): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  // Uebernommenes Signal (z. B. Restore-Session) muss trotzdem den eigenen
+  // Abbruch ausloesen — AbortSignal.any gibt es in Hermes nicht sicher.
+  const fremdes = init?.signal;
+  const onAbort = () => controller.abort();
+  fremdes?.addEventListener("abort", onAbort);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    fremdes?.removeEventListener("abort", onAbort);
+    clearTimeout(timeout);
+  }
+}
+
 async function apiFetch(url: string, init?: RequestInit): Promise<Response> {
   // App und API liegen beide unter EXPO_PUBLIC_DOMAIN, weshalb fetch das Cookie
   // schon im Standardmodus "same-origin" mitschickt. Explizit gesetzt, damit ein
   // spaeterer Umzug der API auf eine andere Domain nicht still die Sitzung bricht.
   // cache: no-store, damit der Browser nie eine 304-Antwort ohne Body liefert,
   // die resp.json() nicht mehr lesen kann.
-  const resp = await fetch(url, { ...init, credentials: "include", cache: "no-store" });
+  const resp = await fetchWithTimeout(url, { ...init, credentials: "include", cache: "no-store" });
   if (resp.status === 401) {
     const { useAppStore } = await import("@/store/useAppStore");
     useAppStore.getState().logout();
@@ -211,7 +256,6 @@ async function apiFetch(url: string, init?: RequestInit): Promise<Response> {
 function headers() {
   return {
     "Content-Type": "application/json",
-    "ngrok-skip-browser-warning": "true",
     ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
   };
 }
@@ -226,7 +270,7 @@ async function fetchAuthParams(providerKey: string, username: string, schoolId?:
   const params = new URLSearchParams({ providerKey, username });
   if (schoolId) params.set("schoolId", schoolId);
   const url = `${API_BASE}/auth/params?${params}`;
-  const resp = await fetch(url, { headers: { "ngrok-skip-browser-warning": "true" }, cache: "no-store" });
+  const resp = await fetchWithTimeout(url, { cache: "no-store" });
   if (!resp.ok) throw new Error("Anmeldewege konnten nicht geladen werden");
   return resp.json();
 }
@@ -311,7 +355,7 @@ export async function ensureCryptoUnlocked(secret: string): Promise<void> {
   const kek = await keyManager.deriveKey(secret, saltEnc);
   const kp = await keyManager.generateKeypair();
   const encryptedPrivateKey = await keyManager.encryptWithKey(kp.privateKey, kek);
-  await apiFetch(`${API_BASE}/crypto/key`, {
+  const registerResp = await apiFetch(`${API_BASE}/crypto/key`, {
     method: "PUT",
     headers: headers(),
     body: JSON.stringify({
@@ -320,6 +364,10 @@ export async function ensureCryptoUnlocked(secret: string): Promise<void> {
       saltEnc,
     }),
   });
+  if (!registerResp.ok) {
+    const error = await registerResp.json().catch(() => ({}));
+    throw new Error(error.error ?? "Schluesselmaterial konnte nicht gespeichert werden.");
+  }
   keyManager.setCryptoSession({ kek, keypair: kp, saltEnc });
   await secureStore.writeKeyMaterial({ publicKey: toBase64(kp.publicKey), encryptedPrivateKey, saltEnc });
   clearDekCache();
@@ -341,13 +389,12 @@ const ApiService = {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 8_000);
     try {
-      const resp = await fetch(`${API_BASE}/auth/session`, {
+      const resp = await fetchWithTimeout(`${API_BASE}/auth/session`, {
         method: "GET",
-        headers: { "ngrok-skip-browser-warning": "true" },
         credentials: "include",
         cache: "no-store",
         signal: controller.signal,
-      });
+      }, 10_000);
       if (!resp.ok) return null;
       const data = await resp.json();
       if (!data.token) return null;
@@ -374,7 +421,7 @@ const ApiService = {
   async loginLocal(providerKey: string, username: string, password: string, schoolId?: string): Promise<{ user: User; isTealUnlocked: boolean; token: string }> {
     const params = await fetchAuthParams(providerKey, username, schoolId);
     const proof = await keyManager.deriveKey(password, params.saltLogin);
-    const resp = await fetch(`${API_BASE}/auth/login`, {
+    const resp = await fetchWithTimeout(`${API_BASE}/auth/login`, {
       method: "POST",
       headers: headers(),
       credentials: "include",
@@ -393,7 +440,7 @@ const ApiService = {
     const saltLogin = await keyManager.generateSalt();
     const proof = await keyManager.deriveKey(input.password, saltLogin);
     const { password: _password, ...rest } = input;
-    const resp = await fetch(`${API_BASE}/auth/local/register`, {
+    const resp = await fetchWithTimeout(`${API_BASE}/auth/local/register`, {
       method: "POST",
       headers: headers(),
       body: JSON.stringify({ ...rest, proof: toBase64(proof), loginSalt: saltLogin }),
@@ -404,21 +451,21 @@ const ApiService = {
   },
 
   async verifyLocalEmail(token: string): Promise<{ message: string; isApproved: boolean }> {
-    const resp = await fetch(`${API_BASE}/auth/local/verify`, { method: "POST", headers: headers(), body: JSON.stringify({ token }) });
+    const resp = await fetchWithTimeout(`${API_BASE}/auth/local/verify`, { method: "POST", headers: headers(), body: JSON.stringify({ token }) });
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok) throw new Error(data.error ?? "Bestätigungslink ist ungültig oder abgelaufen");
     return { message: data.message ?? "", isApproved: data.isApproved === true };
   },
 
   async resendLocalVerification(email: string, schoolId?: string): Promise<string> {
-    const resp = await fetch(`${API_BASE}/auth/local/verify/resend`, { method: "POST", headers: headers(), body: JSON.stringify({ email, ...(schoolId ? { schoolId } : {}) }) });
+    const resp = await fetchWithTimeout(`${API_BASE}/auth/local/verify/resend`, { method: "POST", headers: headers(), body: JSON.stringify({ email, ...(schoolId ? { schoolId } : {}) }) });
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok) throw new Error(data.error ?? "Bestätigungs-Mail konnte nicht angefordert werden");
     return data.message ?? "";
   },
 
   async requestPasswordReset(email: string, schoolId?: string): Promise<string> {
-    const resp = await fetch(`${API_BASE}/auth/local/password/forgot`, { method: "POST", headers: headers(), body: JSON.stringify({ email, ...(schoolId ? { schoolId } : {}) }) });
+    const resp = await fetchWithTimeout(`${API_BASE}/auth/local/password/forgot`, { method: "POST", headers: headers(), body: JSON.stringify({ email, ...(schoolId ? { schoolId } : {}) }) });
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok) throw new Error(data.error ?? "Passwort-Reset konnte nicht angefordert werden");
     return data.message ?? "";
@@ -427,7 +474,7 @@ const ApiService = {
   async resetLocalPassword(token: string, password: string): Promise<void> {
     const saltLogin = await keyManager.generateSalt();
     const proof = await keyManager.deriveKey(password, saltLogin);
-    const resp = await fetch(`${API_BASE}/auth/local/password/reset`, {
+    const resp = await fetchWithTimeout(`${API_BASE}/auth/local/password/reset`, {
       method: "POST",
       headers: headers(),
       body: JSON.stringify({ token, proof: toBase64(proof), loginSalt: saltLogin }),
@@ -469,9 +516,8 @@ async changePassword(currentPassword: string, newPassword: string): Promise<stri
 
   /** Nativer Apple-Login: fragt einen Einmal-Nonce an, den die App an Apple weitergibt. */
   async startAppleNative(): Promise<string> {
-    const resp = await fetch(`${API_BASE}/auth/apple/native/start`, {
+    const resp = await fetchWithTimeout(`${API_BASE}/auth/apple/native/start`, {
       method: "POST",
-      headers: { "ngrok-skip-browser-warning": "true" },
     });
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok || typeof data.nonce !== "string") throw new Error("Anmeldung fehlgeschlagen");
@@ -485,7 +531,7 @@ async changePassword(currentPassword: string, newPassword: string): Promise<stri
     email?: string;
     schoolId?: string;
   }): Promise<{ user: User; isTealUnlocked: boolean; token: string }> {
-    const resp = await fetch(`${API_BASE}/auth/apple/native/complete`, {
+    const resp = await fetchWithTimeout(`${API_BASE}/auth/apple/native/complete`, {
       method: "POST",
       headers: headers(),
       credentials: "include",
@@ -511,7 +557,7 @@ async changePassword(currentPassword: string, newPassword: string): Promise<stri
    * (POST /auth/join-code). Erfolg ist ein Login wie jeder andere.
    */
   async completeJoinCode(handoff: string, joinCode: string): Promise<{ user: User; isTealUnlocked: boolean; token: string }> {
-    const resp = await fetch(`${API_BASE}/auth/join-code`, {
+    const resp = await fetchWithTimeout(`${API_BASE}/auth/join-code`, {
       method: "POST",
       headers: headers(),
       credentials: "include",
@@ -526,7 +572,7 @@ async changePassword(currentPassword: string, newPassword: string): Promise<stri
   },
 
   async exchangeNativeSession(code: string, verifier: string): Promise<{ user: User; isTealUnlocked: boolean; token: string } | null> {
-    const resp = await fetch(`${API_BASE}/auth/native-session`, {
+    const resp = await fetchWithTimeout(`${API_BASE}/auth/native-session`, {
       method: "POST",
       headers: { ...headers(), "Content-Type": "application/json" },
       body: JSON.stringify({ code, verifier }),
@@ -557,7 +603,6 @@ async changePassword(currentPassword: string, newPassword: string): Promise<stri
         : `${API_BASE}/auth/providers`;
       const resp = await fetch(url, {
         cache: "no-store",
-        headers: { "ngrok-skip-browser-warning": "true" },
         signal: controller.signal,
       });
       if (!resp.ok) throw new Error("Anmeldewege konnten nicht geladen werden");
@@ -622,7 +667,6 @@ async changePassword(currentPassword: string, newPassword: string): Promise<stri
     try {
       const resp = await fetch(`${API_BASE}/auth/schools`, {
         cache: "no-store",
-        headers: { "ngrok-skip-browser-warning": "true" },
         signal: controller.signal,
       });
       if (!resp.ok) throw new Error("Schulen konnten nicht geladen werden");
@@ -652,7 +696,7 @@ async changePassword(currentPassword: string, newPassword: string): Promise<stri
     // Serverseitig widerrufen, damit ein kopiertes Cookie nach dem Abmelden
     // wertlos ist. Fehler werden geschluckt: lokal abmelden muss immer gelingen.
     try {
-      await fetch(`${API_BASE}/auth/logout`, {
+      await fetchWithTimeout(`${API_BASE}/auth/logout`, {
         method: "POST",
         headers: headers(),
         credentials: "include",
@@ -673,6 +717,15 @@ async changePassword(currentPassword: string, newPassword: string): Promise<stri
       await disableWebPush();
     } catch {
       // absichtlich ignoriert
+    }
+    const { useAppStore } = await import("@/store/useAppStore");
+    const userId = useAppStore.getState().user?.id;
+    if (userId) {
+      try {
+        await clearIncidentDraftsForUser(userId);
+      } catch {
+        // A storage failure must not leave the account signed in.
+      }
     }
     setAuthToken(null);
     // Verschluesseltes Schluesselmaterial gehoert nicht ueber Abmeldungen
@@ -698,6 +751,39 @@ async changePassword(currentPassword: string, newPassword: string): Promise<stri
     await this.logout();
   },
 
+  async getPrivacyRequests(): Promise<PrivacyRequest[]> {
+    const resp = await apiFetch(`${API_BASE}/privacy/requests`, { headers: headers() });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error ?? "Datenschutzanfragen konnten nicht geladen werden");
+    return Array.isArray(data) ? data : [];
+  },
+
+  async createPrivacyRequest(input: {
+    requestType: PrivacyRequestType;
+    subjectName: string;
+    subjectRelation?: string;
+  }): Promise<PrivacyRequest> {
+    const resp = await apiFetch(`${API_BASE}/privacy/requests`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify(input),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error ?? "Datenschutzanfrage konnte nicht gespeichert werden");
+    return data as PrivacyRequest;
+  },
+
+  async updatePrivacyRequest(id: string, status: PrivacyRequestStatus): Promise<PrivacyRequest> {
+    const resp = await apiFetch(`${API_BASE}/privacy/requests/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      headers: headers(),
+      body: JSON.stringify({ status }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error ?? "Datenschutzanfrage konnte nicht aktualisiert werden");
+    return data as PrivacyRequest;
+  },
+
   async getNews(): Promise<NewsItem[]> {
     const resp = await apiFetch(`${API_BASE}/news`, { headers: headers() });
     if (!resp.ok) {
@@ -721,6 +807,35 @@ async changePassword(currentPassword: string, newPassword: string): Promise<stri
     if (!resp.ok) {
       const data = await resp.json().catch(() => ({}));
       throw new Error(data.error ?? "Nachricht konnte nicht genehmigt werden");
+    }
+    return resp.json();
+  },
+
+  async signupNews(id: string): Promise<NewsItem> {
+    const resp = await apiFetch(`${API_BASE}/news/${id}/signup`, { method: "POST", headers: headers() });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      throw new Error(data.error ?? "Anmeldung fehlgeschlagen");
+    }
+    return resp.json();
+  },
+
+  async unsignNews(id: string): Promise<NewsItem> {
+    const resp = await apiFetch(`${API_BASE}/news/${id}/unsign`, { method: "POST", headers: headers() });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      throw new Error(data.error ?? "Abmeldung fehlgeschlagen");
+    }
+    return resp.json();
+  },
+
+  async setMeetingNotify(id: string, enabled: boolean): Promise<NewsItem> {
+    const resp = await apiFetch(`${API_BASE}/news/${id}/meeting-notify`, {
+      method: "POST", headers: headers(), body: JSON.stringify({ enabled }),
+    });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      throw new Error(data.error ?? "Einstellung konnte nicht gespeichert werden");
     }
     return resp.json();
   },
@@ -1253,7 +1368,7 @@ async changePassword(currentPassword: string, newPassword: string): Promise<stri
     const resp = await apiFetch(`${API_BASE}/incident-reports/${id}/addendum`, {
       method: "POST",
       headers: headers(),
-      body: JSON.stringify({ contentEncrypted, contentKeyVersion }),
+      body: JSON.stringify({ contentEncrypted, contentKeyVersion, updatedAt: current.updatedAt }),
     });
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
@@ -1265,7 +1380,6 @@ async changePassword(currentPassword: string, newPassword: string): Promise<stri
   /** Kopfzeilen fuer Abrufe ausserhalb von `headers()`, das faelschlich JSON deklariert. */
   getAuthHeaders(): Record<string, string> {
     return {
-      "ngrok-skip-browser-warning": "true",
       ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
     };
   },
@@ -1413,39 +1527,6 @@ async changePassword(currentPassword: string, newPassword: string): Promise<stri
     });
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok) throw new Error(data.error ?? "Zugriff konnte nicht freigegeben werden");
-  },
-
-  /** Alt-Protokolle (Klartext) fuer die einmalige Migration auflisten. */
-  async listLegacyReports(): Promise<{ id: string }[]> {
-    const resp = await apiFetch(`${API_BASE}/crypto/legacy-reports`, { headers: headers() });
-    const data = await resp.json().catch(() => ({}));
-    return Array.isArray(data.reports) ? data.reports : [];
-  },
-
-  async getLegacyReportPlaintext(id: string): Promise<EncryptedReportRow> {
-    const resp = await apiFetch(`${API_BASE}/crypto/legacy-reports/${id}`, { headers: headers() });
-    const data = await resp.json().catch(() => ({}));
-    if (!resp.ok) throw new Error(data.error ?? "Alt-Protokoll konnte nicht geladen werden");
-    return data;
-  },
-
-  async putLegacyReportEncrypted(id: string): Promise<void> {
-    const legacy = await this.getLegacyReportPlaintext(id);
-    // Server-Spaltennamen auf die Client-Felder mappen, sonst wandern
-    // Nachtraege in die Metadaten und gehen bei der Migration verloren.
-    const normalized = {
-      ...legacy,
-      addenda: (legacy as Record<string, unknown>)["addendaJson"] ?? undefined,
-      responderIds: (legacy as Record<string, unknown>)["responderIdsJson"] ?? undefined,
-    };
-    const { contentEncrypted, contentKeyVersion } = await encryptReportPayload(normalized);
-    const resp = await apiFetch(`${API_BASE}/crypto/legacy-reports/${id}`, {
-      method: "PUT",
-      headers: headers(),
-      body: JSON.stringify({ contentEncrypted, contentKeyVersion }),
-    });
-    const data = await resp.json().catch(() => ({}));
-    if (!resp.ok) throw new Error(data.error ?? "Alt-Protokoll konnte nicht verschluesselt werden");
   },
 
 };

@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as Sharing from "expo-sharing";
-import * as FileSystem from "expo-file-system";
+import { File, Paths } from "expo-file-system";
 import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -55,7 +55,7 @@ export default function ExportsScreen() {
       setInterval(data.interval);
       setExports(data.exports ?? []);
     } catch (err) {
-      await notify(t("common.error", lang), err instanceof Error ? err.message : "Export konnte nicht geladen werden");
+      await notify(t("common.error", lang), err instanceof Error ? err.message : t("settings.exportFailed", lang));
     } finally {
       setLoading(false);
     }
@@ -74,7 +74,7 @@ export default function ExportsScreen() {
       setInterval(next);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (err) {
-      await notify(t("common.error", lang), err instanceof Error ? err.message : "Intervall konnte nicht gespeichert werden");
+      await notify(t("common.error", lang), err instanceof Error ? err.message : t("settings.exportFailed", lang));
     } finally {
       setSavingInterval(false);
     }
@@ -118,12 +118,10 @@ export default function ExportsScreen() {
       } else {
         // App-privater Cache, kein iCloud-/Geräte-Sync: Das Buendel verlässt
         // das Geraet nur ueber das Teilen-Menue, nie ueber den Server.
-        const dest = `${FileSystem.cacheDirectory}${filename}`;
-        await FileSystem.writeAsStringAsync(dest, toBase64(bytes), {
-          encoding: FileSystem.EncodingType.Base64,
-        });
+        const dest = new File(Paths.cache, filename);
+        dest.write(toBase64(bytes), { encoding: "base64" });
         if (await Sharing.isAvailableAsync()) {
-          await Sharing.shareAsync(dest, { mimeType: "application/pdf" });
+          await Sharing.shareAsync(dest.uri, { mimeType: "application/pdf" });
         }
       }
 
@@ -140,7 +138,7 @@ export default function ExportsScreen() {
   if (!canExport) {
     return (
       <View style={[styles.container, { backgroundColor: theme.background, paddingTop: insets.top + topPad }]}>
-        <Text style={[styles.denied, { color: theme.textTertiary }]}>Kein Zugriff</Text>
+        <Text style={[styles.denied, { color: theme.textTertiary }]}>{t("common.accessDenied", lang)}</Text>
       </View>
     );
   }
@@ -203,7 +201,7 @@ export default function ExportsScreen() {
         </Pressable>
 
         {/* Historie */}
-        <Text style={[styles.historyTitle, { color: theme.text }]}>Verlauf</Text>
+        <Text style={[styles.historyTitle, { color: theme.text }]}>{t("settings.exportHistory", lang)}</Text>
         {loading ? (
           <ActivityIndicator color={theme.tint} style={{ marginTop: 20 }} />
         ) : exports.length === 0 ? (

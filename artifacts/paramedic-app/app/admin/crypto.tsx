@@ -38,12 +38,9 @@ export default function CryptoScreen() {
   const [wrapCount, setWrapCount] = useState(0);
   const [users, setUsers] = useState<User[]>([]);
   const [publicKeys, setPublicKeys] = useState<Map<string, string>>(new Map());
-  const [legacyCount, setLegacyCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [dekBusy, setDekBusy] = useState(false);
   const [grantBusy, setGrantBusy] = useState<string | null>(null);
-  const [migrating, setMigrating] = useState(false);
-  const [migrationDone, setMigrationDone] = useState(false);
 
   async function load() {
     try {
@@ -56,8 +53,6 @@ export default function CryptoScreen() {
       setWrapCount(dek.wraps.length);
       setPublicKeys(new Map(keys.map((k) => [k.userId, k.publicKey])));
       setUsers(users);
-      const legacy = await ApiService.listLegacyReports();
-      setLegacyCount(legacy.length);
     } catch {
       // Teilausfaelle einzelner Abrufe sind kein Abbruchgrund; der Screen bleibt
       // bedienbar und zeigt an, was geladen werden konnte.
@@ -100,25 +95,6 @@ export default function CryptoScreen() {
       await notify(t("common.error", lang), err instanceof Error ? err.message : t("crypto.grantFailed", lang));
     } finally {
       setGrantBusy(null);
-    }
-  }
-
-  async function handleMigrate() {
-    if (migrating || !legacyCount) return;
-    setMigrating(true);
-    try {
-      const legacy = await ApiService.listLegacyReports();
-      for (const report of legacy) {
-        await ApiService.putLegacyReportEncrypted(report.id);
-      }
-      setLegacyCount(0);
-      setMigrationDone(true);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      await notify(t("common.success", lang), t("crypto.migrationDone", lang));
-    } catch (err) {
-      await notify(t("common.error", lang), err instanceof Error ? err.message : t("crypto.migrationFailed", lang));
-    } finally {
-      setMigrating(false);
     }
   }
 
@@ -239,35 +215,6 @@ export default function CryptoScreen() {
           )}
         </View>
 
-        {/* Migration von Alt-Protokollen */}
-        <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
-          <Text style={[styles.cardTitle, { color: theme.text }]}>{t("crypto.migrationTitle", lang)}</Text>
-          <Text style={[styles.cardHint, { color: theme.textTertiary }]}>{t("crypto.migrationHint", lang)}</Text>
-          {loading ? (
-            <ActivityIndicator color={theme.tint} style={{ marginTop: 8 }} />
-          ) : legacyCount === null || legacyCount === 0 ? (
-            <Text style={[styles.empty, { color: theme.textTertiary }]}>
-              {migrationDone ? t("crypto.migrationDone", lang) : t("crypto.migrationNone", lang)}
-            </Text>
-          ) : (
-            <Pressable
-              disabled={migrating}
-              onPress={handleMigrate}
-              style={[styles.primaryBtn, { backgroundColor: theme.warning ?? theme.tint }]}
-            >
-              {migrating ? (
-                <ActivityIndicator color="#fff" size="small" />
-              ) : (
-                <>
-                  <Ionicons name="shield-checkmark-outline" size={16} color="#fff" />
-                  <Text style={styles.primaryBtnText}>
-                    {t("crypto.migrationButton", lang).replace("{n}", String(legacyCount))}
-                  </Text>
-                </>
-              )}
-            </Pressable>
-          )}
-        </View>
       </ScrollView>
     </View>
   );
