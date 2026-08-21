@@ -45,4 +45,8 @@ describe("computeCutoffs", () => {
   it("loescht widerrufene Sitzungen nach 30 Tagen", () => {
     expect(cutoffs.sessionsRevoked.toISOString()).toBe("2026-06-19T10:00:00.000Z");
   });
+
+  it("loescht Meeting-Anmeldungen nach 90 Tagen", () => {
+    expect(cutoffs.meetingSignups.toISOString()).toBe("2026-04-20T10:00:00.000Z");
+  });
 });

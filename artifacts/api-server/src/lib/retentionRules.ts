@@ -35,6 +35,8 @@ export interface RetentionCutoffs {
   authTokens: Date;
   /** Unbestaetigte lokale Konten: 30 Tage nach Anlage. */
   unverifiedAccounts: Date;
+  /** Meeting-Anmeldungen: 90 Tage nach Meeting-Ende (ohne Endzeit: nach Beginn). */
+  meetingSignups: Date;
 }
 
 function minusDays(now: Date, days: number): Date {
@@ -70,5 +72,6 @@ export function computeCutoffs(now: Date): RetentionCutoffs {
     sessionsRevoked: minusDays(now, 30),
     authTokens: minusDays(now, 7),
     unverifiedAccounts: minusDays(now, 30),
+    meetingSignups: minusDays(now, 90),
   };
 }

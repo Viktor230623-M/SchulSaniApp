@@ -7,6 +7,7 @@ import {
   loaTable,
   missionActivityLogTable,
   missionsTable,
+  newsTable,
   notificationsTable,
   profileChangeLogTable,
   reportAccessLogTable,
@@ -131,6 +132,22 @@ export async function runRetention(now: Date = new Date()): Promise<RetentionRes
     ))
     .returning({ id: missionActivityLogTable.id });
   results.push({ table: "mission_activity_log", action: "anonymized", count: anonymized.length });
+
+  // Meeting-Anmeldungen (Treffen/Abstimmungen) sind nur fuer die Organisation
+  // des Termins noetig. 90 Tage nach Meeting-Ende — ohne Endzeit nach Beginn —
+  // werden die Namen entfernt; der Beitrag selbst bleibt als Nachricht stehen.
+  const meetingSignups = await db
+    .update(newsTable)
+    .set({ meetingSignupsJson: null })
+    .where(and(
+      isNotNull(newsTable.meetingAt),
+      or(
+        and(isNotNull(newsTable.meetingEndAt), lt(newsTable.meetingEndAt, cutoffs.meetingSignups)),
+        and(isNull(newsTable.meetingEndAt), lt(newsTable.meetingAt, cutoffs.meetingSignups)),
+      ),
+    ))
+    .returning({ id: newsTable.id });
+  results.push({ table: "news (Meeting-Anmeldungen)", action: "deleted", count: meetingSignups.length });
 
   // Sitzungen sind reine Betriebsdaten ohne Aufbewahrungspflicht. Entfernt werden
   // sie, sobald sie endgueltig nicht mehr gelten koennen: nach der absoluten

@@ -984,6 +984,22 @@ router.post("/account/delete", authLimiter, requireAuth, async (req: AuthRequest
       .set({ responderIdsJson: sql`(${incidentReportsTable.responderIdsJson}::jsonb - ${userId})::json` })
       .where(and(sql`${incidentReportsTable.responderIdsJson}::jsonb ? ${userId}`, eq(incidentReportsTable.schoolId, schoolId)));
     await tx.update(newsTable).set({ authorId: DELETED_USER }).where(eq(newsTable.authorId, userId));
+    // Anmeldungen zu Treffen sind Teilnahme-Spuren: mit dem Konto entfernt
+    // werden sie aus allen Meeting-Listen der Schule. Der Beitrag selbst und
+    // die Anmeldungen anderer bleiben bestehen.
+    await tx.update(newsTable)
+      .set({
+        meetingSignupsJson: sql`(
+          select json_agg(s)::json
+          from jsonb_array_elements(${newsTable.meetingSignupsJson}::jsonb) s
+          where s->>'userId' <> ${userId}
+        )`,
+      })
+      .where(and(
+        eq(newsTable.schoolId, schoolId),
+        isNotNull(newsTable.meetingSignupsJson),
+        sql`exists (select 1 from jsonb_array_elements(${newsTable.meetingSignupsJson}::jsonb) s where s->>'userId' = ${userId})`,
+      ));
     await tx.update(shiftsTable).set({ createdBy: DELETED_USER }).where(eq(shiftsTable.createdBy, userId));
     await tx.update(missionsTable).set({ assignedParamedicId: null }).where(eq(missionsTable.assignedParamedicId, userId));
     await tx.update(missionsTable).set({ requestedBy: null }).where(eq(missionsTable.requestedBy, userId));

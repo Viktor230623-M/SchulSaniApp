@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
-import { Router } from "express";
+import { Router, type Response } from "express";
+import rateLimit from "express-rate-limit";
 import { and, desc, eq } from "drizzle-orm";
 import { db, newsTable, newsReadsTable, usersTable } from "@workspace/db";
 import { requireAuth, requirePermission, schoolIdOf, type AuthRequest } from "../middlewares/auth";
@@ -9,6 +10,15 @@ import { z } from "@workspace/api-zod";
 import { validate } from "../middlewares/validate";
 
 const router = Router();
+
+// Signup/Unsign togglen kann den Organisator per Push zuspammen (bei jedem
+// Wechsel eine Benachrichtigung). Das Limit begrenzt den Missbrauch, ohne
+// echte Teilnahmewechsel zu behindern.
+const meetingSignupLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  message: { error: "Zu viele Anmeldungs-Aenderungen, bitte kurz warten." },
+});
 
 const newsCreateBody = z.object({
   title: z.string().min(1).max(200),
@@ -114,11 +124,16 @@ router.post("/", requireAuth, validate({ body: newsCreateBody }), async (req: Au
   };
   await db.insert(newsTable).values(newItem);
 
-  const t = await translateToLanguages({ title, summary: newItem.summary ?? "", content }, "de").catch(() => ({}));
-  if (Object.keys(t).length > 0) {
-    await db.update(newsTable).set({ translationsJson: JSON.stringify(t) }).where(and(eq(newsTable.id, newItem.id), eq(newsTable.schoolId, schoolId)));
-    newItem.translationsJson = JSON.stringify(t);
-  }
+  // Uebersetzung ist Beiwerk: Der Beitrag darf nicht auf den MT-Dienst warten.
+  // Fehler und Zeitueberschreitungen (3 s) landen im Nichts, die Antwort kommt
+  // sofort.
+  void translateToLanguages({ title, summary: newItem.summary ?? "", content }, "de")
+    .then((t) => {
+      if (Object.keys(t).length === 0) return;
+      return db.update(newsTable).set({ translationsJson: JSON.stringify(t) })
+        .where(and(eq(newsTable.id, newItem.id), eq(newsTable.schoolId, schoolId)));
+    })
+    .catch(() => {});
 
   res.status(201).json({ ...newItem, isRead: false });
 });
@@ -155,7 +170,7 @@ router.post("/:id/reject", requireAuth, requirePermission("news.moderate"), asyn
   res.json(item);
 });
 
-async function loadMeetingItem(req: AuthRequest, res: any) {
+async function loadMeetingItem(req: AuthRequest, res: Response) {
   const schoolId = schoolIdOf(req);
   const [item] = await db.select().from(newsTable).where(and(eq(newsTable.id, req.params.id as string), eq(newsTable.schoolId, schoolId)));
   if (!item) { res.status(404).json({ error: "Not found" }); return null; }
@@ -168,52 +183,64 @@ async function userNameOf(userId: string, schoolId: string): Promise<string> {
 }
 
 // POST /:id/signup — Teilnahme an einem veroeffentlichten Meeting.
-router.post("/:id/signup", requireAuth, async (req: AuthRequest, res) => {
+// Laeuft in einer Transaktion mit Zeilensperre: zwei gleichzeitige Anmeldungen
+// duerfen sich nicht gegenseitig ueberschreiben (Lost Update).
+router.post("/:id/signup", requireAuth, meetingSignupLimiter, async (req: AuthRequest, res) => {
   const { userId } = req.user!;
   const schoolId = schoolIdOf(req);
-  const item = await loadMeetingItem(req, res);
-  if (!item) return;
-  if (item.status !== "approved") { res.status(400).json({ error: "Nur veroeffentlichte Meetings." }); return; }
-  if (!item.meetingAt) { res.status(400).json({ error: "Dieser Beitrag ist kein Meeting." }); return; }
-  if (new Date(item.meetingAt).getTime() < Date.now()) { res.status(400).json({ error: "Das Meeting ist bereits vorbei." }); return; }
-  const signups = parseSignups(item.meetingSignupsJson);
-  if (signups.some((s) => s.userId === userId)) { res.status(400).json({ error: "Du bist bereits angemeldet." }); return; }
-  const name = await userNameOf(userId, schoolId);
-  signups.push({ userId, name, signedAt: new Date().toISOString() });
-  const [updated] = await db.update(newsTable).set({ meetingSignupsJson: signups })
-    .where(and(eq(newsTable.id, req.params.id as string), eq(newsTable.schoolId, schoolId))).returning();
-  if (item.meetingNotifyOnSignup && item.authorId !== userId) {
-    notifyUser(item.authorId, {
-      schoolId,
-      type: "news",
-      title: `Neue Anmeldung: ${item.title}`,
-      body: `${name} hat sich angemeldet (${signups.length} Teilnehmende).`,
-      relatedId: item.id,
-    }).catch(console.error);
-  }
-  res.json({ ...updated, meetingSignups: signups, signedUp: true });
+  await db.transaction(async (tx) => {
+    const [item] = await tx.select().from(newsTable)
+      .where(and(eq(newsTable.id, req.params.id as string), eq(newsTable.schoolId, schoolId)))
+      .for("update")
+      .limit(1);
+    if (!item) { res.status(404).json({ error: "Not found" }); return; }
+    if (item.status !== "approved") { res.status(400).json({ error: "Nur veroeffentlichte Meetings." }); return; }
+    if (!item.meetingAt) { res.status(400).json({ error: "Dieser Beitrag ist kein Meeting." }); return; }
+    if (new Date(item.meetingAt).getTime() < Date.now()) { res.status(400).json({ error: "Das Meeting ist bereits vorbei." }); return; }
+    const signups = parseSignups(item.meetingSignupsJson);
+    if (signups.some((s) => s.userId === userId)) { res.status(400).json({ error: "Du bist bereits angemeldet." }); return; }
+    const name = await userNameOf(userId, schoolId);
+    signups.push({ userId, name, signedAt: new Date().toISOString() });
+    const [updated] = await tx.update(newsTable).set({ meetingSignupsJson: signups })
+      .where(and(eq(newsTable.id, item.id), eq(newsTable.schoolId, schoolId))).returning();
+    if (item.meetingNotifyOnSignup && item.authorId !== userId) {
+      notifyUser(item.authorId, {
+        schoolId,
+        type: "news",
+        title: `Neue Anmeldung: ${item.title}`,
+        body: `${name} hat sich angemeldet (${signups.length} Teilnehmende).`,
+        relatedId: item.id,
+      }).catch(console.error);
+    }
+    res.json({ ...updated, meetingSignups: signups, signedUp: true });
+  });
 });
 
 // POST /:id/unsign — Teilnahme zurueckziehen.
-router.post("/:id/unsign", requireAuth, async (req: AuthRequest, res) => {
+router.post("/:id/unsign", requireAuth, meetingSignupLimiter, async (req: AuthRequest, res) => {
   const { userId } = req.user!;
   const schoolId = schoolIdOf(req);
-  const item = await loadMeetingItem(req, res);
-  if (!item) return;
-  const signups = parseSignups(item.meetingSignupsJson).filter((s) => s.userId !== userId);
-  const [updated] = await db.update(newsTable).set({ meetingSignupsJson: signups })
-    .where(and(eq(newsTable.id, req.params.id as string), eq(newsTable.schoolId, schoolId))).returning();
-  if (item.meetingNotifyOnSignup && item.authorId !== userId) {
-    const name = await userNameOf(userId, schoolId);
-    notifyUser(item.authorId, {
-      schoolId,
-      type: "news",
-      title: `Abmeldung: ${item.title}`,
-      body: `${name} hat sich abgemeldet (${signups.length} Teilnehmende).`,
-      relatedId: item.id,
-    }).catch(console.error);
-  }
-  res.json({ ...updated, meetingSignups: signups, signedUp: false });
+  await db.transaction(async (tx) => {
+    const [item] = await tx.select().from(newsTable)
+      .where(and(eq(newsTable.id, req.params.id as string), eq(newsTable.schoolId, schoolId)))
+      .for("update")
+      .limit(1);
+    if (!item) { res.status(404).json({ error: "Not found" }); return; }
+    const signups = parseSignups(item.meetingSignupsJson).filter((s) => s.userId !== userId);
+    const [updated] = await tx.update(newsTable).set({ meetingSignupsJson: signups })
+      .where(and(eq(newsTable.id, item.id), eq(newsTable.schoolId, schoolId))).returning();
+    if (item.meetingNotifyOnSignup && item.authorId !== userId) {
+      const name = await userNameOf(userId, schoolId);
+      notifyUser(item.authorId, {
+        schoolId,
+        type: "news",
+        title: `Abmeldung: ${item.title}`,
+        body: `${name} hat sich abgemeldet (${signups.length} Teilnehmende).`,
+        relatedId: item.id,
+      }).catch(console.error);
+    }
+    res.json({ ...updated, meetingSignups: signups, signedUp: false });
+  });
 });
 
 // POST /:id/meeting-notify — Organisator schaltet Teilnahme-Benachrichtigungen
@@ -231,7 +258,7 @@ router.post("/:id/meeting-notify", requireAuth, async (req: AuthRequest, res) =>
 });
 
 router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
-  const { userId, role } = req.user!;
+  const { userId } = req.user!;
   const schoolId = schoolIdOf(req);
   const [item] = await db.select().from(newsTable).where(and(eq(newsTable.id, req.params.id as string), eq(newsTable.schoolId, schoolId)));
   if (!item) { res.status(404).json({ error: "Not found" }); return; }
