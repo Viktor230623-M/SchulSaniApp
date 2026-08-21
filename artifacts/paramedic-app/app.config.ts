@@ -31,7 +31,7 @@ function pflicht(name: string, fallback?: string): string {
   );
 }
 
-const appName = pflicht("EXPO_PUBLIC_APP_NAME", "SchulSani");
+const appName = pflicht("EXPO_PUBLIC_APP_NAME", "SchulSaniApp");
 const themeColor = pflicht("EXPO_PUBLIC_THEME_COLOR", "#22C55E");
 const domain = pflicht("EXPO_PUBLIC_DOMAIN", "schulsaniapp.com");
 const bundleId = pflicht("APP_BUNDLE_ID", "com.schulsani.app");
