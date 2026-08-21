@@ -1,6 +1,37 @@
 import type { ExpoConfig } from "expo/config";
 
+import * as fs from "node:fs";
+import * as path from "node:path";
+
 import appJson from "./app.json";
+
+/**
+ * `expo export` wertet app.config.ts aus, bevor es .env geladen hat
+ * (`expo config` tut das — Inkonsistenz im CLI). Damit Deploys auf dem
+ * Server ohne inline Umgebungsvariablen funktionieren, laden wir .env hier
+ * nach. Bereits gesetzte process.env-Werte (z.B. von EAS) haben Vorrang.
+ */
+function ladeDotEnv(): void {
+  try {
+    const kandidaten = [path.join(__dirname, ".env"), path.join(process.cwd(), ".env")];
+    const pfad = kandidaten.find((k) => fs.existsSync(k));
+    if (!pfad) return;
+    for (const zeile of fs.readFileSync(pfad, "utf8").split(/\r?\n/)) {
+      const treffer = zeile.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
+      if (!treffer) continue;
+      const name = treffer[1];
+      if (process.env[name]) continue;
+      let wert = treffer[2].trim();
+      if ((wert.startsWith("\"") && wert.endsWith("\"")) || (wert.startsWith("'") && wert.endsWith("'"))) {
+        wert = wert.slice(1, -1);
+      }
+      process.env[name] = wert;
+    }
+  } catch {
+    // .env fehlt — dann greift ohnehin der Fehlerpfad von pflicht().
+  }
+}
+ladeDotEnv();
 
 /**
  * Ergaenzt app.json um die Werte, die von Schule zu Schule verschieden sind.
