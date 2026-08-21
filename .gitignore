@@ -84,3 +84,8 @@ ops/ssd-daten/
 ops/e2e/.certs/
 kampagne_*/
 schulleitungen_leads.csv
+
+# Lokale Audit-/Security-Artefakte (enthalten Produktions-HAR-Captures mit Auth-Traffic)
+AUDIT/
+GAUNTLET/
+GAUNTLET2/
